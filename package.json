@@ -13,7 +13,7 @@
     "build": "bun run --cwd apps/client build",
     "start": "bun run --cwd apps/server start",
     "typecheck": "bun run --filter '*' typecheck",
-    "test": "bun test packages apps/server && bun run --cwd apps/client test",
+    "test": "bun run --filter \"*\" test",
     "format": "biome check --write .",
     "lint": "biome check .",
     "check:boundaries": "bun run scripts/check-boundaries.ts",

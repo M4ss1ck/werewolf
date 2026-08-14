@@ -1,0 +1,2 @@
+DROP INDEX `game_events_game_command_idx`;--> statement-breakpoint
+CREATE UNIQUE INDEX `game_events_game_command_idx` ON `game_events` (`game_id`,`command_id`) WHERE "game_events"."command_id" is not null;
