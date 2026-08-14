@@ -23,6 +23,9 @@ export const EVENT_KINDS = [
   "harlot.result",
   // Wolf faction
   "wolves.member_joined",
+  "masons.member_joined",
+  // Scheduled game
+  "game.start_deferred",
   // Server-only
   "audit.vote",
   "audit.night",
@@ -82,6 +85,8 @@ export interface EventPayloads {
   "harlot.result": { outcome: "safe" | "killed" };
   // Wolf faction
   "wolves.member_joined": { playerId: UserId };
+  "masons.member_joined": { playerId: UserId };
+  "game.start_deferred": { joinedPlayers: number; minimumPlayers: number };
   // Server-only
   "audit.vote": {
     phaseId: PhaseId;

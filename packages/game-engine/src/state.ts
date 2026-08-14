@@ -46,6 +46,7 @@ export interface VictoryResult {
 export interface GameState {
   id: GameId;
   status: GameStatus;
+  scheduledAt?: number | null;
   day: number;
   phase: { id: PhaseId; type: GamePhase; startedAt: number; endsAt: number } | null;
   players: Record<UserId, PlayerState>;
@@ -55,7 +56,9 @@ export interface GameState {
   version: number;
 }
 
-export type GamePatch = Partial<Pick<GameState, "status" | "day" | "phase" | "winner" | "version">>;
+export type GamePatch = Partial<
+  Pick<GameState, "status" | "scheduledAt" | "day" | "phase" | "winner" | "version">
+>;
 export type PlayerPatch = { playerId: UserId; changes: Partial<PlayerState> };
 export type EventDraft<K extends EventKind = EventKind> = {
   kind: K;

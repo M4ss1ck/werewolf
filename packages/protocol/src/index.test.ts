@@ -204,6 +204,8 @@ test("EVENT_KINDS covers the initial protocol vocabulary", () => {
     "cursed.converted",
     "harlot.result",
     "wolves.member_joined",
+    "masons.member_joined",
+    "game.start_deferred",
     "audit.vote",
     "audit.night",
   ]);
