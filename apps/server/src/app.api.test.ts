@@ -2,109 +2,23 @@
 // libSQL database (migrations applied), builds the Hono app with a stubbed
 // session resolver (an `x-user-id` header stands in for Google auth), and
 // drives it through app.request. A controllable clock lets tests advance
-// phases the way the scheduler will.
+// phases the way the scheduler will. The harness lives in ./test/harness.ts.
 
-import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { applyMigrations, createDb, type Db, GameRepository } from "@werewolf/db";
+import { expect, test } from "bun:test";
+import { type Db, GameRepository } from "@werewolf/db";
 import type { DomainTransition, GameState } from "@werewolf/game-engine";
-import type { GameId, UserId, ViewerGameSnapshot } from "@werewolf/protocol";
-import type { App } from "./app.ts";
-import { createApp } from "./app.ts";
-import { GameCoordinator } from "./game/coordinator.ts";
-import { GameLock } from "./game/locks.ts";
-
-const USERS = ["u1", "u2", "u3", "u4", "u5", "u6", "u7"];
-
-type Harness = {
-  app: App;
-  coordinator: GameCoordinator;
-  repo: GameRepository;
-  clock: { now: number };
-  close: () => void;
-};
-
-const cleanups: (() => void)[] = [];
-afterEach(() => {
-  while (cleanups.length > 0) cleanups.pop()!();
-});
-
-async function setup(
-  overrides: { createRepo?: (db: Db) => GameRepository; lock?: GameLock } = {},
-): Promise<Harness> {
-  const dir = mkdtempSync(join(tmpdir(), "werewolf-server-test-"));
-  const { client, db } = createDb(`file:${join(dir, "test.db")}`);
-  cleanups.push(() => {
-    client.close();
-    rmSync(dir, { recursive: true, force: true });
-  });
-  await applyMigrations(db);
-  const repo = overrides.createRepo ? overrides.createRepo(db) : new GameRepository(db);
-  const clock = { now: 1_000_000 };
-  const coordinator = new GameCoordinator(repo, overrides.lock ?? new GameLock(), () => clock.now);
-  const app = createApp({
-    coordinator,
-    sessionResolver: async (request) => {
-      const userId = request.headers.get("x-user-id");
-      return userId ? { userId } : null;
-    },
-  });
-  return { app, coordinator, repo, clock, close: () => client.close() };
-}
-
-function as(app: App, userId: string, path: string, init: RequestInit = {}) {
-  const headers = new Headers(init.headers);
-  headers.set("x-user-id", userId);
-  return app.request(path, { ...init, headers });
-}
-
-function jsonRequest(method: string, body: unknown, userId = USERS[0]!) {
-  return {
-    method,
-    headers: { "x-user-id": userId, "content-type": "application/json" },
-    body: JSON.stringify(body),
-  } as const;
-}
-
-/** Create a game as the owner. Returns the full GameState (has `id`). */
-async function createGame(app: App, owner = USERS[0]!): Promise<GameState> {
-  const response = await as(
-    app,
-    owner,
-    "/api/games",
-    jsonRequest("POST", { name: "Lobby", settings: { spectatingEnabled: true } }, owner),
-  );
-  expect(response.status).toBe(200);
-  return (await response.json()) as GameState;
-}
-
-/** Join `players` (the owner is already a member) and start the game. */
-async function startGameWithPlayers(app: App, owner: string, players: string[]): Promise<GameId> {
-  const game = await createGame(app, owner);
-  for (const player of players) {
-    const response = await as(app, player, `/api/games/${game.id}/join`, jsonRequest("POST", {}));
-    expect(response.status).toBe(200);
-  }
-  const start = await as(app, owner, `/api/games/${game.id}/start`, jsonRequest("POST", {}));
-  expect(start.status).toBe(200);
-  return game.id;
-}
-
-async function snapshot(app: App, userId: string, gameId: GameId): Promise<ViewerGameSnapshot> {
-  const response = await as(app, userId, `/api/games/${gameId}`);
-  expect(response.status).toBe(200);
-  return (await response.json()) as ViewerGameSnapshot;
-}
-
-function chatCommand(commandId: string, phaseId: number) {
-  return { commandId, phaseId, type: "chat.send", payload: { channel: "public", text: "hello" } };
-}
-
-function voteCommand(commandId: string, phaseId: number, targetId: string) {
-  return { commandId, phaseId, type: "vote.set", payload: { targetId } };
-}
+import type { GameId, UserId } from "@werewolf/protocol";
+import {
+  as,
+  chatCommand,
+  createGame,
+  jsonRequest,
+  setup,
+  snapshot,
+  startGameWithPlayers,
+  USERS,
+  voteCommand,
+} from "./test/harness.ts";
 
 test("create a game, five players join, the owner starts it, and every player is alive with a role", async () => {
   const { app } = await setup();

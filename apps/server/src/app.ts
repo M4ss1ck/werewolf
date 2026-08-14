@@ -1,5 +1,6 @@
 import type { GameRepository } from "@werewolf/db";
 import { Hono } from "hono";
+import { upgradeWebSocket } from "hono/bun";
 import {
   type createAuth,
   requireViewer,
@@ -7,6 +8,7 @@ import {
   type ViewerContext,
 } from "./auth/auth.ts";
 import { GameCoordinator } from "./game/coordinator.ts";
+import type { GameHub } from "./live/game-hub.ts";
 import { commandRoutes } from "./routes/commands.ts";
 import { eventRoutes } from "./routes/events.ts";
 import { gamesRoutes } from "./routes/games.ts";
@@ -25,6 +27,7 @@ export type AppOptions = {
   sessionResolver?: (request: Request) => Promise<ViewerContext | null>;
   coordinator?: GameCoordinator;
   auth?: ReturnType<typeof createAuth>;
+  gameHub?: GameHub;
 };
 
 export function createApp(options: AppOptions = {}) {
@@ -43,6 +46,29 @@ export function createApp(options: AppOptions = {}) {
     app.route("/api", eventRoutes(coordinator));
     app.route("/api", replayRoutes(coordinator));
     app.route("/api", preferenceRoutes());
+    if (options.gameHub)
+      app.get(
+        "/api/games/:id/live",
+        upgradeWebSocket((c) => {
+          const viewer = c.get("viewer") as ViewerContext;
+          let connection: ReturnType<GameHub["connect"]> | undefined;
+          return {
+            onOpen(_event, ws) {
+              connection = options.gameHub!.connect(
+                c.req.param("id") as import("@werewolf/protocol").GameId,
+                viewer.userId as import("@werewolf/protocol").UserId,
+                ws,
+              );
+            },
+            onMessage(event) {
+              if (connection) void connection.message(String(event.data));
+            },
+            onClose() {
+              connection?.close();
+            },
+          };
+        }),
+      );
   }
 
   // Must stay last: the SPA fallback swallows unmatched GETs.

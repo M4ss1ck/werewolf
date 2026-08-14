@@ -1,6 +1,6 @@
 import type { DomainTransition, PlayerPatch } from "@werewolf/game-engine";
 import type { EventId, GameId, UserId } from "@werewolf/protocol";
-import { and, asc, eq, gt } from "drizzle-orm";
+import { and, asc, eq, gt, isNotNull } from "drizzle-orm";
 import type { Db } from "./client.ts";
 import { mapEvent, mapGame } from "./mapper.ts";
 import { gameEvents, gamePlayers, games } from "./schema.ts";
@@ -54,6 +54,15 @@ export class GameRepository {
       .from(games)
       .where(eq(games.visibility, "public"))
       .orderBy(asc(games.createdAt));
+  }
+  async listScheduledGames() {
+    return this.db.select().from(games).where(eq(games.status, "scheduled"));
+  }
+  async listRunningGames() {
+    return this.db
+      .select()
+      .from(games)
+      .where(and(eq(games.status, "running"), isNotNull(games.phaseEndsAt)));
   }
   async getGame(gameId: GameId) {
     return (await this.db.select().from(games).where(eq(games.id, gameId)).limit(1))[0] ?? null;
