@@ -23,6 +23,7 @@ function state(roles: PlayerState["role"][], phaseId = 1, endsAt = 100): GameSta
   );
   return {
     id: "g" as GameState["id"],
+    ownerUserId: "p0" as PlayerState["id"],
     status: "running",
     day: 1,
     phase: {

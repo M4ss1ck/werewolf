@@ -31,6 +31,7 @@ function state(
   );
   return {
     id: "g" as GameState["id"],
+    ownerUserId: uid("p0"),
     status: "running",
     day: 1,
     phase: { id: phaseId as never, type: phase, startedAt: 0, endsAt: 100 },

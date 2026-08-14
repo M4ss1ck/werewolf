@@ -26,6 +26,7 @@ export interface PublicGame {
 export interface CreateGameInput {
   name: string;
   visibility?: "public" | "private";
+  scheduledAt?: number;
   settings?: {
     discussionDurationMs?: number;
     votingDurationMs?: number;

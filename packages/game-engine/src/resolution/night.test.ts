@@ -30,6 +30,7 @@ function makeState(
   );
   return {
     id: id("g") as unknown as GameState["id"],
+    ownerUserId: id("p0"),
     status: "running",
     day: 1,
     phase: { id: phaseId as never, type: "night", startedAt: 0, endsAt: 100 },

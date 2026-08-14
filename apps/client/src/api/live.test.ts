@@ -54,6 +54,7 @@ function makeSnapshot(cursor: number): ViewerGameSnapshot {
     game: {
       id: gameId,
       name: "Lobby 1",
+      ownerUserId: "owner-1" as ViewerGameSnapshot["game"]["ownerUserId"],
       status: "lobby",
       day: 1,
       phase: null,

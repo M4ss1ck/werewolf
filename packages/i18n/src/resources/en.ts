@@ -86,6 +86,7 @@ export const en = {
     },
   },
   errors: {
+    UNKNOWN_ERROR: "Something went wrong. Please try again.",
     GAME_NOT_FOUND: "That game could not be found.",
     GAME_ALREADY_STARTED: "That game has already started.",
     GAME_NOT_STARTED: "That game has not started yet.",

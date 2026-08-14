@@ -12,6 +12,7 @@ function state(
   const id = PLAYER_ID;
   return {
     id: "g" as GameState["id"],
+    ownerUserId: id,
     status: "running",
     day: 1,
     phase: { id: 1 as never, type: phase, startedAt: 0, endsAt: 100 },

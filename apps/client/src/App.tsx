@@ -1,7 +1,10 @@
+import { useEffect, useState } from "react";
 import { I18nextProvider } from "react-i18next";
-
+import { api } from "./api/client.ts";
+import { getSession, type Session } from "./auth/session.ts";
 import { i18n } from "./i18n/i18n.ts";
-import { Routes } from "./routes.tsx";
+import { currentRoute, navigate } from "./routes.tsx";
+import { GameScreen, GamesScreen, LobbyScreen, SignInScreen } from "./screens.tsx";
 
 export function App() {
   return (
@@ -12,10 +15,47 @@ export function App() {
 }
 
 function Shell() {
+  const [session, setSession] = useState<Session | null>(null);
+  const [route, setRoute] = useState(currentRoute());
+  const [snapshot, setSnapshot] = useState<Awaited<ReturnType<typeof api.getSnapshot>> | null>(
+    null,
+  );
+  useEffect(() => {
+    void getSession().then(setSession);
+    const update = () => setRoute(currentRoute());
+    window.addEventListener("popstate", update);
+    return () => window.removeEventListener("popstate", update);
+  }, []);
+  useEffect(() => {
+    if (route.type !== "games")
+      void (route.type === "replay"
+        ? api.getReplay(route.id).then((result) => setSnapshot(result.state))
+        : api.getSnapshot(route.id).then(setSnapshot));
+  }, [route]);
+  const open = (id: string) => navigate(`/games/${id}`);
   return (
-    <main className="flex min-h-dvh flex-col items-center justify-center gap-2">
-      <h1 className="text-2xl font-semibold">Werewolf</h1>
-      <Routes />
+    <main className="min-h-dvh bg-slate-50 px-4 py-6 text-slate-900">
+      <div className="mx-auto flex max-w-6xl flex-col gap-6">
+        <header className="flex items-center justify-between">
+          <button className="text-xl font-bold" onClick={() => navigate("/")} type="button">
+            Werewolf
+          </button>
+          <SignInScreen onRefresh={() => void getSession().then(setSession)} session={session} />
+        </header>
+        {route.type === "games" ? (
+          <GamesScreen onOpen={open} />
+        ) : snapshot ? (
+          route.type === "replay" ? (
+            <GameScreen initial={snapshot} replay />
+          ) : snapshot.game.status === "lobby" || snapshot.game.status === "scheduled" ? (
+            <LobbyScreen onUpdate={setSnapshot} snapshot={snapshot} />
+          ) : (
+            <GameScreen initial={snapshot} />
+          )
+        ) : (
+          <p>{"…"}</p>
+        )}
+      </div>
     </main>
   );
 }

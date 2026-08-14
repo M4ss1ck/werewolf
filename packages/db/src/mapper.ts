@@ -35,6 +35,7 @@ export function mapGame(rows: { game: GameRow; players: PlayerRow[] }): GameStat
   return {
     id: game.id as GameId,
     name: game.name,
+    ownerUserId: game.ownerUserId as UserId,
     status: game.status as GameState["status"],
     scheduledAt: game.scheduledAt,
     day: game.day,

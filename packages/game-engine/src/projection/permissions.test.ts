@@ -17,6 +17,7 @@ function player(id: string, overrides: Partial<PlayerState>): PlayerState {
 }
 
 const state = {
+  ownerUserId: "startingWolf" as UserId,
   players: {
     startingWolf: player("startingWolf", {
       originalRole: "werewolf",

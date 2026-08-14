@@ -28,6 +28,7 @@ function makeState(): GameState {
   return {
     id: "game" as GameState["id"],
     name: "Game",
+    ownerUserId: id("seer"),
     status: "running",
     day: 1,
     phase: {
@@ -59,6 +60,7 @@ describe("viewer projection security", () => {
   test("living roles stay hidden, dead roles are public, and a member sees only their own role", () => {
     const state = makeState();
     const snapshot = projectSnapshot(state, { userId: id("seer"), cursor: 4, serverNow: 5 });
+    expect(snapshot.game.ownerUserId).toBe(id("seer"));
     expect(snapshot.me?.role).toBe("seer");
     expect(snapshot.players.find((player) => player.userId === id("wolf"))).not.toHaveProperty(
       "revealedRole",

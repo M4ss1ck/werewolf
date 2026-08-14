@@ -22,6 +22,7 @@ function makeState(count: number, status: GameState["status"] = "lobby"): GameSt
   );
   return {
     id: "game" as GameState["id"],
+    ownerUserId: "p0" as PlayerState["id"],
     status,
     day: 0,
     phase: null,

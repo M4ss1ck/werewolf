@@ -97,6 +97,7 @@ describe("GameRepository", () => {
     const expected: GameState = {
       id: GAME_ID,
       name: "Test lobby",
+      ownerUserId: OWNER_ID,
       status: "lobby",
       scheduledAt: null,
       day: 0,

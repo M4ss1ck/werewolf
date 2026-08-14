@@ -84,6 +84,7 @@ export const es: TranslationResource = {
     },
   },
   errors: {
+    UNKNOWN_ERROR: "Algo salió mal. Inténtalo de nuevo.",
     GAME_NOT_FOUND: "No se encontró esa partida.",
     GAME_ALREADY_STARTED: "Esa partida ya ha comenzado.",
     GAME_NOT_STARTED: "Esa partida aún no ha comenzado.",

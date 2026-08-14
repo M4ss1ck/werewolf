@@ -50,6 +50,7 @@ export interface ViewerGameSnapshot {
   game: {
     id: GameId;
     name: string;
+    ownerUserId: UserId;
     status: GameStatus;
     day: number;
     phase: {
@@ -92,6 +93,7 @@ export const ViewerGameSnapshotSchema = z.object({
   game: z.object({
     id: GameIdSchema,
     name: z.string(),
+    ownerUserId: UserIdSchema,
     status: GameStatusSchema,
     day: z.number(),
     phase: z

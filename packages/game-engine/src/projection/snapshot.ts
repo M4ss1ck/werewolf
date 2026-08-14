@@ -56,6 +56,7 @@ export function projectSnapshot(
     game: {
       id: state.id,
       name: state.name ?? state.id,
+      ownerUserId: state.ownerUserId,
       status: state.status,
       day: state.day,
       phase: state.phase,

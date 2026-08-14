@@ -49,6 +49,7 @@ export interface VictoryResult {
 export interface GameState {
   id: GameId;
   name?: string;
+  ownerUserId: UserId;
   status: GameStatus;
   scheduledAt?: number | null;
   day: number;

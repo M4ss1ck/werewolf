@@ -10,9 +10,13 @@ export interface Session {
 }
 
 export async function getSession(): Promise<Session | null> {
-  const response = await fetch("/api/auth/get-session", { credentials: "include" });
-  if (!response.ok) return null;
-  return (await response.json()) as Session | null;
+  try {
+    const response = await fetch("/api/auth/get-session", { credentials: "include" });
+    if (!response.ok) return null;
+    return (await response.json()) as Session | null;
+  } catch {
+    return null;
+  }
 }
 
 export function signInWithGoogle() {
