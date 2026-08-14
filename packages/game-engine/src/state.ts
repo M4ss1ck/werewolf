@@ -17,6 +17,8 @@ export interface GameSettings {
   discussionDurationMs: number;
   votingDurationMs: number;
   nightDurationMs: number;
+  visibility?: "public" | "private";
+  spectatingEnabled?: boolean;
 }
 
 export type StoredVote = { type: "player"; targetId: UserId } | { type: "abstain" };
@@ -28,6 +30,7 @@ export interface StoredPhaseState {
 
 export interface PlayerState {
   id: UserId;
+  displayName?: string;
   status: "lobby" | "alive" | "dead" | "spectator";
   originalRole: RoleId | null;
   role: RoleId | null;
@@ -45,6 +48,7 @@ export interface VictoryResult {
 
 export interface GameState {
   id: GameId;
+  name?: string;
   status: GameStatus;
   scheduledAt?: number | null;
   day: number;
