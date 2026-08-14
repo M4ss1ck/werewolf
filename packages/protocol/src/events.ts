@@ -3,8 +3,18 @@
 // shape. `chat.message` appears in both the public and the wolves-faction
 // scope; the `scope` field on the event distinguishes the two.
 
+import { z } from "zod";
 import type { ChatChannel, EventScope, FactionId, GamePhase, RoleId } from "./enums.ts";
+
+import {
+  ChatChannelSchema,
+  EventScopeSchema,
+  FactionIdSchema,
+  GamePhaseSchema,
+  RoleIdSchema,
+} from "./enums.ts";
 import type { EventId, PhaseId, UserId } from "./ids.ts";
+import { EventIdSchema, PhaseIdSchema, UserIdSchema } from "./ids.ts";
 
 export const EVENT_KINDS = [
   // Public
@@ -118,3 +128,221 @@ export interface GameEventBase {
 export type GameEvent = {
   [K in EventKind]: GameEventBase & { kind: K; payload: EventPayloads[K] };
 }[EventKind];
+
+export const VoteChoiceSchema: z.ZodType<VoteChoice> = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("player"),
+    targetId: UserIdSchema,
+  }),
+  z.object({
+    type: z.literal("abstain"),
+  }),
+  z.object({
+    type: z.literal("none"),
+  }),
+]);
+
+export const EliminationCauseSchema = z.enum(["day_vote", "night"]);
+export const NightDeathCauseSchema = z.enum([
+  "wolf_attack",
+  "hunter_retaliation",
+  "harlot_exposure",
+]);
+export const VictoryReasonSchema = z.enum(["wolves_eliminated", "wolves_outnumber"]);
+
+/** Runtime validation for a GameEvent; mirrors the type above branch for branch. */
+export const GameEventSchema = z.discriminatedUnion("kind", [
+  z.object({
+    id: EventIdSchema,
+    kind: z.literal("game.started"),
+    scope: EventScopeSchema,
+    scopeId: z.string().optional(),
+    actorUserId: UserIdSchema.optional(),
+    createdAt: z.number(),
+    payload: z.object({}),
+  }),
+  z.object({
+    id: EventIdSchema,
+    kind: z.literal("phase.started"),
+    scope: EventScopeSchema,
+    scopeId: z.string().optional(),
+    actorUserId: UserIdSchema.optional(),
+    createdAt: z.number(),
+    payload: z.object({
+      phaseId: PhaseIdSchema,
+      type: GamePhaseSchema,
+      startedAt: z.number(),
+      endsAt: z.number(),
+    }),
+  }),
+  z.object({
+    id: EventIdSchema,
+    kind: z.literal("vote.resolved"),
+    scope: EventScopeSchema,
+    scopeId: z.string().optional(),
+    actorUserId: UserIdSchema.optional(),
+    createdAt: z.number(),
+    payload: z.object({
+      phaseId: PhaseIdSchema,
+      eliminated: UserIdSchema.nullable(),
+      tallies: z.array(z.object({ targetId: UserIdSchema, count: z.number() })),
+      abstain: z.number(),
+      noVote: z.number(),
+    }),
+  }),
+  z.object({
+    id: EventIdSchema,
+    kind: z.literal("player.eliminated"),
+    scope: EventScopeSchema,
+    scopeId: z.string().optional(),
+    actorUserId: UserIdSchema.optional(),
+    createdAt: z.number(),
+    payload: z.object({
+      playerId: UserIdSchema,
+      role: RoleIdSchema,
+      cause: EliminationCauseSchema,
+    }),
+  }),
+  z.object({
+    id: EventIdSchema,
+    kind: z.literal("princess.revealed"),
+    scope: EventScopeSchema,
+    scopeId: z.string().optional(),
+    actorUserId: UserIdSchema.optional(),
+    createdAt: z.number(),
+    payload: z.object({ playerId: UserIdSchema }),
+  }),
+  z.object({
+    id: EventIdSchema,
+    kind: z.literal("night.resolved"),
+    scope: EventScopeSchema,
+    scopeId: z.string().optional(),
+    actorUserId: UserIdSchema.optional(),
+    createdAt: z.number(),
+    payload: z.object({ deaths: z.array(UserIdSchema) }),
+  }),
+  z.object({
+    id: EventIdSchema,
+    kind: z.literal("game.finished"),
+    scope: EventScopeSchema,
+    scopeId: z.string().optional(),
+    actorUserId: UserIdSchema.optional(),
+    createdAt: z.number(),
+    payload: z.object({
+      winningFactions: z.array(FactionIdSchema),
+      winningPlayers: z.array(UserIdSchema),
+      reason: VictoryReasonSchema,
+    }),
+  }),
+  z.object({
+    id: EventIdSchema,
+    kind: z.literal("chat.message"),
+    scope: EventScopeSchema,
+    scopeId: z.string().optional(),
+    actorUserId: UserIdSchema.optional(),
+    createdAt: z.number(),
+    payload: z.object({ channel: ChatChannelSchema, text: z.string() }),
+  }),
+  z.object({
+    id: EventIdSchema,
+    kind: z.literal("role.assigned"),
+    scope: EventScopeSchema,
+    scopeId: z.string().optional(),
+    actorUserId: UserIdSchema.optional(),
+    createdAt: z.number(),
+    payload: z.object({ role: RoleIdSchema, faction: FactionIdSchema }),
+  }),
+  z.object({
+    id: EventIdSchema,
+    kind: z.literal("seer.result"),
+    scope: EventScopeSchema,
+    scopeId: z.string().optional(),
+    actorUserId: UserIdSchema.optional(),
+    createdAt: z.number(),
+    payload: z.object({ targetId: UserIdSchema, role: RoleIdSchema }),
+  }),
+  z.object({
+    id: EventIdSchema,
+    kind: z.literal("cursed.converted"),
+    scope: EventScopeSchema,
+    scopeId: z.string().optional(),
+    actorUserId: UserIdSchema.optional(),
+    createdAt: z.number(),
+    payload: z.object({ role: RoleIdSchema, faction: FactionIdSchema }),
+  }),
+  z.object({
+    id: EventIdSchema,
+    kind: z.literal("harlot.result"),
+    scope: EventScopeSchema,
+    scopeId: z.string().optional(),
+    actorUserId: UserIdSchema.optional(),
+    createdAt: z.number(),
+    payload: z.object({ outcome: z.enum(["safe", "killed"]) }),
+  }),
+  z.object({
+    id: EventIdSchema,
+    kind: z.literal("wolves.member_joined"),
+    scope: EventScopeSchema,
+    scopeId: z.string().optional(),
+    actorUserId: UserIdSchema.optional(),
+    createdAt: z.number(),
+    payload: z.object({ playerId: UserIdSchema }),
+  }),
+  z.object({
+    id: EventIdSchema,
+    kind: z.literal("masons.member_joined"),
+    scope: EventScopeSchema,
+    scopeId: z.string().optional(),
+    actorUserId: UserIdSchema.optional(),
+    createdAt: z.number(),
+    payload: z.object({ playerId: UserIdSchema }),
+  }),
+  z.object({
+    id: EventIdSchema,
+    kind: z.literal("game.start_deferred"),
+    scope: EventScopeSchema,
+    scopeId: z.string().optional(),
+    actorUserId: UserIdSchema.optional(),
+    createdAt: z.number(),
+    payload: z.object({ joinedPlayers: z.number(), minimumPlayers: z.number() }),
+  }),
+  z.object({
+    id: EventIdSchema,
+    kind: z.literal("audit.vote"),
+    scope: EventScopeSchema,
+    scopeId: z.string().optional(),
+    actorUserId: UserIdSchema.optional(),
+    createdAt: z.number(),
+    payload: z.object({
+      phaseId: PhaseIdSchema,
+      votes: z.array(
+        z.object({
+          playerId: UserIdSchema,
+          choice: VoteChoiceSchema,
+        }),
+      ),
+    }),
+  }),
+  z.object({
+    id: EventIdSchema,
+    kind: z.literal("audit.night"),
+    scope: EventScopeSchema,
+    scopeId: z.string().optional(),
+    actorUserId: UserIdSchema.optional(),
+    createdAt: z.number(),
+    payload: z.object({
+      phaseId: PhaseIdSchema,
+      wolfVotes: z.array(z.object({ playerId: UserIdSchema, targetId: UserIdSchema.nullable() })),
+      wolfTarget: UserIdSchema.nullable(),
+      seerInspection: z.object({ targetId: UserIdSchema, role: RoleIdSchema }).nullable(),
+      harlotAction: z
+        .discriminatedUnion("type", [
+          z.object({ type: z.literal("stay") }),
+          z.object({ type: z.literal("visit"), targetId: UserIdSchema }),
+        ])
+        .nullable(),
+      deaths: z.array(z.object({ playerId: UserIdSchema, cause: NightDeathCauseSchema })),
+      conversions: z.array(UserIdSchema),
+    }),
+  }),
+]);

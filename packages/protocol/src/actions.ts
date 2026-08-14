@@ -1,26 +1,29 @@
 // The server drives gameplay legality: the client renders controls from this
 // model instead of switching on its own knowledge of roles.
 
-import type { ActionId } from "./enums.ts";
-import type { UserId } from "./ids.ts";
+import { z } from "zod";
 
-export interface AvailableTargetAction {
-  id: ActionId;
-  type: "target";
-  targets: {
-    userId: UserId;
-    enabled: boolean;
-  }[];
-  selectedTargetId?: UserId;
-}
+import { ActionIdSchema } from "./enums.ts";
+import { UserIdSchema } from "./ids.ts";
 
-/** A targetless option the player may pick, e.g. the Harlot staying home. */
-export interface AvailableChoiceAction {
-  id: ActionId;
-  type: "choice";
-  /** Whether this targetless action is currently selected. */
-  selected?: boolean;
-}
+export const AvailableActionSchema = z.discriminatedUnion("type", [
+  z.object({
+    id: ActionIdSchema,
+    type: z.literal("target"),
+    targets: z.array(
+      z.object({
+        userId: UserIdSchema,
+        enabled: z.boolean(),
+      }),
+    ),
+    selectedTargetId: UserIdSchema.optional(),
+  }),
+  z.object({
+    id: ActionIdSchema,
+    type: z.literal("choice"),
+    selected: z.boolean().optional(),
+  }),
+]);
 
 /** Union of action models; more shapes may join it later. */
-export type AvailableAction = AvailableTargetAction | AvailableChoiceAction;
+export type AvailableAction = z.infer<typeof AvailableActionSchema>;
