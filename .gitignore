@@ -1,0 +1,26 @@
+node_modules/
+dist/
+*.local
+.env
+.env.*
+!.env.example
+
+# Tauri
+apps/client/src-tauri/target/
+apps/client/src-tauri/gen/
+
+# Local databases used by tests / dev
+*.db
+*.db-journal
+*.sqlite
+local.db*
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Planning artifacts stay local (global CLAUDE.md rule 5)
+werewolf-product-technical-spec-v1.md
+docs/superpowers/

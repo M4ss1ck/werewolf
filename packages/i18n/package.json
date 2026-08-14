@@ -1,0 +1,16 @@
+{
+  "name": "@werewolf/i18n",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@werewolf/protocol": "workspace:*",
+    "i18next": "^25.6.0"
+  }
+}
