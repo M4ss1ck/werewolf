@@ -1,6 +1,15 @@
-// Shared wire vocabulary between client and server. No internal dependencies.
-// Modules to be filled in: ids, enums, commands, events, snapshots, actions,
-// errors, websocket.
+// Shared wire vocabulary between client and server. This package only
+// describes the wire: schema and type definitions, no helpers or runtime
+// logic, and no internal dependencies.
 
 export const MIN_PLAYERS = 5;
 export const BALANCE_VERSION = 1;
+
+export * from "./ids.ts";
+export * from "./enums.ts";
+export * from "./commands.ts";
+export * from "./events.ts";
+export * from "./snapshots.ts";
+export * from "./actions.ts";
+export * from "./errors.ts";
+export * from "./websocket.ts";
