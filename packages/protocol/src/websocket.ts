@@ -5,8 +5,8 @@
 import { z } from "zod";
 
 import type { GameEvent } from "./events.ts";
-import { EventIdSchema } from "./ids.ts";
 import type { EventId } from "./ids.ts";
+import { EventIdSchema } from "./ids.ts";
 import type { ViewerGameSnapshot } from "./snapshots.ts";
 
 export const SubscribeFrameSchema = z.object({

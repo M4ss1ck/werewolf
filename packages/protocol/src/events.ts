@@ -3,13 +3,7 @@
 // shape. `chat.message` appears in both the public and the wolves-faction
 // scope; the `scope` field on the event distinguishes the two.
 
-import type {
-  ChatChannel,
-  EventScope,
-  FactionId,
-  GamePhase,
-  RoleId,
-} from "./enums.ts";
+import type { ChatChannel, EventScope, FactionId, GamePhase, RoleId } from "./enums.ts";
 import type { EventId, PhaseId, UserId } from "./ids.ts";
 
 export const EVENT_KINDS = [

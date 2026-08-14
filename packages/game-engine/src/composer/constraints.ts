@@ -1,5 +1,9 @@
 import type { RoleId } from "@werewolf/protocol";
-import { forbiddenCombinations, minimumVanillaVillagers, roleAvailabilityMinimums } from "./balance-v1.ts";
+import {
+  forbiddenCombinations,
+  minimumVanillaVillagers,
+  roleAvailabilityMinimums,
+} from "./balance-v1.ts";
 
 export function hasRole(roles: readonly RoleId[], role: RoleId): boolean {
   return roles.includes(role);
@@ -37,6 +41,11 @@ export function hasMinimumVanillaVillagers(roles: readonly RoleId[], playerCount
 }
 
 export function isValidComposition(roles: readonly RoleId[], playerCount: number): boolean {
-  return roles.length === playerCount && hasValidSpecialCardinality(roles) && hasAvailableRoles(roles, playerCount)
-    && hasAllowedCombinations(roles, playerCount) && hasMinimumVanillaVillagers(roles, playerCount);
+  return (
+    roles.length === playerCount &&
+    hasValidSpecialCardinality(roles) &&
+    hasAvailableRoles(roles, playerCount) &&
+    hasAllowedCombinations(roles, playerCount) &&
+    hasMinimumVanillaVillagers(roles, playerCount)
+  );
 }

@@ -26,13 +26,7 @@ export const GAME_PHASES = ["discussion", "voting", "night"] as const;
 export type GamePhase = (typeof GAME_PHASES)[number];
 export const GamePhaseSchema = z.enum(GAME_PHASES);
 
-export const GAME_STATUSES = [
-  "lobby",
-  "scheduled",
-  "running",
-  "finished",
-  "cancelled",
-] as const;
+export const GAME_STATUSES = ["lobby", "scheduled", "running", "finished", "cancelled"] as const;
 export type GameStatus = (typeof GAME_STATUSES)[number];
 export const GameStatusSchema = z.enum(GAME_STATUSES);
 
@@ -40,12 +34,7 @@ export const GAME_PLAYER_STATUSES = ["lobby", "alive", "dead", "spectator"] as c
 export type GamePlayerStatus = (typeof GAME_PLAYER_STATUSES)[number];
 export const GamePlayerStatusSchema = z.enum(GAME_PLAYER_STATUSES);
 
-export const ACTION_IDS = [
-  "wolf.attack",
-  "seer.inspect",
-  "harlot.visit",
-  "harlot.stay",
-] as const;
+export const ACTION_IDS = ["wolf.attack", "seer.inspect", "harlot.visit", "harlot.stay"] as const;
 export type ActionId = (typeof ACTION_IDS)[number];
 export const ActionIdSchema = z.enum(ACTION_IDS);
 

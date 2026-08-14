@@ -24,9 +24,7 @@ describe("SeededRng", () => {
   });
 
   test("selects weighted values", () => {
-    const value = new SeededRng("seed").weightedPick([
-      { value: "only", weight: 1 },
-    ]);
+    const value = new SeededRng("seed").weightedPick([{ value: "only", weight: 1 }]);
     expect(value).toBe("only");
   });
 });

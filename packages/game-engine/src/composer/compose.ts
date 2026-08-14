@@ -47,7 +47,8 @@ function chooseSpecialRoles(count: number, playerCount: number, rng: SeededRng):
 
 export function composeBalancedGame(input: ComposeBalancedGameInput): RoleId[] {
   const { playerCount, seed, balanceVersion = BALANCE_V1 } = input;
-  if (balanceVersion !== BALANCE_V1) throw new Error(`Unsupported balance version: ${balanceVersion}`);
+  if (balanceVersion !== BALANCE_V1)
+    throw new Error(`Unsupported balance version: ${balanceVersion}`);
   if (!Number.isInteger(playerCount) || playerCount < 5) throw new Error("Minimum 5 players");
 
   const wolves = getStartingWolfCount(playerCount);

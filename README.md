@@ -33,7 +33,9 @@ bun install
 bun run dev:server        # Bun + Hono on :3000
 bun run dev:client        # Vite on :1420, proxying /api to :3000
 
-bun run check             # boundaries + typecheck + tests — the gate
+bun run check             # lint + boundaries + typecheck + tests — the gate
+bun run format            # Biome: format, organize imports, safe lint fixes
+bun run lint              # Biome check without writing
 bun run check:boundaries  # dependency rules
 bun run typecheck         # tsc --noEmit in every workspace
 bun run test              # bun test (packages, server) + vitest (client)

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-
+import type { EventId, GameEvent, UserId } from "./index.ts";
 import {
   BALANCE_VERSION,
   ChatSendCommandSchema,
@@ -7,11 +7,10 @@ import {
   GameplayCommandSchema,
   MIN_PLAYERS,
   NightActionSetCommandSchema,
-  RoleIdSchema,
   ROLE_IDS,
+  RoleIdSchema,
   SubscribeFrameSchema,
 } from "./index.ts";
-import type { EventId, GameEvent, UserId } from "./index.ts";
 
 test("a game needs at least five active players", () => {
   expect(MIN_PLAYERS).toBe(5);

@@ -17,9 +17,7 @@ export const roleAvailabilityMinimums: Partial<Record<RoleId, number>> = {
   mason: 8,
 };
 
-export const forbiddenCombinations: readonly (readonly RoleId[])[] = [
-  ["seer", "princess"],
-];
+export const forbiddenCombinations: readonly (readonly RoleId[])[] = [["seer", "princess"]];
 
 export function getStartingWolfCount(players: number): number {
   if (players < 5) throw new Error("Minimum 5 players");

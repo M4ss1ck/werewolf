@@ -8,10 +8,12 @@ write code here.
 Nothing is done until this passes:
 
 ```bash
-bun run check      # boundaries + typecheck (6 workspaces) + bun test + vitest
+bun run format     # Biome: format, organize imports, apply safe lint fixes
+bun run check      # lint + boundaries + typecheck (6 workspaces) + bun test + vitest
 ```
 
-Run it before claiming any task is complete. If you touched the client, also run
+Run `bun run format` before `bun run check`; the gate fails on unformatted code.
+Run the gate before claiming any task is complete. If you touched the client, also run
 `bun run build`. Never report success on a command you did not actually run, and
 never paste output you did not actually see.
 

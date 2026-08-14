@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  composeBalancedGame,
-  getStartingWolfCount,
-  minimumVanillaVillagers,
-} from "../index.ts";
+import { composeBalancedGame, getStartingWolfCount, minimumVanillaVillagers } from "../index.ts";
 
 const playerCounts = Array.from({ length: 20 }, (_, index) => index + 5);
 const seeds = Array.from({ length: 40 }, (_, index) => `seed-${index}`);
@@ -13,7 +9,9 @@ describe("balance-v1 role composer", () => {
     for (const seed of seeds) {
       const roles = composeBalancedGame({ playerCount, seed, balanceVersion: 1 });
       expect(roles).toHaveLength(playerCount);
-      expect(roles.filter((role) => role === "werewolf")).toHaveLength(getStartingWolfCount(playerCount));
+      expect(roles.filter((role) => role === "werewolf")).toHaveLength(
+        getStartingWolfCount(playerCount),
+      );
       expect([0, 2].includes(roles.filter((role) => role === "mason").length)).toBe(true);
       expect(roles.filter((role) => role === "villager").length).toBeGreaterThanOrEqual(
         minimumVanillaVillagers(playerCount),
