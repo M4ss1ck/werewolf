@@ -37,6 +37,14 @@ COPY apps/server apps/server
 # The SPA is served from apps/server/public (see src/static/serve-client.ts).
 COPY --from=build /app/apps/client/dist apps/server/public
 
+# Production points TURSO_DATABASE_URL at a hosted libsql:// URL and never
+# touches this, but a file: URL must have somewhere writable to land or the
+# container dies on boot with "Unable to open connection to local database".
+RUN mkdir -p /app/data && chown -R bun:bun /app/data
+VOLUME ["/app/data"]
+
+USER bun
+
 EXPOSE 3000
 
 # Run exactly one replica: the game hub, the per-game locks and event fanout

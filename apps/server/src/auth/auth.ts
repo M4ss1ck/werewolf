@@ -16,6 +16,12 @@ export function createAuth(db: Db, env: Env) {
     socialProviders: {
       google: { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET },
     },
+    advanced: {
+      // The app always runs behind a reverse proxy, so the socket address is
+      // the proxy's. Without this every request shares one rate-limit bucket
+      // and one abusive client throttles everybody.
+      ipAddress: { ipAddressHeaders: ["x-forwarded-for", "x-real-ip"] },
+    },
   });
 }
 
