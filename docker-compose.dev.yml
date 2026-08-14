@@ -1,0 +1,45 @@
+# Development stack. Run with:
+#
+#   docker compose -f docker-compose.dev.yml up
+#
+# The API is on http://localhost:3000 and the Vite dev server on
+# http://localhost:1420. Use the Vite URL while developing: it hot-reloads and
+# proxies /api to the server.
+#
+# The database is a local libSQL file under ./data, so no Turso account is
+# needed to develop. Point TURSO_DATABASE_URL at a real Turso URL when you want
+# to work against the hosted database instead.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    env_file:
+      - .env
+    environment:
+      PORT: 3000
+      # Overrides .env so the container writes inside its own volume.
+      TURSO_DATABASE_URL: file:/app/data/werewolf.db
+      TURSO_AUTH_TOKEN: ""
+      BETTER_AUTH_URL: http://localhost:3000
+      # Lets the Vite dev server reach the API from inside the container.
+      VITE_SERVER_ORIGIN: http://localhost:3000
+      # Bind mounts do not deliver inotify events; poll instead.
+      VITE_POLL: "1"
+    ports:
+      - "3000:3000"
+      - "1420:1420"
+    volumes:
+      # Live source, so edits on the host reload in the container.
+      - .:/app
+      # Keep the image's installed dependencies rather than the host's.
+      - /app/node_modules
+      # Persist the development database across restarts.
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

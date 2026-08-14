@@ -25,11 +25,42 @@ scripts/
 Do not add `shared`, `common` or `utils` packages. A new package needs a real
 reusable boundary behind it.
 
-## Commands
+## Getting started
+
+```bash
+cp .env.example .env      # then fill it in; every value is documented in the file
+```
+
+`.env.example` explains where each variable comes from, including how to get
+Google OAuth credentials and a Turso database. For local development you need
+neither: the default `TURSO_DATABASE_URL` is a local file, and only Google
+sign-in requires real credentials.
+
+### With Docker (development)
+
+```bash
+docker compose -f docker-compose.dev.yml up
+```
+
+Open **http://localhost:1420** — that is the Vite dev server, which hot-reloads
+and proxies `/api` to the API on port 3000. Sources are bind-mounted, so edits
+on the host reload in the container. The database is a file under `./data`, so
+it survives restarts and needs no Turso account.
+
+`docker-compose.yml` (no `.dev`) is the production stack instead: one container
+serving the built SPA and the API together.
+
+### Without Docker
 
 ```bash
 bun install
+bun run dev               # server on :3000 and client on :1420 together
+```
 
+## Commands
+
+```bash
+bun run dev               # server + client
 bun run dev:server        # Bun + Hono on :3000
 bun run dev:client        # Vite on :1420, proxying /api to :3000
 

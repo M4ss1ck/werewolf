@@ -12,7 +12,15 @@ export default defineConfig({
   server: {
     port: 1420,
     strictPort: true,
-    watch: { ignored: ["**/src-tauri/**"] },
+    // Bind all interfaces so the dev server is reachable from outside the
+    // container when running the Docker development stack.
+    host: true,
+    // Bind mounts do not deliver filesystem events into the container, so fall
+    // back to polling when the container asks for it.
+    watch: {
+      ignored: ["**/src-tauri/**"],
+      ...(process.env.VITE_POLL ? { usePolling: true, interval: 300 } : {}),
+    },
     proxy: {
       "/api": { target: SERVER_ORIGIN, changeOrigin: true, ws: true },
     },

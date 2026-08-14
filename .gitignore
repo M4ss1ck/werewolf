@@ -14,6 +14,7 @@ apps/client/src-tauri/gen/
 *.db-journal
 *.sqlite
 local.db*
+data/
 
 # Editors / OS
 .DS_Store
