@@ -82,6 +82,16 @@ export class GameRepository {
       .delete(gamePlayers)
       .where(and(eq(gamePlayers.gameId, gameId), eq(gamePlayers.userId, userId)));
   }
+  async updateGame(
+    gameId: GameId,
+    patch: { name?: string | undefined; visibility?: string | undefined },
+  ) {
+    const changes: Partial<typeof games.$inferInsert> = {};
+    if (patch.name !== undefined) changes.name = patch.name;
+    if (patch.visibility !== undefined) changes.visibility = patch.visibility;
+    if (Object.keys(changes).length === 0) return;
+    await this.db.update(games).set(changes).where(eq(games.id, gameId));
+  }
   async updatePlayerPhaseState(gameId: GameId, userId: UserId, phaseState: unknown) {
     await this.db
       .update(gamePlayers)

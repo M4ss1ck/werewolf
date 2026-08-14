@@ -46,6 +46,7 @@
         "@werewolf/game-engine": "workspace:*",
         "@werewolf/protocol": "workspace:*",
         "better-auth": "^1.3.27",
+        "drizzle-orm": "^0.44.6",
         "hono": "^4.9.10",
         "zod": "^4.1.5",
       },

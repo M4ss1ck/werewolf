@@ -37,6 +37,7 @@ bun run check             # lint + boundaries + typecheck + tests — the gate
 bun run format            # Biome: format, organize imports, safe lint fixes
 bun run lint              # Biome check without writing
 bun run check:boundaries  # dependency rules
+bun run db:migrate       # create/migrate the database (game + Better Auth tables)
 bun run typecheck         # tsc --noEmit in every workspace
 bun run test              # bun test (packages, server) + vitest (client)
 bun run build             # client production build
@@ -46,6 +47,22 @@ bun run --cwd apps/client tauri build
 ```
 
 Copy `.env.example` to `.env` before running the server.
+
+## Database bootstrap
+
+A fresh empty database is brought to a working state with one command:
+
+```bash
+bun run db:migrate
+```
+
+This applies the game-table migrations (`packages/db/src/migrations`) and then
+creates Better Auth's own tables (`user`, `session`, `account`, `verification`
+— they live in `apps/server/src/auth/schema.ts`, not in `@werewolf/db`). Both
+steps are idempotent, and the server also runs them on every boot
+(`apps/server/src/index.ts`), so the container self-provisions on a fresh
+database — `bun run db:migrate` is only needed when you want to migrate
+without starting the server.
 
 ## Package boundaries
 
