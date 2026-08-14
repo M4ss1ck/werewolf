@@ -34,5 +34,30 @@ export function validateCommand(
     }
     return null;
   }
+  if (command.type === "night.action.set" || command.type === "night.action.clear") {
+    if (state.phase.type !== "night") return { code: "ACTION_NOT_AVAILABLE" };
+    if (command.type === "night.action.clear") return null;
+    const target = "targetId" in command.payload ? state.players[command.payload.targetId] : null;
+    switch (command.payload.action) {
+      case "wolf.attack":
+        if (player.faction !== "wolves") return { code: "ACTION_NOT_AVAILABLE" };
+        if (!target || target.status !== "alive" || target.faction === "wolves")
+          return { code: "INVALID_TARGET" };
+        return null;
+      case "seer.inspect":
+        if (player.role !== "seer") return { code: "ACTION_NOT_AVAILABLE" };
+        if (!target || target.status !== "alive" || target.id === actorId)
+          return { code: "INVALID_TARGET" };
+        return null;
+      case "harlot.visit":
+        if (player.role !== "harlot") return { code: "ACTION_NOT_AVAILABLE" };
+        if (!target || target.status !== "alive" || target.id === actorId)
+          return { code: "INVALID_TARGET" };
+        return null;
+      case "harlot.stay":
+        if (player.role !== "harlot") return { code: "ACTION_NOT_AVAILABLE" };
+        return null;
+    }
+  }
   return { code: "ACTION_NOT_AVAILABLE" };
 }
