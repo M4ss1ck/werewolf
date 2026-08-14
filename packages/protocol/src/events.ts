@@ -29,11 +29,13 @@ export const EVENT_KINDS = [
 ] as const;
 export type EventKind = (typeof EVENT_KINDS)[number];
 
-export type EliminationCause =
-  | "day_vote"
-  | "wolf_attack"
-  | "hunter_retaliation"
-  | "harlot_exposure";
+/** Public elimination cause. Night deaths share one value so a spectator
+ * cannot tell an ordinary attack from a Hunter retaliation or a Harlot
+ * exposure; the precise cause lives in the server-scope audit.night event. */
+export type EliminationCause = "day_vote" | "night";
+
+/** Precise per-death cause, recorded only in the server-scope audit.night. */
+export type NightDeathCause = "wolf_attack" | "hunter_retaliation" | "harlot_exposure";
 
 export type VictoryReason = "wolves_eliminated" | "wolves_outnumber";
 
@@ -91,7 +93,7 @@ export interface EventPayloads {
     wolfTarget: UserId | null;
     seerInspection: { targetId: UserId; role: RoleId } | null;
     harlotAction: { type: "stay" } | { type: "visit"; targetId: UserId } | null;
-    deaths: UserId[];
+    deaths: { playerId: UserId; cause: NightDeathCause }[];
     conversions: UserId[];
   };
 }

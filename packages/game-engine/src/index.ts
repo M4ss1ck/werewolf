@@ -10,6 +10,7 @@ export * from "./composer/balance-v1.ts";
 export * from "./composer/compose.ts";
 export * from "./composer/constraints.ts";
 export * from "./projection/available-actions.ts";
+export * from "./resolution/night.ts";
 export * from "./resolution/victory.ts";
 export * from "./resolution/vote.ts";
 export * from "./rng/rng.ts";
