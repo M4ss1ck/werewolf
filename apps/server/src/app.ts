@@ -1,4 +1,4 @@
-import { type Db, GameRepository } from "@werewolf/db";
+import { type Db, GameRepository, type GlobalChatRepository } from "@werewolf/db";
 import { Hono } from "hono";
 import { upgradeWebSocket } from "hono/bun";
 import {
@@ -9,6 +9,8 @@ import {
 } from "./auth/auth.ts";
 import { GameCoordinator } from "./game/coordinator.ts";
 import type { GameHub } from "./live/game-hub.ts";
+import type { GlobalChatHub } from "./live/global-chat-hub.ts";
+import { chatRoutes } from "./routes/chat.ts";
 import { commandRoutes } from "./routes/commands.ts";
 import { eventRoutes } from "./routes/events.ts";
 import { gamesRoutes } from "./routes/games.ts";
@@ -30,6 +32,7 @@ export type AppOptions = {
   coordinator?: GameCoordinator;
   auth?: ReturnType<typeof createAuth>;
   gameHub?: GameHub;
+  globalChat?: { repository: GlobalChatRepository; hub: GlobalChatHub };
 };
 
 export function createApp(options: AppOptions = {}) {
@@ -79,6 +82,34 @@ export function createApp(options: AppOptions = {}) {
           };
         }),
       );
+    if (options.globalChat) {
+      const { repository, hub } = options.globalChat;
+      app.route("/api", chatRoutes(repository, hub));
+      app.get(
+        "/api/chat/live",
+        upgradeWebSocket((c) => {
+          const viewer = c.get("viewer") as ViewerContext;
+          let connection: ReturnType<GlobalChatHub["connect"]> | undefined;
+          return {
+            onOpen(_event, ws) {
+              connection = hub.connect(
+                {
+                  userId: viewer.userId as import("@werewolf/protocol").UserId,
+                  displayName: viewer.username ?? viewer.userId,
+                },
+                ws,
+              );
+            },
+            onMessage(event) {
+              if (connection) void connection.message(String(event.data));
+            },
+            onClose() {
+              connection?.close();
+            },
+          };
+        }),
+      );
+    }
   }
 
   // Must stay last: the SPA fallback swallows unmatched GETs.

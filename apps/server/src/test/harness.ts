@@ -8,7 +8,13 @@ import { afterEach, expect } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { applyMigrations, createDb, type Db, GameRepository } from "@werewolf/db";
+import {
+  applyMigrations,
+  createDb,
+  type Db,
+  GameRepository,
+  GlobalChatRepository,
+} from "@werewolf/db";
 import type { GameState } from "@werewolf/game-engine";
 import type { GameId, ViewerGameSnapshot } from "@werewolf/protocol";
 import type { App } from "../app.ts";
@@ -16,6 +22,7 @@ import { createApp } from "../app.ts";
 import { createAuthTables } from "../auth/schema.ts";
 import { GameCoordinator } from "../game/coordinator.ts";
 import { GameLock } from "../game/locks.ts";
+import { GlobalChatHub } from "../live/global-chat-hub.ts";
 
 export const USERS = ["u1", "u2", "u3", "u4", "u5", "u6", "u7"];
 
@@ -23,6 +30,8 @@ export type Harness = {
   app: App;
   coordinator: GameCoordinator;
   repo: GameRepository;
+  chatRepo: GlobalChatRepository;
+  chatHub: GlobalChatHub;
   db: Db;
   clock: { now: number };
   close: () => void;
@@ -45,11 +54,14 @@ export async function setup(
   await applyMigrations(db);
   await createAuthTables(client);
   const repo = overrides.createRepo ? overrides.createRepo(db) : new GameRepository(db);
+  const chatRepo = new GlobalChatRepository(db);
+  const chatHub = new GlobalChatHub(chatRepo);
   const clock = { now: 1_000_000 };
   const coordinator = new GameCoordinator(repo, overrides.lock ?? new GameLock(), () => clock.now);
   const app = createApp({
     db,
     coordinator,
+    globalChat: { repository: chatRepo, hub: chatHub },
     sessionResolver: async (request) => {
       const userId = request.headers.get("x-user-id");
       if (!userId) return null;
@@ -60,7 +72,7 @@ export async function setup(
       return { userId, username: header === null ? userId : header || null };
     },
   });
-  return { app, coordinator, repo, db, clock, close: () => client.close() };
+  return { app, coordinator, repo, chatRepo, chatHub, db, clock, close: () => client.close() };
 }
 
 export function as(app: App, userId: string, path: string, init: RequestInit = {}) {

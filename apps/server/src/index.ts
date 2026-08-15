@@ -1,4 +1,4 @@
-import { applyMigrations, createDb, GameRepository } from "@werewolf/db";
+import { applyMigrations, createDb, GameRepository, GlobalChatRepository } from "@werewolf/db";
 import { createApp } from "./app.ts";
 import { createAuth, resolveAuthSession } from "./auth/auth.ts";
 import { createAuthTables } from "./auth/schema.ts";
@@ -6,6 +6,7 @@ import { loadEnv } from "./env.ts";
 import { GameCoordinator } from "./game/coordinator.ts";
 import { PhaseScheduler } from "./game/scheduler.ts";
 import { GameHub } from "./live/game-hub.ts";
+import { GlobalChatHub } from "./live/global-chat-hub.ts";
 
 const env = loadEnv();
 const { client, db } = createDb(env.TURSO_DATABASE_URL, env.TURSO_AUTH_TOKEN);
@@ -22,11 +23,14 @@ const scheduler = new PhaseScheduler(repository, coordinator);
 // game's timer whenever the coordinator commits a change to it.
 coordinator.onCommitted((gameId) => void scheduler.watch(gameId));
 const hub = new GameHub(coordinator);
+const chatRepository = new GlobalChatRepository(db);
+const chatHub = new GlobalChatHub(chatRepository);
 const app = createApp({
   db,
   repository,
   coordinator,
   gameHub: hub,
+  globalChat: { repository: chatRepository, hub: chatHub },
   auth,
   sessionResolver: (request) => resolveAuthSession(auth, request),
 });
@@ -48,6 +52,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     void server.stop(false).then(() => {
       scheduler.stop();
       hub.stop();
+      chatHub.stop();
       client.close();
       process.exit(0);
     });
