@@ -33,13 +33,21 @@ function Shell() {
         : api.getSnapshot(route.id).then(setSnapshot));
   }, [route]);
   const open = (id: string) => navigate(`/games/${id}`);
+  const home = route.type === "games";
   return (
-    <main className="min-h-dvh bg-slate-50 px-4 py-6 text-slate-900">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6">
-        <header className="flex items-center justify-between">
-          <button className="text-xl font-bold" onClick={() => navigate("/")} type="button">
-            Werewolf
-          </button>
+    <div className="app-shell">
+      <div aria-hidden="true" className="app-shell__atmosphere" />
+      <main className="relative mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6">
+        <header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+          {home ? (
+            <h1 className="font-display text-2xl font-semibold tracking-wide text-paper sm:text-3xl">
+              Werewolf
+            </h1>
+          ) : (
+            <button className="brand-control" onClick={() => navigate("/")} type="button">
+              Werewolf
+            </button>
+          )}
           <SignInScreen onRefresh={() => void getSession().then(setSession)} session={session} />
         </header>
         {route.type === "games" ? (
@@ -53,9 +61,9 @@ function Shell() {
             <GameScreen initial={snapshot} />
           )
         ) : (
-          <p>{"…"}</p>
+          <p className="text-fog">{"…"}</p>
         )}
-      </div>
-    </main>
+      </main>
+    </div>
   );
 }

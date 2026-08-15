@@ -7,6 +7,7 @@ import { LiveGameConnection, type LiveStatus } from "./api/live.ts";
 import type { Session } from "./auth/session.ts";
 import {
   ErrorMessage,
+  initialsOf,
   LanguageSwitcher,
   PhaseBanner,
   PlayerList,
@@ -23,14 +24,18 @@ export function SignInScreen({
 }) {
   const { t } = useTranslation();
   return (
-    <section className="flex w-full max-w-md flex-col gap-4 rounded border bg-white p-6 shadow-sm">
-      <h1 className="text-2xl font-semibold">Werewolf</h1>
+    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
       <LanguageSwitcher onChange={(language) => void changeLocale(language, Boolean(session))} />
       {session ? (
-        <>
-          <p>{session.user.name ?? session.user.email ?? session.user.id}</p>
+        <div className="flex min-w-0 items-center gap-2">
+          <span aria-hidden="true" className="avatar">
+            {initialsOf(session.user.name ?? session.user.email ?? session.user.id)}
+          </span>
+          <span className="hidden max-w-40 truncate text-sm text-fog sm:inline">
+            {session.user.name ?? session.user.email ?? session.user.id}
+          </span>
           <button
-            className="rounded bg-slate-900 px-4 py-2 text-white"
+            className="btn btn--quiet btn--sm"
             onClick={() =>
               void import("./auth/session.ts").then(({ signOut }) => signOut()).then(onRefresh)
             }
@@ -38,10 +43,10 @@ export function SignInScreen({
           >
             {t("ui.signOut")}
           </button>
-        </>
+        </div>
       ) : (
         <button
-          className="rounded bg-slate-900 px-4 py-2 text-white"
+          className="btn btn--primary btn--sm"
           onClick={() =>
             void import("./auth/session.ts").then(({ signInWithGoogle }) => signInWithGoogle())
           }
@@ -50,7 +55,32 @@ export function SignInScreen({
           {t("ui.signIn")} · Google
         </button>
       )}
-    </section>
+    </div>
+  );
+}
+
+function GameCard({ game, onOpen }: { game: PublicGame; onOpen: (id: string) => void }) {
+  const { t } = useTranslation();
+  const running = game.status === "running";
+  return (
+    <article className="panel flex flex-wrap items-center justify-between gap-3">
+      <div className="min-w-0">
+        <h3 className="truncate font-display text-lg text-paper">{game.name}</h3>
+        <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-fog">
+          <span className="status-chip" data-status={game.status}>
+            {t(`gameStatuses.${game.status}`)}
+          </span>
+          <span>{t("ui.players.count", { count: game.playerCount ?? 0 })}</span>
+        </p>
+      </div>
+      <button
+        className={running ? "btn btn--quiet" : "btn btn--primary"}
+        onClick={() => onOpen(game.id)}
+        type="button"
+      >
+        {running ? t("ui.spectate") : t("ui.join")}
+      </button>
+    </article>
   );
 }
 
@@ -82,84 +112,105 @@ export function GamesScreen({ onOpen }: { onOpen: (id: string) => void }) {
     }
   };
   return (
-    <div className="w-full max-w-5xl space-y-6">
+    <div className="w-full space-y-8">
       <ErrorMessage error={error} />
-      <div className="grid gap-6 md:grid-cols-[1fr_20rem]">
-        <section>
-          <h1 className="mb-4 text-2xl font-semibold">{t("ui.waitingForPlayers")}</h1>
-          <div className="space-y-3">
-            {games.map((game) => (
-              <article
-                className="flex flex-wrap items-center justify-between gap-3 rounded border p-4"
-                key={game.id}
-              >
-                <div>
-                  <h2 className="font-semibold">{game.name}</h2>
-                  <p className="text-sm opacity-70">
-                    {t("ui.players.count", { count: game.playerCount ?? 0 })} ·{" "}
-                    {t(`gameStatuses.${game.status}`)}
-                  </p>
-                </div>
-                <button
-                  className="rounded border px-3 py-2"
-                  onClick={() => onOpen(game.id)}
-                  type="button"
-                >
-                  {game.status === "running" ? t("ui.spectate") : t("ui.join")}
-                </button>
-              </article>
-            ))}
-          </div>
+      <section className="max-w-2xl">
+        <p className="font-display text-lg leading-relaxed text-fog sm:text-xl">
+          {t("ui.homeTagline")}
+        </p>
+      </section>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
+        <section className="min-w-0">
+          <h2 className="mb-3 font-display text-xl text-paper sm:text-2xl">{t("ui.openGames")}</h2>
+          {games.length === 0 ? (
+            <p className="panel text-fog">{t("ui.noOpenGames")}</p>
+          ) : (
+            <ul className="space-y-3">
+              {games.map((game) => (
+                <li key={game.id}>
+                  <GameCard game={game} onOpen={onOpen} />
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
-        <form className="space-y-3 rounded border p-4" onSubmit={(event) => void create(event)}>
-          <h2 className="text-lg font-semibold">{t("ui.createGame")}</h2>
-          <input
-            className="w-full rounded border p-2"
-            onChange={(event) => setName(event.target.value)}
-            placeholder={t("ui.createGame")}
-            required
-            value={name}
-          />
-          <select
-            className="w-full rounded border p-2"
-            onChange={(event) => setVisibility(event.target.value as "public" | "private")}
-            value={visibility}
-          >
-            <option value="public">public</option>
-            <option value="private">private</option>
-          </select>
-          <label className="flex gap-2">
-            <input
-              checked={spectatingEnabled}
-              onChange={(event) => setSpectatingEnabled(event.target.checked)}
-              type="checkbox"
-            />
-            {t("ui.spectate")}
-          </label>
-          <input
-            className="w-full rounded border p-2"
-            onChange={(event) => setScheduledAt(event.target.value)}
-            type="datetime-local"
-            value={scheduledAt}
-          />
-          {Object.entries(durations).map(([key, value]) => (
-            <label className="block text-sm" key={key}>
-              {key}
+        <aside className="min-w-0">
+          <form className="panel space-y-4" onSubmit={(event) => void create(event)}>
+            <h2 className="font-display text-xl text-gold">{t("ui.createGame")}</h2>
+            <div className="space-y-1.5">
+              <label className="field-label" htmlFor="create-name">
+                {t("ui.gameName")}
+              </label>
               <input
-                className="ml-2 w-20 rounded border p-1"
-                min="1"
-                onChange={(event) =>
-                  setDurations((current) => ({ ...current, [key]: Number(event.target.value) }))
-                }
-                type="number"
-                value={value}
+                className="field-input w-full"
+                id="create-name"
+                onChange={(event) => setName(event.target.value)}
+                placeholder={t("ui.gameNamePlaceholder")}
+                required
+                value={name}
               />
+            </div>
+            <div className="space-y-1.5">
+              <label className="field-label" htmlFor="create-visibility">
+                {t("ui.visibility")}
+              </label>
+              <select
+                className="field-input w-full"
+                id="create-visibility"
+                onChange={(event) => setVisibility(event.target.value as "public" | "private")}
+                value={visibility}
+              >
+                <option value="public">{t("ui.visibilityPublic")}</option>
+                <option value="private">{t("ui.visibilityPrivate")}</option>
+              </select>
+            </div>
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-paper">
+              <input
+                checked={spectatingEnabled}
+                className="accent-gold"
+                onChange={(event) => setSpectatingEnabled(event.target.checked)}
+                type="checkbox"
+              />
+              {t("ui.allowSpectating")}
             </label>
-          ))}
-          <button className="w-full rounded bg-slate-900 px-4 py-2 text-white" type="submit">
-            {t("ui.createGame")}
-          </button>
-        </form>
+            <div className="space-y-1.5">
+              <label className="field-label" htmlFor="create-scheduled">
+                {t("ui.scheduledStart")}
+              </label>
+              <input
+                className="field-input w-full"
+                id="create-scheduled"
+                onChange={(event) => setScheduledAt(event.target.value)}
+                type="datetime-local"
+                value={scheduledAt}
+              />
+            </div>
+            <fieldset className="space-y-2.5">
+              <legend className="field-label">{t("ui.phaseDurations")}</legend>
+              {Object.entries(durations).map(([key, value]) => (
+                <div className="flex items-center gap-2" key={key}>
+                  <label className="min-w-0 flex-1 text-sm text-paper" htmlFor={`duration-${key}`}>
+                    {t(`phases.${key}`)}
+                  </label>
+                  <input
+                    className="field-input w-24 flex-none"
+                    id={`duration-${key}`}
+                    min="1"
+                    onChange={(event) =>
+                      setDurations((current) => ({ ...current, [key]: Number(event.target.value) }))
+                    }
+                    type="number"
+                    value={value}
+                  />
+                  <span className="w-16 flex-none text-xs text-fog">{t("ui.seconds")}</span>
+                </div>
+              ))}
+            </fieldset>
+            <button className="btn btn--primary w-full" type="submit">
+              {t("ui.createGame")}
+            </button>
+          </form>
+        </aside>
       </div>
     </div>
   );
@@ -175,6 +226,7 @@ export function LobbyScreen({
   const { t } = useTranslation();
   const [error, setError] = useState<unknown>();
   const isOwner = snapshot.game.ownerUserId === snapshot.me?.userId;
+  const ready = snapshot.players.length >= 5;
   const act = async (operation: () => Promise<ViewerGameSnapshot>) => {
     try {
       onUpdate(await operation());
@@ -185,21 +237,33 @@ export function LobbyScreen({
   return (
     <div className="w-full max-w-3xl space-y-5">
       <ErrorMessage error={error} />
-      <h1 className="text-2xl font-semibold">{snapshot.game.name}</h1>
+      <header className="panel space-y-2">
+        <h1 className="font-display text-2xl text-paper sm:text-3xl">{snapshot.game.name}</h1>
+        <p className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="status-chip" data-status={snapshot.game.status}>
+            {t(`gameStatuses.${snapshot.game.status}`)}
+          </span>
+          {ready ? (
+            <span className="chip chip--gold">{t("ui.readyToStart")}</span>
+          ) : (
+            <span className="chip">{t("ui.waitingForPlayers")}</span>
+          )}
+        </p>
+      </header>
       <PlayerList snapshot={snapshot} />
-      {snapshot.players.length < 5 && <p>{t("ui.notEnoughPlayers", { count: 5 })}</p>}
-      <div className="flex flex-wrap gap-2">
-        {isOwner ? (
-          <>
+      {!ready && <p className="text-sm text-fog">{t("ui.notEnoughPlayers", { count: 5 })}</p>}
+      {isOwner ? (
+        <div className="space-y-3">
+          <button
+            className="btn btn--primary"
+            onClick={() => void act(() => api.start(snapshot.game.id))}
+            type="button"
+          >
+            {t("ui.start")}
+          </button>
+          <div className="space-y-2 border-t border-fog/15 pt-3">
             <button
-              className="rounded bg-slate-900 px-3 py-2 text-white"
-              onClick={() => void act(() => api.start(snapshot.game.id))}
-              type="button"
-            >
-              {t("ui.start")}
-            </button>
-            <button
-              className="rounded border px-3 py-2"
+              className="btn btn--danger"
               onClick={() => void act(() => api.cancel(snapshot.game.id))}
               type="button"
             >
@@ -209,7 +273,7 @@ export function LobbyScreen({
               .filter((player) => player.userId !== snapshot.me?.userId)
               .map((player) => (
                 <button
-                  className="rounded border px-3 py-2"
+                  className="btn btn--danger"
                   key={player.userId}
                   onClick={() => void act(() => api.kick(snapshot.game.id, player.userId))}
                   type="button"
@@ -217,17 +281,17 @@ export function LobbyScreen({
                   {t("ui.cancel")} · {player.displayName}
                 </button>
               ))}
-          </>
-        ) : (
-          <button
-            className="rounded border px-3 py-2"
-            onClick={() => void act(() => api.leave(snapshot.game.id))}
-            type="button"
-          >
-            {t("ui.leave")}
-          </button>
-        )}
-      </div>
+          </div>
+        </div>
+      ) : (
+        <button
+          className="btn btn--danger"
+          onClick={() => void act(() => api.leave(snapshot.game.id))}
+          type="button"
+        >
+          {t("ui.leave")}
+        </button>
+      )}
     </div>
   );
 }
@@ -241,16 +305,18 @@ function ActionControls({
 }) {
   const { t } = useTranslation();
   const phaseId = snapshot.game.phase?.id;
+  const names = new Map(snapshot.players.map((player) => [player.userId, player.displayName]));
   if (snapshot.availableActions.length === 0 || phaseId === undefined) return null;
   return (
-    <section className="space-y-3">
-      <h2 className="text-lg font-semibold">{t("ui.vote")}</h2>
+    <section className="panel space-y-4">
+      <h2 className="font-display text-lg text-gold">{t("ui.yourMove")}</h2>
       {snapshot.availableActions.map((action) => (
-        <div key={action.id}>
-          <h3 className="font-medium">{t(`actions.${action.id}.label`)}</h3>
+        <div className="space-y-2" key={action.id}>
+          <h3 className="text-sm font-medium text-paper">{t(`actions.${action.id}.label`)}</h3>
+          <p className="text-sm text-fog">{t(`actions.${action.id}.prompt`)}</p>
           {action.type === "choice" ? (
             <button
-              className="rounded border px-3 py-2"
+              className="btn btn--primary"
               onClick={() =>
                 send({ type: "night.action.set", phaseId, payload: { action: action.id } } as Omit<
                   GameplayCommand,
@@ -265,7 +331,7 @@ function ActionControls({
             <div className="flex flex-wrap gap-2">
               {action.targets.map((target) => (
                 <button
-                  className="rounded border px-3 py-2 disabled:opacity-40"
+                  className="btn btn--quiet disabled:opacity-40 disabled:hover:border-fog/30 disabled:hover:text-paper"
                   disabled={!target.enabled}
                   key={target.userId}
                   onClick={() =>
@@ -277,7 +343,7 @@ function ActionControls({
                   }
                   type="button"
                 >
-                  {target.userId}
+                  {names.get(target.userId) ?? target.userId}
                 </button>
               ))}
             </div>
@@ -307,10 +373,11 @@ function Chat({
     (event) => event.kind === "chat.message" && event.payload.channel === channel,
   );
   return (
-    <section className="space-y-3">
-      <div className="flex gap-2">
+    <section className="panel">
+      <div className="flex gap-1 border-b border-fog/15">
         <button
-          className="rounded border px-2 py-1"
+          aria-pressed={channel === "public"}
+          className={`chat-tab ${channel === "public" ? "chat-tab--active" : ""}`}
           onClick={() => setChannel("public")}
           type="button"
         >
@@ -318,7 +385,8 @@ function Chat({
         </button>
         {snapshot.availableChannels.includes("wolves") && (
           <button
-            className="rounded border px-2 py-1"
+            aria-pressed={channel === "wolves"}
+            className={`chat-tab ${channel === "wolves" ? "chat-tab--active" : ""}`}
             onClick={() => setChannel("wolves")}
             type="button"
           >
@@ -326,13 +394,18 @@ function Chat({
           </button>
         )}
       </div>
-      <ul className="min-h-16 space-y-1 rounded border p-3">
-        {messages.map(
-          (event) => event.kind === "chat.message" && <li key={event.id}>{event.payload.text}</li>,
+      <ul className="chat-surface">
+        {messages.length === 0 ? (
+          <li className="text-fog">{t("ui.chatEmpty")}</li>
+        ) : (
+          messages.map(
+            (event) =>
+              event.kind === "chat.message" && <li key={event.id}>{event.payload.text}</li>,
+          )
         )}
       </ul>
       <form
-        className="flex gap-2"
+        className="mt-3 flex gap-2"
         onSubmit={(event) => {
           event.preventDefault();
           if (!text.trim() || !snapshot.game.phase) return;
@@ -340,14 +413,19 @@ function Chat({
           setText("");
         }}
       >
+        <label className="sr-only" htmlFor="chat-message">
+          {t("ui.messageLabel")}
+        </label>
         <input
-          className="min-w-0 flex-1 rounded border p-2"
+          className="field-input min-w-0 flex-1 disabled:cursor-not-allowed disabled:opacity-50"
           disabled={readOnly}
+          id="chat-message"
           onChange={(event) => setText(event.target.value)}
+          placeholder={t("ui.messagePlaceholder")}
           value={text}
         />
         <button
-          className="rounded bg-slate-900 px-3 py-2 text-white disabled:opacity-40"
+          className="btn btn--primary disabled:cursor-not-allowed disabled:opacity-50"
           disabled={readOnly}
           type="submit"
         >
@@ -388,19 +466,34 @@ export function GameScreen({
     void api.postCommand(snapshot.game.id, command).catch(() => undefined);
   };
   const isVoting = snapshot.game.phase?.type === "voting";
+  const spectating = snapshot.me?.status === "spectator";
   const { t } = useTranslation();
   return (
-    <div className="w-full max-w-5xl space-y-5">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">{snapshot.game.name}</h1>
-        {status === "reconnecting" && <span className="text-sm opacity-70">{status}</span>}
-      </div>
+    <div className="w-full space-y-6">
+      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="min-w-0">
+          <h1 className="truncate font-display text-2xl text-paper sm:text-3xl">
+            {snapshot.game.name}
+          </h1>
+          {spectating && <p className="mt-1 text-sm text-fog">{t("ui.spectating")}</p>}
+        </div>
+        {status === "reconnecting" && (
+          <span className="chip chip--gold">{t("ui.reconnecting")}</span>
+        )}
+      </header>
       <PhaseBanner snapshot={snapshot} />
       {isVoting && snapshot.progress && snapshot.game.phase && (
-        <section className="space-y-2">
-          <p>
-            {snapshot.progress.acted} / {snapshot.progress.eligible}
-          </p>
+        <section className="panel space-y-3">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="font-display text-lg text-gold">{t("ui.vote")}</h2>
+            <p
+              aria-label={t("ui.votingProgress")}
+              className="font-mono text-sm text-fog"
+              role="status"
+            >
+              {snapshot.progress.acted} / {snapshot.progress.eligible}
+            </p>
+          </div>
           <div className="flex flex-wrap gap-2">
             {snapshot.players
               .filter(
@@ -408,7 +501,7 @@ export function GameScreen({
               )
               .map((player) => (
                 <button
-                  className="rounded border px-3 py-2"
+                  className="btn btn--quiet"
                   key={player.userId}
                   onClick={() =>
                     send({
@@ -423,7 +516,7 @@ export function GameScreen({
                 </button>
               ))}
             <button
-              className="rounded border px-3 py-2"
+              className="btn btn--quiet"
               onClick={() =>
                 send({ type: "vote.abstain", phaseId: snapshot.game.phase!.id, payload: {} })
               }
@@ -434,26 +527,29 @@ export function GameScreen({
           </div>
         </section>
       )}
-      <div className="grid gap-6 md:grid-cols-2">
+      <ActionControls send={send} snapshot={snapshot} />
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <PlayerList snapshot={snapshot} />
-        <section className="space-y-5">
+        <section className="min-w-0 space-y-5">
           {snapshot.me?.role && (
-            <div className="rounded border p-4">
-              <h2 className="font-semibold">{t("ui.yourRole")}</h2>
-              <p>{t(`roles.${snapshot.me.role}.name`)}</p>
+            <div className="panel">
+              <h2 className="font-display text-lg text-gold">{t("ui.yourRole")}</h2>
+              <p className="mt-1 text-paper">{t(`roles.${snapshot.me.role}.name`)}</p>
+              <p className="mt-1 text-sm text-fog">{t(`roles.${snapshot.me.role}.description`)}</p>
             </div>
           )}
-          <ActionControls send={send} snapshot={snapshot} />
           <PrivateFeed events={events} snapshot={snapshot} />
         </section>
       </div>
       <Chat events={events} send={send} snapshot={snapshot} />
       {replay && (
-        <section>
-          <h2 className="text-lg font-semibold">{t("ui.replay")}</h2>
-          {events.map((event) => (
-            <p key={event.id}>{event.kind}</p>
-          ))}
+        <section className="panel">
+          <h2 className="font-display text-lg text-gold">{t("ui.replay")}</h2>
+          <ul className="mt-2 space-y-1 font-mono text-xs text-fog">
+            {events.map((event) => (
+              <li key={event.id}>{event.kind}</li>
+            ))}
+          </ul>
         </section>
       )}
     </div>

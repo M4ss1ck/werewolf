@@ -133,11 +133,32 @@ test("the games list renders games and a create form", async () => {
   expect(await screen.findByText("Game One")).toBeInTheDocument();
   expect(screen.getByText("Game Two")).toBeInTheDocument();
   expect(screen.getByRole("heading", { name: "Create game" })).toBeInTheDocument();
-  expect(screen.getByPlaceholderText("Create game")).toBeInTheDocument();
+  expect(screen.getByLabelText("Game name")).toBeInTheDocument();
   expect(screen.getAllByRole("button", { name: "Create game" })).toHaveLength(1);
   expect(screen.getByRole("button", { name: "Join" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Spectate" })).toBeInTheDocument();
   expect(fetchMock).toHaveBeenCalledWith("/api/games", expect.anything());
+});
+
+test("the create form labels every control visibly and accessibly", () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("[]", { status: 200 })));
+  renderWithI18n(<GamesScreen onOpen={() => undefined} />);
+
+  // Every control is associated with a label whose text is visible on screen,
+  // not a placeholder masquerading as a label.
+  expect(screen.getByLabelText("Game name")).toBeInTheDocument();
+  expect(screen.getByText("Game name")).toBeVisible();
+  expect(screen.getByLabelText("Visibility")).toBeInTheDocument();
+  expect(screen.getByText("Visibility")).toBeVisible();
+  expect(screen.getByLabelText("Allow spectating")).toBeInTheDocument();
+  expect(screen.getByLabelText("Scheduled start")).toBeInTheDocument();
+  // Phase durations carry unit context next to each labelled field.
+  expect(screen.getByLabelText("Discussion")).toBeInTheDocument();
+  expect(screen.getByLabelText("Voting")).toBeInTheDocument();
+  expect(screen.getByLabelText("Night")).toBeInTheDocument();
+  // Presentation values are translated, not the wire values.
+  expect(screen.getByRole("option", { name: "Public" })).toBeInTheDocument();
+  expect(screen.getByRole("option", { name: "Private" })).toBeInTheDocument();
 });
 
 test("lobby owner controls appear for exactly the owner", () => {
@@ -185,7 +206,7 @@ test("action controls render from availableActions; none offered renders none ev
     />,
   );
   expect(screen.queryByText("Inspect")).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "bob" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Bob" })).not.toBeInTheDocument();
   noActions.unmount();
 
   // The same viewer with an offered action gets exactly that control.
@@ -206,7 +227,7 @@ test("action controls render from availableActions; none offered renders none ev
     />,
   );
   expect(screen.getByText("Inspect")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "bob" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Bob" })).toBeInTheDocument();
 });
 
 test("a target marked disabled renders disabled rather than missing", () => {
@@ -229,10 +250,10 @@ test("a target marked disabled renders disabled rather than missing", () => {
       })}
     />,
   );
-  const blocked = screen.getByRole("button", { name: "bob" });
+  const blocked = screen.getByRole("button", { name: "Bob" });
   expect(blocked).toBeInTheDocument();
   expect(blocked).toBeDisabled();
-  expect(screen.getByRole("button", { name: "me" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "Me" })).toBeEnabled();
 });
 
 test("voting shows progress as a count and never per-target tallies", () => {

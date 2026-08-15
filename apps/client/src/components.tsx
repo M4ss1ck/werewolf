@@ -1,16 +1,25 @@
-import type { GameEvent, ViewerGameSnapshot } from "@werewolf/protocol";
+import type { GameEvent, GamePhase, ViewerGameSnapshot } from "@werewolf/protocol";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
 import type { ApiError } from "./api/client.ts";
 
+export function initialsOf(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  const first = words[0]?.[0] ?? "";
+  const last = words.length > 1 ? (words[words.length - 1]?.[0] ?? "") : "";
+  return (first + last).toUpperCase() || "·";
+}
+
 export function LanguageSwitcher({ onChange }: { onChange: (locale: "en" | "es") => void }) {
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation();
   return (
-    <div className="flex gap-1">
+    <fieldset className="m-0 flex gap-1 border-0 p-0">
+      <legend className="sr-only">{t("ui.language")}</legend>
       {(["en", "es"] as const).map((language) => (
         <button
-          className={`rounded border px-2 py-1 text-xs ${i18n.language === language ? "bg-slate-200" : ""}`}
+          aria-pressed={i18n.language === language}
+          className={`btn btn--sm ${i18n.language === language ? "btn--active" : "btn--quiet"}`}
           key={language}
           onClick={() => onChange(language)}
           type="button"
@@ -18,7 +27,7 @@ export function LanguageSwitcher({ onChange }: { onChange: (locale: "en" | "es")
           {language.toUpperCase()}
         </button>
       ))}
-    </div>
+    </fieldset>
   );
 }
 
@@ -27,7 +36,10 @@ export function ErrorMessage({ error }: { error: unknown }) {
   if (!error) return null;
   const code = (error as Partial<ApiError>).code ?? "UNKNOWN_ERROR";
   return (
-    <p className="rounded bg-red-50 p-3 text-sm text-red-800">
+    <p
+      className="rounded-md border border-omen/50 bg-omen/15 px-3 py-2 text-sm text-paper"
+      role="alert"
+    >
       {t(`errors.${code}`, { defaultValue: t("errors.UNKNOWN_ERROR") })}
     </p>
   );
@@ -35,39 +47,97 @@ export function ErrorMessage({ error }: { error: unknown }) {
 
 export function PlayerList({ snapshot }: { snapshot: ViewerGameSnapshot }) {
   const { t } = useTranslation();
+  const me = snapshot.me?.userId;
   return (
     <section>
-      <h2 className="mb-2 text-lg font-semibold">
+      <h2 className="mb-2 font-display text-lg text-paper">
         {t("ui.players.count", { count: snapshot.players.length })}
       </h2>
       <ul className="space-y-2">
-        {snapshot.players.map((player) => (
-          <li className="flex items-center justify-between rounded border p-2" key={player.userId}>
-            <span>{player.displayName}</span>
-            <span className="text-sm opacity-70">
-              {t(`playerStatuses.${player.status}`)}
-              {player.revealedRole ? ` · ${t(`roles.${player.revealedRole}.name`)}` : ""}
-            </span>
-          </li>
-        ))}
+        {snapshot.players.map((player) => {
+          const isMe = player.userId === me;
+          return (
+            <li className={`player-row ${isMe ? "player-row--me" : ""}`} key={player.userId}>
+              <span aria-hidden="true" className="avatar">
+                {initialsOf(player.displayName)}
+              </span>
+              <span className="player-row__name">
+                <span>{player.displayName}</span>
+                {isMe && (
+                  <span className="ml-2 rounded-full bg-gold/15 px-1.5 py-0.5 text-[0.65rem] font-medium text-gold">
+                    {t("ui.you")}
+                  </span>
+                )}
+              </span>
+              <span className="status-chip" data-status={player.status}>
+                {t(`playerStatuses.${player.status}`)}
+                {player.revealedRole ? ` · ${t(`roles.${player.revealedRole}.name`)}` : ""}
+              </span>
+            </li>
+          );
+        })}
       </ul>
     </section>
+  );
+}
+
+function Moon({ phase }: { phase: GamePhase | null }) {
+  const state = phase ? `moon--${phase}` : "moon--full";
+  return (
+    <div aria-hidden="true" className={`moon ${state}`}>
+      <span className="moon__shade" />
+    </div>
+  );
+}
+
+function PhaseRail({ current }: { current: GamePhase }) {
+  const { t } = useTranslation();
+  const phases: GamePhase[] = ["discussion", "voting", "night"];
+  const activeIndex = phases.indexOf(current);
+  return (
+    <ol aria-label={t("ui.phaseRail")} className="phase-rail">
+      {phases.map((phase, index) => (
+        <li
+          aria-current={index === activeIndex ? "step" : undefined}
+          className={`phase-rail__step ${index === activeIndex ? "is-active" : ""} ${
+            index < activeIndex ? "is-past" : ""
+          }`}
+          key={phase}
+        >
+          <span aria-hidden="true" className="phase-rail__dot" />
+          <span className="phase-rail__label">{t(`phases.${phase}`)}</span>
+        </li>
+      ))}
+    </ol>
   );
 }
 
 export function PhaseBanner({ snapshot }: { snapshot: ViewerGameSnapshot }) {
   const { t } = useTranslation();
   const phase = snapshot.game.phase;
-  if (!phase)
-    return <div className="rounded border p-3">{t(`gameStatuses.${snapshot.game.status}`)}</div>;
-  const seconds = Math.max(0, Math.ceil((phase.endsAt - snapshot.serverNow) / 1000));
+  const seconds = phase ? Math.max(0, Math.ceil((phase.endsAt - snapshot.serverNow) / 1000)) : 0;
   return (
-    <section className="rounded bg-slate-900 p-4 text-white">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="text-xl font-semibold">{t(`phases.${phase.type}`)}</h2>
-        <span>{t("ui.timeRemaining", { count: seconds })}</span>
+    <section className="flex flex-col items-center gap-5 rounded-lg border border-fog/15 bg-night/30 p-4 sm:flex-row sm:items-center sm:gap-6 sm:p-5">
+      <Moon phase={phase?.type ?? null} />
+      <div className="w-full min-w-0 flex-1">
+        {phase ? (
+          <>
+            <p className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-mono text-xs text-fog">
+                {t("ui.day", { count: snapshot.game.day })}
+              </span>
+              <span className="font-mono text-sm text-gold">
+                {t("ui.timeRemaining", { count: seconds })}
+              </span>
+            </p>
+            <PhaseRail current={phase.type} />
+          </>
+        ) : (
+          <p className="text-center font-display text-lg text-gold sm:text-left">
+            {t(`gameStatuses.${snapshot.game.status}`)}
+          </p>
+        )}
       </div>
-      <p className="text-sm opacity-80">{snapshot.game.day}</p>
     </section>
   );
 }
@@ -104,9 +174,9 @@ export function PrivateFeed({
   );
   if (privateEvents.length === 0) return null;
   return (
-    <section>
-      <h2 className="mb-2 text-lg font-semibold">{t("ui.yourRole")}</h2>
-      <ul className="space-y-1">
+    <section className="panel">
+      <h2 className="font-display text-lg text-gold">{t("ui.yourIntel")}</h2>
+      <ul className="mt-2 space-y-1.5 text-sm text-paper">
         {privateEvents.map((event) => (
           <li key={event.id}>{eventText(event, snapshot, t) as string}</li>
         ))}
