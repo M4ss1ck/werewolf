@@ -44,6 +44,86 @@ export function Avatar({
   );
 }
 
+/** One message row: avatar and author on the left for other people, a bare
+ * right-aligned bubble for your own. Shared by the in-game Talk tab and the
+ * global chat screen. */
+export function ChatBubble({
+  author,
+  text,
+  mine,
+}: {
+  author: string;
+  text: string;
+  mine: boolean;
+}) {
+  return (
+    <div className={`flex gap-2.5 ${mine ? "justify-end" : ""}`}>
+      {!mine && <Avatar name={author} size="sm" />}
+      <div className={`flex max-w-[82%] flex-col ${mine ? "items-end" : ""}`}>
+        {!mine && <span className="mb-[5px] font-mono text-[11px] text-fog">{author}</span>}
+        <div className={`bubble ${mine ? "bubble--mine" : "bubble--theirs"}`}>{text}</div>
+      </div>
+    </div>
+  );
+}
+
+/** The message input and its send button. `className` carries the wrapper's
+ * positioning because the two callers differ: the Talk tab sticks it to the
+ * bottom of a scrolling page, the global chat screen is a flex sibling of a
+ * virtualized list. */
+export function ChatComposer({
+  className,
+  disabled = false,
+  inputId,
+  label,
+  placeholder,
+  sendLabel,
+  onSend,
+}: {
+  className: string;
+  disabled?: boolean;
+  inputId: string;
+  label: string;
+  placeholder: string;
+  sendLabel: string;
+  onSend: (text: string) => void;
+}) {
+  const [text, setText] = useState("");
+  return (
+    <form
+      className={className}
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (disabled || text.trim() === "") return;
+        onSend(text);
+        setText("");
+      }}
+    >
+      <label className="sr-only" htmlFor={inputId}>
+        {label}
+      </label>
+      <input
+        className="min-h-12 flex-1 rounded-full bg-surface-raised px-[18px] text-paper placeholder:text-fog-dim disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={disabled}
+        id={inputId}
+        onChange={(event) => setText(event.target.value)}
+        placeholder={placeholder}
+        value={text}
+      />
+      <button
+        aria-label={sendLabel}
+        className="flex h-12 w-12 flex-none items-center justify-center rounded-full bg-blood text-bone disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={disabled}
+        type="submit"
+      >
+        <span aria-hidden="true" className="text-[18px]">
+          ↑
+        </span>
+      </button>
+    </form>
+  );
+}
+
 export function AvatarStack({ names, max = 3 }: { names: string[]; max?: number }) {
   const visible = names.slice(0, max);
   const overflow = names.length - visible.length;

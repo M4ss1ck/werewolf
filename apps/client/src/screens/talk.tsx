@@ -7,7 +7,7 @@ import type {
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { Avatar, Chip, DividerNote } from "../components.tsx";
+import { ChatBubble, ChatComposer, Chip, DividerNote } from "../components.tsx";
 
 type Send = (command: Omit<GameplayCommand, "commandId">) => void;
 
@@ -23,7 +23,6 @@ export function Talk({
 }) {
   const { t } = useTranslation();
   const [channel, setChannel] = useState<ChatChannel>("public");
-  const [text, setText] = useState("");
   const me = snapshot.me;
   const readOnly =
     me === undefined ||
@@ -86,53 +85,26 @@ export function Talk({
             const authorId = event.actorUserId;
             const author = authorId !== undefined ? (names.get(authorId) ?? authorId) : "";
             return (
-              <li className={`flex gap-2.5 ${mine ? "justify-end" : ""}`} key={event.id}>
-                {!mine && <Avatar name={author} size="sm" />}
-                <div className={`flex max-w-[82%] flex-col ${mine ? "items-end" : ""}`}>
-                  {!mine && (
-                    <span className="mb-[5px] font-mono text-[11px] text-fog">{author}</span>
-                  )}
-                  <div className={`bubble ${mine ? "bubble--mine" : "bubble--theirs"}`}>
-                    {event.payload.text}
-                  </div>
-                </div>
+              <li key={event.id}>
+                <ChatBubble author={author} mine={mine} text={event.payload.text} />
               </li>
             );
           })
         )}
       </ul>
-      <form
+      <ChatComposer
         className="sticky bottom-0 -mx-[18px] flex items-center gap-2.5 border-t border-paper/10 bg-bar px-[14px] py-2.5"
-        onSubmit={(event) => {
-          event.preventDefault();
+        disabled={readOnly}
+        inputId="talk-message"
+        label={t("ui.messageLabel")}
+        onSend={(text) => {
           const phase = snapshot.game.phase;
-          if (readOnly || phase === null || text.trim() === "") return;
+          if (phase === null) return;
           send({ type: "chat.send", phaseId: phase.id, payload: { channel, text } });
-          setText("");
         }}
-      >
-        <label className="sr-only" htmlFor="talk-message">
-          {t("ui.messageLabel")}
-        </label>
-        <input
-          className="min-h-12 flex-1 rounded-full bg-surface-raised px-[18px] text-paper placeholder:text-fog-dim disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={readOnly}
-          id="talk-message"
-          onChange={(event) => setText(event.target.value)}
-          placeholder={t("ui.messagePlaceholder")}
-          value={text}
-        />
-        <button
-          aria-label={t("ui.sendMessage")}
-          className="flex h-12 w-12 flex-none items-center justify-center rounded-full bg-blood text-bone disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={readOnly}
-          type="submit"
-        >
-          <span aria-hidden="true" className="text-[18px]">
-            ↑
-          </span>
-        </button>
-      </form>
+        placeholder={t("ui.messagePlaceholder")}
+        sendLabel={t("ui.sendMessage")}
+      />
     </div>
   );
 }

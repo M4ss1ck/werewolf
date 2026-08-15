@@ -2,7 +2,16 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { MessageCircle, Moon, Users } from "lucide-react";
 import { afterEach, expect, test, vi } from "vitest";
 
-import { AvatarStack, Countdown, Segmented, Stepper, TabBar, Toggle } from "./components.tsx";
+import {
+  AvatarStack,
+  ChatBubble,
+  ChatComposer,
+  Countdown,
+  Segmented,
+  Stepper,
+  TabBar,
+  Toggle,
+} from "./components.tsx";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -124,4 +133,78 @@ test("Segmented reads like a radio group and reports its value", () => {
   expect(screen.getByRole("radio", { name: "Public" })).toBeChecked();
   fireEvent.click(screen.getByRole("radio", { name: "Private" }));
   expect(onChange).toHaveBeenCalledWith("private");
+});
+
+test("ChatBubble shows the author for other people's messages", () => {
+  render(<ChatBubble author="Ana" mine={false} text="21:00 works" />);
+
+  expect(screen.getByText("Ana")).toBeInTheDocument();
+  expect(screen.getByText("21:00 works")).toBeInTheDocument();
+});
+
+test("ChatBubble omits the author for your own messages", () => {
+  render(<ChatBubble author="Ana" mine={true} text="on my way" />);
+
+  expect(screen.queryByText("Ana")).not.toBeInTheDocument();
+  expect(screen.getByText("on my way")).toBeInTheDocument();
+});
+
+test("ChatComposer sends the trimmed text and clears the input", () => {
+  const sent: string[] = [];
+  render(
+    <ChatComposer
+      className="flex"
+      inputId="test-message"
+      label="Message"
+      onSend={(text) => sent.push(text)}
+      placeholder="Say something"
+      sendLabel="Send"
+    />,
+  );
+
+  const input = screen.getByLabelText("Message");
+  fireEvent.change(input, { target: { value: "hello" } });
+  fireEvent.click(screen.getByLabelText("Send"));
+
+  expect(sent).toEqual(["hello"]);
+  expect(input).toHaveValue("");
+});
+
+test("ChatComposer ignores a blank message", () => {
+  const sent: string[] = [];
+  render(
+    <ChatComposer
+      className="flex"
+      inputId="test-message"
+      label="Message"
+      onSend={(text) => sent.push(text)}
+      placeholder="Say something"
+      sendLabel="Send"
+    />,
+  );
+
+  fireEvent.change(screen.getByLabelText("Message"), {
+    target: { value: "   " },
+  });
+  fireEvent.click(screen.getByLabelText("Send"));
+
+  expect(sent).toEqual([]);
+});
+
+test("ChatComposer disabled blocks input and sending", () => {
+  const sent: string[] = [];
+  render(
+    <ChatComposer
+      className="flex"
+      disabled={true}
+      inputId="test-message"
+      label="Message"
+      onSend={(text) => sent.push(text)}
+      placeholder="Say something"
+      sendLabel="Send"
+    />,
+  );
+
+  expect(screen.getByLabelText("Message")).toBeDisabled();
+  expect(screen.getByLabelText("Send")).toBeDisabled();
 });
