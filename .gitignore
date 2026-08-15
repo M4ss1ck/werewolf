@@ -25,3 +25,4 @@ data/
 # Planning artifacts stay local (global CLAUDE.md rule 5)
 werewolf-product-technical-spec-v1.md
 docs/superpowers/
+docs/plans/
