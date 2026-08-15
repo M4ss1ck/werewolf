@@ -6,6 +6,7 @@ export const MIN_PLAYERS = 5;
 export const BALANCE_VERSION = 1;
 
 export * from "./actions.ts";
+export * from "./chat.ts";
 export * from "./commands.ts";
 export * from "./enums.ts";
 export * from "./errors.ts";

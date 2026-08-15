@@ -99,6 +99,7 @@ export const es: TranslationResource = {
     CHAT_READ_ONLY: "El chat es de solo lectura ahora mismo.",
     CHANNEL_NOT_AVAILABLE: "Ese canal de chat no está disponible.",
     MIN_PLAYERS_NOT_REACHED: "No hay suficientes jugadores para comenzar la partida.",
+    RATE_LIMITED: "Estás enviando mensajes demasiado rápido.",
     USERNAME_REQUIRED: "Elige un nombre de usuario antes de unirte a una partida.",
     INVALID_USERNAME:
       "Ese nombre de usuario no está permitido. Usa 3-24 caracteres: letras, números, espacios, guiones o guiones bajos.",

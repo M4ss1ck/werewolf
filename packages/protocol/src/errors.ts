@@ -18,6 +18,7 @@ export const ERROR_CODES = [
   "CHAT_READ_ONLY",
   "CHANNEL_NOT_AVAILABLE",
   "MIN_PLAYERS_NOT_REACHED",
+  "RATE_LIMITED",
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];
 export const ErrorCodeSchema = z.enum(ERROR_CODES);

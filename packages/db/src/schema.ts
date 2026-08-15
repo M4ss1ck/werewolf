@@ -81,6 +81,15 @@ export const gameEvents = sqliteTable(
   ],
 );
 
+export const globalChatMessages = sqliteTable("global_chat_messages", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: text("user_id").notNull(),
+  displayName: text("display_name").notNull(),
+  text: text("text").notNull(),
+  createdAt: integer("created_at").notNull(),
+});
+
 export type GameRow = typeof games.$inferSelect;
 export type PlayerRow = typeof gamePlayers.$inferSelect;
 export type EventRow = typeof gameEvents.$inferSelect;
+export type GlobalChatMessageRow = typeof globalChatMessages.$inferSelect;
