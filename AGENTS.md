@@ -44,6 +44,10 @@ that *your* change orphaned.
 **Ask instead of guessing.** If a requirement is ambiguous or two readings would
 produce materially different code, stop and ask. Don't silently pick one.
 
+**Delegate the typing.** Design decisions stay with you; mechanical implementation
+goes to a cheap worker. Invoke the `delegate-implementation` skill before opening the
+first file, and delegate unless the task is a genuine one-shot.
+
 ## Invariants
 
 These are load-bearing. Breaking one is a bug even if tests pass.
