@@ -19,13 +19,17 @@ export async function getSession(): Promise<Session | null> {
   }
 }
 
-export function signInWithGoogle() {
-  return fetch("/api/auth/sign-in/social", {
+export async function signInWithGoogle() {
+  const response = await fetch("/api/auth/sign-in/social", {
     method: "POST",
     credentials: "include",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ provider: "google", callbackURL: window.location.href }),
+    body: JSON.stringify({ provider: "google", callbackURL: globalThis.location.href }),
   });
+  if (!response.ok) throw new Error(`Google sign-in failed (${response.status})`);
+
+  const result = (await response.json()) as { redirect?: boolean; url?: string };
+  if (result.redirect && result.url) globalThis.location.href = result.url;
 }
 
 export function signOut() {
