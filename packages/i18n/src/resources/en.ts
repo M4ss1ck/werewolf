@@ -211,6 +211,7 @@ export const en = {
     schedulePastTime: "Pick a time in the future.",
     phaseDurations: "Phase durations",
     seconds: "seconds",
+    secondsShort: "s",
     day: "Day {{count}}",
     you: "you",
     yourMove: "Your move",

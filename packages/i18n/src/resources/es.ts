@@ -211,6 +211,7 @@ export const es: TranslationResource = {
     schedulePastTime: "Elige una hora futura.",
     phaseDurations: "Duración de las fases",
     seconds: "segundos",
+    secondsShort: "s",
     day: "Día {{count}}",
     you: "tú",
     yourMove: "Tu jugada",
