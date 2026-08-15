@@ -41,11 +41,6 @@ function GameCard({ game }: { game: PublicGameSummary }) {
       <button
         className="card flex flex-col gap-1.5 text-left"
         onClick={() => navigate(`/games/${game.id}/replay`)}
-        style={{
-          backgroundColor: "transparent",
-          borderColor: "rgba(233, 229, 218, .14)",
-          borderStyle: "dashed",
-        }}
         type="button"
       >
         <span className="text-[19px] font-semibold tracking-[-0.02em] text-fog">{game.name}</span>

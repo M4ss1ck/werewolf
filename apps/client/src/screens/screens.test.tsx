@@ -1,14 +1,28 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { GameId, PublicGameSummary, UserId } from "@werewolf/protocol";
+import { readFile } from "node:fs/promises";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { en } from "@werewolf/i18n";
+import type {
+  ActionId,
+  ChatChannel,
+  EventId,
+  GameId,
+  PhaseId,
+  PublicGameSummary,
+  UserId,
+  ViewerGameSnapshot,
+} from "@werewolf/protocol";
 import type { ReactElement } from "react";
 import { I18nextProvider } from "react-i18next";
 import { afterEach, expect, test, vi } from "vitest";
-
-import { api } from "../api/client.ts";
+import { ApiError, api } from "../api/client.ts";
+import { ErrorMessage } from "../components.tsx";
 import { i18n } from "../i18n/i18n.ts";
+import { Act } from "./act.tsx";
 import { CreateGameScreen } from "./create-game.tsx";
 import { GamesScreen } from "./games.tsx";
+import { LobbyScreen } from "./lobby.tsx";
 import { ProfileScreen } from "./profile.tsx";
+import { Talk } from "./talk.tsx";
 import { UsernameScreen } from "./username.tsx";
 
 function renderWithI18n(ui: ReactElement) {
@@ -31,6 +45,42 @@ function makeSummary(overrides: Partial<PublicGameSummary> = {}): PublicGameSumm
 }
 
 const SESSION_USER = { id: "me", username: "wren", email: "wren@example.com" };
+
+function makeGameSnapshot(
+  overrides: Partial<Omit<ViewerGameSnapshot, "game">> & {
+    game?: Partial<ViewerGameSnapshot["game"]>;
+  } = {},
+): ViewerGameSnapshot {
+  const base: ViewerGameSnapshot = {
+    game: {
+      id: "g1" as GameId,
+      name: "Game One",
+      ownerUserId: "owner" as UserId,
+      status: "running",
+      day: 2,
+      phase: { id: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 },
+      settings: {
+        visibility: "public",
+        spectatingEnabled: true,
+        durations: { discussion: 120, voting: 60, night: 60 },
+      },
+    },
+    players: [
+      { userId: "wren" as UserId, displayName: "Wren", status: "alive" },
+      { userId: "odile" as UserId, displayName: "Odile", status: "alive" },
+      { userId: "mattias" as UserId, displayName: "Mattias", status: "alive" },
+      { userId: "kestrel" as UserId, displayName: "Kestrel", status: "alive" },
+      { userId: "anna" as UserId, displayName: "Anna", status: "alive" },
+    ],
+    me: { userId: "wren" as UserId, status: "alive", role: "villager" },
+    availableActions: [],
+    availableChannels: ["public"],
+    progress: { acted: 0, eligible: 4 },
+    cursor: 0 as EventId,
+    serverNow: 5000,
+  };
+  return { ...base, ...overrides, game: { ...base.game, ...overrides.game } };
+}
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -175,4 +225,300 @@ test("profile: renders the three stats and flips a toggle", async () => {
   fireEvent.click(motion);
   expect(localStorage.getItem("werewolf.prefs.reducedMotion")).toBe("true");
   expect(document.documentElement.dataset.reducedMotion).toBe("true");
+});
+
+test("voting sends vote.set on lock", () => {
+  const send = vi.fn();
+  const snapshot = makeGameSnapshot({
+    game: { phase: { id: 7 as PhaseId, type: "voting", startedAt: 1000, endsAt: 10_000 } },
+    voteTallies: [{ targetId: "odile" as UserId, count: 1 }],
+    progress: { acted: 1, eligible: 4 },
+  });
+  renderWithI18n(<Act events={[]} send={send} snapshot={snapshot} />);
+
+  expect(screen.getByRole("heading", { name: "Who hangs today?" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /Mattias/ }));
+  fireEvent.click(screen.getByRole("button", { name: /Lock vote/ }));
+  expect(send).toHaveBeenCalledWith({
+    type: "vote.set",
+    phaseId: 7,
+    payload: { targetId: "mattias" },
+  });
+});
+
+test("a disabled night target renders disabled rather than missing", () => {
+  const snapshot = makeGameSnapshot({
+    game: { phase: { id: 2 as PhaseId, type: "night", startedAt: 1000, endsAt: 10_000 } },
+    me: { userId: "wren" as UserId, status: "alive", role: "seer" },
+    availableActions: [
+      {
+        id: "seer.inspect" as ActionId,
+        type: "target",
+        targets: [
+          { userId: "odile" as UserId, enabled: true },
+          { userId: "mattias" as UserId, enabled: false },
+        ],
+      },
+    ],
+  });
+  renderWithI18n(<Act events={[]} send={vi.fn()} snapshot={snapshot} />);
+
+  expect(screen.getByText("Choose a player to learn their role.")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /Odile/ })).toBeEnabled();
+  const disabled = screen.getByRole("button", { name: /Mattias/ });
+  expect(disabled).toBeInTheDocument();
+  expect(disabled).toBeDisabled();
+});
+
+test("the chat composer is disabled when the viewer is dead", () => {
+  const snapshot = makeGameSnapshot({
+    game: { phase: { id: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 } },
+    players: [
+      { userId: "wren" as UserId, displayName: "Wren", status: "dead", revealedRole: "villager" },
+      { userId: "odile" as UserId, displayName: "Odile", status: "alive" },
+    ],
+    me: { userId: "wren" as UserId, status: "dead", role: "villager" },
+  });
+  renderWithI18n(<Talk events={[]} send={vi.fn()} snapshot={snapshot} />);
+
+  expect(screen.getByLabelText(/Message/)).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
+});
+
+test("lobby owner controls appear for exactly the owner", () => {
+  const players: ViewerGameSnapshot["players"] = [
+    { userId: "owner" as UserId, displayName: "Owner", status: "lobby" },
+    { userId: "bob" as UserId, displayName: "Bob", status: "lobby" },
+    { userId: "anna" as UserId, displayName: "Anna", status: "lobby" },
+    { userId: "mattias" as UserId, displayName: "Mattias", status: "lobby" },
+    { userId: "kestrel" as UserId, displayName: "Kestrel", status: "lobby" },
+  ];
+  const base = {
+    game: {
+      ownerUserId: "owner" as UserId,
+      status: "lobby" as const,
+      phase: null as null,
+    },
+    players,
+  };
+
+  // A non-owner sees no start, cancel or kick controls, only leave.
+  const nonOwner = renderWithI18n(
+    <LobbyScreen
+      onUpdate={() => undefined}
+      snapshot={makeGameSnapshot({
+        ...base,
+        me: { userId: "bob" as UserId, status: "lobby", role: "villager" },
+      })}
+    />,
+  );
+  expect(screen.queryByRole("button", { name: "Start" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /Remove/ })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Leave" })).toBeInTheDocument();
+  nonOwner.unmount();
+
+  // The owner sees start, cancel and a kick control per other player, no
+  // leave. Start now renders only for the owner (it used to render for
+  // everyone, disabled).
+  renderWithI18n(
+    <LobbyScreen
+      onUpdate={() => undefined}
+      snapshot={makeGameSnapshot({
+        ...base,
+        me: { userId: "owner" as UserId, status: "lobby", role: "villager" },
+      })}
+    />,
+  );
+  expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Remove Bob" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Remove Anna" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Leave" })).not.toBeInTheDocument();
+});
+
+test("action controls render from availableActions; none offered renders none even for a seer", () => {
+  // The viewer's own role is seer, but the server offered no actions: nothing
+  // renders. The client renders the server's action model, never its own
+  // knowledge of roles.
+  const noActions = renderWithI18n(
+    <Act
+      events={[]}
+      send={() => undefined}
+      snapshot={makeGameSnapshot({
+        game: {
+          phase: { id: 2 as PhaseId, type: "night", startedAt: 1000, endsAt: 10_000 },
+        },
+        me: { userId: "wren" as UserId, status: "alive", role: "seer" },
+        availableActions: [],
+      })}
+    />,
+  );
+  expect(screen.queryByText("Choose a player to learn their role.")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /Odile/ })).not.toBeInTheDocument();
+  noActions.unmount();
+
+  // The same viewer with an offered action gets exactly that control.
+  renderWithI18n(
+    <Act
+      events={[]}
+      send={() => undefined}
+      snapshot={makeGameSnapshot({
+        game: {
+          phase: { id: 2 as PhaseId, type: "night", startedAt: 1000, endsAt: 10_000 },
+        },
+        me: { userId: "wren" as UserId, status: "alive", role: "seer" },
+        availableActions: [
+          {
+            id: "seer.inspect" as ActionId,
+            type: "target",
+            targets: [{ userId: "odile" as UserId, enabled: true }],
+          },
+        ],
+      })}
+    />,
+  );
+  expect(screen.getByText("Choose a player to learn their role.")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /Odile/ })).toBeInTheDocument();
+});
+
+test("the wolf chat tab appears only when the snapshot lists that channel", () => {
+  const withWolfChat = renderWithI18n(
+    <Talk
+      events={[]}
+      send={() => undefined}
+      snapshot={makeGameSnapshot({
+        game: {
+          phase: { id: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 },
+        },
+        me: { userId: "wren" as UserId, status: "alive", role: "werewolf" },
+        availableChannels: ["public", "wolves"] as ChatChannel[],
+      })}
+    />,
+  );
+  expect(screen.getByRole("button", { name: "Wolf chat" })).toBeInTheDocument();
+  withWolfChat.unmount();
+
+  renderWithI18n(
+    <Talk
+      events={[]}
+      send={() => undefined}
+      snapshot={makeGameSnapshot({
+        game: {
+          phase: { id: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 },
+        },
+        me: { userId: "wren" as UserId, status: "alive", role: "werewolf" },
+        availableChannels: ["public"] as ChatChannel[],
+      })}
+    />,
+  );
+  expect(screen.queryByRole("button", { name: "Wolf chat" })).not.toBeInTheDocument();
+});
+
+test("a dead player's revealed role shows in the list; living players show none", () => {
+  renderWithI18n(
+    <Act
+      events={[]}
+      send={() => undefined}
+      snapshot={makeGameSnapshot({
+        game: {
+          phase: { id: 7 as PhaseId, type: "voting", startedAt: 1000, endsAt: 10_000 },
+        },
+        players: [
+          { userId: "wren" as UserId, displayName: "Wren", status: "alive" },
+          { userId: "odile" as UserId, displayName: "Odile", status: "alive" },
+          { userId: "bob" as UserId, displayName: "Bob", status: "dead", revealedRole: "werewolf" },
+        ],
+        me: { userId: "wren" as UserId, status: "alive", role: "seer" },
+      })}
+    />,
+  );
+
+  // Dead players are public: their revealed role shows next to the name.
+  const deadRow = screen.getByRole("button", { name: /Bob/ });
+  expect(within(deadRow).getByText(/Werewolf/)).toBeInTheDocument();
+
+  // Living players hide their role completely.
+  const livingRow = screen.getByRole("button", { name: /Odile/ });
+  expect(
+    within(livingRow).queryByText(/Villager|Werewolf|Mason|Seer|Cursed|Harlot|Hunter|Princess/),
+  ).not.toBeInTheDocument();
+});
+
+test("an error code renders its translated message, not the code", () => {
+  renderWithI18n(<ErrorMessage error={new ApiError("PHASE_CLOSED")} />);
+  expect(screen.getByText("That phase has already ended.")).toBeInTheDocument();
+  expect(screen.queryByText("PHASE_CLOSED")).not.toBeInTheDocument();
+});
+
+test("the voting screen renders no voter identity", () => {
+  const send = vi.fn();
+  // Odile leads with 3 votes, cast by Wren, Kestrel and Anna. The tally must
+  // show her name and the number 3 — never who voted for her.
+  const snapshot = makeGameSnapshot({
+    game: { phase: { id: 7 as PhaseId, type: "voting", startedAt: 1000, endsAt: 10_000 } },
+    voteTallies: [
+      { targetId: "odile" as UserId, count: 3 },
+      { targetId: "mattias" as UserId, count: 1 },
+    ],
+    progress: { acted: 4, eligible: 4 },
+  });
+  renderWithI18n(<Act events={[]} send={send} snapshot={snapshot} />);
+
+  const odileRow = screen.getByRole("button", { name: /Odile/ });
+  expect(within(odileRow).getByText("3")).toBeInTheDocument();
+  // The mockup draws little voter avatars next to each candidate's count;
+  // that is the one part of the design this screen must not reproduce.
+  // No voter's display name may appear inside a candidate's row.
+  expect(within(odileRow).queryByText("Wren")).not.toBeInTheDocument();
+  expect(within(odileRow).queryByText("Kestrel")).not.toBeInTheDocument();
+  expect(within(odileRow).queryByText("Anna")).not.toBeInTheDocument();
+});
+
+// Plural resources live under a `count` sub-key (`ui.players.count_one` /
+// `_other`), so they must be called as `t("ui.players.count", { count })`.
+// Calling the parent (`t("ui.players", { count })`) resolves to an object,
+// which i18next renders as the raw key — a screen full of `ui.lobby.startNeeds`
+// instead of "Start · needs 2". Nine call sites shipped that way once; this
+// keeps them honest by checking the bundle rather than any one screen.
+test("every plural key is called with its .count suffix", async () => {
+  const sources = await Promise.all(
+    [
+      "./act.tsx",
+      "./create-game.tsx",
+      "./game-over.tsx",
+      "./games.tsx",
+      "./lobby.tsx",
+      "./me.tsx",
+      "./profile.tsx",
+      "./talk.tsx",
+      "./username.tsx",
+      "./village.tsx",
+      "../components.tsx",
+    ].map(async (path) => {
+      const url = new URL(path, import.meta.url);
+      return [path, await readFile(url, "utf8")] as const;
+    }),
+  );
+
+  const pluralKeys = new Set<string>();
+  const collect = (node: unknown, prefix: string) => {
+    if (typeof node !== "object" || node === null) return;
+    for (const [key, value] of Object.entries(node)) {
+      if (key.endsWith("_one")) pluralKeys.add(`${prefix}${key.slice(0, -"_one".length)}`);
+      else collect(value, `${prefix}${key}.`);
+    }
+  };
+  collect(en, "");
+  expect(pluralKeys.size).toBeGreaterThan(0);
+
+  const offences: string[] = [];
+  for (const [path, source] of sources)
+    for (const match of source.matchAll(/t\(\s*"([\w.]+)"\s*,\s*\{[^}]*\bcount\b/g)) {
+      const key = match[1]!;
+      // Calling the parent of a plural key is the bug; calling the key itself is correct.
+      if (pluralKeys.has(`${key}.count`))
+        offences.push(`${path}: t("${key}") should be "${key}.count"`);
+    }
+  expect(offences).toEqual([]);
 });

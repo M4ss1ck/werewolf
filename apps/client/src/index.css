@@ -96,14 +96,6 @@
   --color-sage: #7fa292;
   --color-sage-light: #9fbcad;
 
-  /* TEMP aliases onto the new palette. The old screens.tsx still references
-   * the utilities these generate (text-gold, border-omen/50, bg-omen/15,
-   * bg-night-raised, text-omen-light, …). Delete with screens.tsx. */
-  --color-gold: #7fa292;
-  --color-omen: #b33a36;
-  --color-omen-light: #d08a83;
-  --color-night-raised: #131e1b;
-
   --font-sans: "Space Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-display: "Space Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "Space Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
@@ -151,6 +143,7 @@ body {
 
 /* --- App shell (old screens.tsx) ------------------------------------------ */
 
+@layer components {
 .app-shell {
   position: relative;
   isolation: isolate;
@@ -172,11 +165,11 @@ body {
 /* --- Old surfaces/controls kept for screens.tsx ---------------------------- */
 
 .panel {
-  @apply rounded-lg border border-fog/20 bg-night-raised p-4 shadow-[0_1px_0_rgba(242,238,228,0.04),0_12px_24px_-16px_rgba(0,0,0,0.6)] sm:p-5;
+   @apply rounded-lg border border-fog/20 bg-surface p-4 shadow-[0_1px_0_rgba(242,238,228,0.04),0_12px_24px_-16px_rgba(0,0,0,0.6)] sm:p-5;
 }
 
 .brand-control {
-  @apply font-display text-2xl font-semibold tracking-wide text-paper transition-colors hover:text-gold sm:text-3xl;
+   @apply font-display text-2xl font-semibold tracking-wide text-paper transition-colors hover:text-sage sm:text-3xl;
 }
 
 .status-chip {
@@ -188,7 +181,7 @@ body {
 .status-chip[data-status="running"],
 .status-chip[data-status="alive"] {
   border-color: rgba(213, 165, 74, 0.45);
-  color: var(--color-gold);
+  color: var(--color-sage);
 }
 
 .status-chip[data-status="scheduled"],
@@ -201,19 +194,19 @@ body {
 .status-chip[data-status="cancelled"],
 .status-chip[data-status="dead"] {
   border-color: rgba(212, 115, 125, 0.55);
-  color: var(--color-omen-light);
+   color: var(--color-blood-light);
 }
 
 .schedule-option {
-  @apply inline-flex min-h-11 cursor-pointer items-center justify-center rounded-md border border-fog/30 px-3 text-sm font-medium text-paper transition-colors hover:border-gold/50 hover:text-gold;
+   @apply inline-flex min-h-11 cursor-pointer items-center justify-center rounded-md border border-fog/30 px-3 text-sm font-medium text-paper transition-colors hover:border-sage/50 hover:text-sage;
 }
 
 .schedule-option:has(input:checked) {
-  @apply border-gold/60 bg-gold/15 text-gold;
+   @apply border-sage/60 bg-sage/15 text-sage;
 }
 
 .schedule-option:has(input:focus-visible) {
-  outline: 2px solid var(--color-gold);
+   outline: 2px solid var(--color-sage);
   outline-offset: 2px;
 }
 
@@ -223,16 +216,16 @@ body {
 }
 
 .btn--quiet {
-  @apply border-fog/30 text-paper hover:border-gold/50 hover:text-gold;
+   @apply border-fog/30 text-paper hover:border-sage/50 hover:text-sage;
 }
 
 .btn--active {
-  @apply border-gold/60 bg-gold/15 text-gold;
+   @apply border-sage/60 bg-sage/15 text-sage;
 }
 
 .chip--gold {
   border-color: rgba(213, 165, 74, 0.45);
-  color: var(--color-gold);
+   color: var(--color-sage);
 }
 
 /* --- Old moon, phase rail, roster and chat (screens.tsx) -------------------- */
@@ -346,8 +339,8 @@ body {
 }
 
 .phase-rail__step.is-active .phase-rail__dot {
-  border-color: var(--color-gold);
-  background-color: var(--color-gold);
+   border-color: var(--color-sage);
+  background-color: var(--color-sage);
   box-shadow: 0 0 0.5rem rgba(213, 165, 74, 0.6);
 }
 
@@ -358,7 +351,7 @@ body {
 
 .phase-rail__step.is-active .phase-rail__label {
   font-weight: 600;
-  color: var(--color-gold);
+   color: var(--color-sage);
 }
 
 .player-row {
@@ -379,8 +372,8 @@ body {
 }
 
 .chat-tab--active {
-  border-color: var(--color-gold);
-  color: var(--color-gold);
+  border-color: var(--color-sage);
+  color: var(--color-sage);
 }
 
 .chat-surface {
@@ -894,4 +887,5 @@ body {
   position: absolute;
   inset: 0;
   background-color: rgba(179, 58, 54, 0.2);
+}
 }

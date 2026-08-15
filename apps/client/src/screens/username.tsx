@@ -45,7 +45,6 @@ export function UsernameScreen({ onSaved }: { onSaved: () => void }) {
             onChange={(event) => setUsername(event.target.value)}
             placeholder={t("ui.usernamePlaceholder")}
             required
-            style={{ fontSize: 19, minHeight: 60 }}
             value={username}
           />
           <div className="flex justify-between text-[13px] text-fog">
@@ -59,7 +58,6 @@ export function UsernameScreen({ onSaved }: { onSaved: () => void }) {
         <button
           className={`btn btn--primary w-full${valid ? "" : " btn--disabled"}`}
           disabled={!valid}
-          style={{ fontSize: 16, fontWeight: 600, minHeight: 56 }}
           type="submit"
         >
           {t("ui.saveUsername")}

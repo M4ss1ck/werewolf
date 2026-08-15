@@ -71,7 +71,6 @@ export function CreateGameScreen() {
             onChange={(event) => setName(event.target.value)}
             placeholder={t("ui.gameNamePlaceholder")}
             required
-            style={{ fontSize: 17, minHeight: 56 }}
             value={name}
           />
         </div>
@@ -137,7 +136,7 @@ export function CreateGameScreen() {
             min={15}
             onChange={(value) => setDuration("discussion", value)}
             step={15}
-            unit={` ${t("ui.seconds")}`}
+            unit={t("ui.secondsShort")}
             value={durations.discussion}
           />
           <Stepper
@@ -146,7 +145,7 @@ export function CreateGameScreen() {
             min={15}
             onChange={(value) => setDuration("voting", value)}
             step={15}
-            unit={` ${t("ui.seconds")}`}
+            unit={t("ui.secondsShort")}
             value={durations.voting}
           />
           <Stepper
@@ -155,18 +154,14 @@ export function CreateGameScreen() {
             min={15}
             onChange={(value) => setDuration("night", value)}
             step={15}
-            unit={` ${t("ui.seconds")}`}
+            unit={t("ui.secondsShort")}
             value={durations.night}
           />
         </fieldset>
         <ErrorMessage error={error} />
       </div>
       <div className="border-t border-paper/8 bg-bar px-[18px] py-3 pb-4">
-        <button
-          className="btn btn--primary w-full"
-          style={{ fontSize: 16, fontWeight: 600, minHeight: 56 }}
-          type="submit"
-        >
+        <button className="btn btn--primary w-full" type="submit">
           {t("ui.createGame")}
         </button>
       </div>

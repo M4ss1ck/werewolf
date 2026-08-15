@@ -9,13 +9,7 @@ import { changeLocale } from "../i18n/i18n.ts";
 export function SignInScreen() {
   const { t, i18n } = useTranslation();
   return (
-    <div
-      className="screen"
-      style={{
-        backgroundImage:
-          "radial-gradient(120% 60% at 50% 0%, rgba(127,162,146,.10), transparent 70%)",
-      }}
-    >
+    <div className="screen">
       <div className="mx-auto flex w-full max-w-[30rem] flex-1 flex-col justify-between px-6 pb-8 pt-12">
         <div className="flex flex-col gap-7 pt-10">
           <span
@@ -35,7 +29,6 @@ export function SignInScreen() {
             onClick={() =>
               void import("../auth/session.ts").then(({ signInWithGoogle }) => signInWithGoogle())
             }
-            style={{ fontSize: 16, fontWeight: 600, minHeight: 56 }}
             type="button"
           >
             {t("ui.signIn")} · Google

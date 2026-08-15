@@ -8,12 +8,14 @@ import { i18n } from "./i18n/i18n.ts";
 import { currentRoute, navigate } from "./routes.tsx";
 import {
   CreateGameScreen,
+  GameOverScreen,
+  GameScreen,
   GamesScreen,
+  LobbyScreen,
   ProfileScreen,
   SignInScreen,
   UsernameScreen,
 } from "./screens/index.ts";
-import { GameScreen, LobbyScreen } from "./screens.tsx";
 
 export function App() {
   return (
@@ -82,9 +84,11 @@ function Shell() {
       <main className="relative mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6">
         {snapshot ? (
           route.type === "replay" ? (
-            <GameScreen initial={snapshot} replay />
+            <GameOverScreen snapshot={snapshot} />
           ) : snapshot.game.status === "lobby" || snapshot.game.status === "scheduled" ? (
             <LobbyScreen onUpdate={setSnapshot} snapshot={snapshot} />
+          ) : snapshot.game.status === "finished" ? (
+            <GameOverScreen snapshot={snapshot} />
           ) : (
             <GameScreen initial={snapshot} />
           )

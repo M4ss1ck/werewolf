@@ -120,7 +120,6 @@ export function ProfileScreen({
         onClick={() =>
           void import("../auth/session.ts").then(({ signOut }) => signOut()).then(onSignedOut)
         }
-        style={{ minHeight: 52 }}
         type="button"
       >
         {t("ui.profile.signOut")}

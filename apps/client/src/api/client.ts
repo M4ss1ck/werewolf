@@ -18,10 +18,6 @@ export class ApiError extends Error {
   }
 }
 
-/** TEMP re-export: the old screens.tsx imports `PublicGame` from this module.
- * Delete together with src/screens.tsx in the next task. */
-export type PublicGame = PublicGameSummary;
-
 export interface CreateGameInput {
   name: string;
   visibility?: "public" | "private";
@@ -58,7 +54,8 @@ const json = (body: unknown): RequestInit => ({ method: "POST", body: JSON.strin
 
 export const api = {
   listGames: () => request<PublicGameSummary[]>("/api/games"),
-  createGame: (input: CreateGameInput) => request<PublicGame>("/api/games", { ...json(input) }),
+  createGame: (input: CreateGameInput) =>
+    request<PublicGameSummary>("/api/games", { ...json(input) }),
   getSnapshot: (id: GameId | string) => request<ViewerGameSnapshot>(`/api/games/${id}`),
   join: (id: GameId | string) => request<ViewerGameSnapshot>(`/api/games/${id}/join`, json({})),
   spectate: (id: GameId | string) =>
