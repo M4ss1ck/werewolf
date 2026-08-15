@@ -47,6 +47,20 @@ and proxies `/api` to the API on port 3000. Sources are bind-mounted, so edits
 on the host reload in the container. The database is a file under `./data`, so
 it survives restarts and needs no Turso account.
 
+Dependencies live in the image, not in the bind mount — `/app/node_modules` is an
+anonymous volume filled by `bun install` when the image was built. Installing a
+package on the host therefore does not reach the container. After any change to a
+`package.json`, rebuild and replace that volume:
+
+```bash
+docker compose -f docker-compose.dev.yml up --build --renew-anon-volumes
+```
+
+`--build` on its own is not enough: anonymous volumes survive container
+recreation, so the stale `node_modules` comes back and Vite fails with `Failed to
+resolve import`. The healthcheck only probes the API, so the container still
+reports healthy while the client is broken.
+
 `docker-compose.yml` (no `.dev`) is the production stack instead: one container
 serving the built SPA and the API together.
 
