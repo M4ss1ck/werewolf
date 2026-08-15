@@ -259,6 +259,11 @@ export const en = {
       confirm: "Confirm · {{player}}",
       noAction: "Nothing to do tonight.",
     },
+    cancelled: {
+      title: "Game cancelled",
+      body: "The host cancelled this game.",
+      backToGames: "Back to games",
+    },
     over: {
       villageWins: "the village wins",
       packWins: "the pack wins",

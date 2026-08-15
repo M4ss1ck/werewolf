@@ -8,6 +8,7 @@ import { TabBar } from "./components.tsx";
 import { i18n } from "./i18n/i18n.ts";
 import { currentRoute, navigate } from "./routes.tsx";
 import {
+  CancelledScreen,
   CreateGameScreen,
   GameOverScreen,
   GameScreen,
@@ -90,6 +91,8 @@ function Shell() {
         {snapshot ? (
           route.type === "replay" ? (
             <GameOverScreen snapshot={snapshot} />
+          ) : snapshot.game.status === "cancelled" ? (
+            <CancelledScreen snapshot={snapshot} />
           ) : snapshot.game.status === "lobby" || snapshot.game.status === "scheduled" ? (
             <LobbyScreen onUpdate={setSnapshot} snapshot={snapshot} />
           ) : snapshot.game.status === "finished" ? (

@@ -259,6 +259,11 @@ export const es: TranslationResource = {
       confirm: "Confirmar · {{player}}",
       noAction: "Nada que hacer esta noche.",
     },
+    cancelled: {
+      title: "Partida cancelada",
+      body: "El anfitrión canceló esta partida.",
+      backToGames: "Volver a las partidas",
+    },
     over: {
       villageWins: "la aldea gana",
       packWins: "la manada gana",
