@@ -405,3 +405,21 @@ test("only the owner may edit the game", async () => {
   expect(JSON.stringify(reloaded)).toContain("renamed");
   expect(JSON.stringify(reloaded)).not.toContain("hijacked");
 });
+
+test("a signed-out visitor can browse public games but cannot act", async () => {
+  const { app } = await setup();
+  await createGame(app, USERS[0]!);
+
+  const listing = await app.request("/api/games");
+  expect(listing.status).toBe(200);
+  expect(await listing.json()).toHaveLength(1);
+
+  // The exemption covers the listing only; everything else still needs a viewer.
+  const created = await app.request("/api/games", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "anonymous" }),
+  });
+  expect(created.status).toBe(401);
+  expect(await created.json()).toEqual({ error: { code: "UNAUTHENTICATED" } });
+});

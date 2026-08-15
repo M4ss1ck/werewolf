@@ -40,7 +40,9 @@ export function createApp(options: AppOptions = {}) {
   if (options.repository || options.coordinator) {
     const coordinator = options.coordinator ?? new GameCoordinator(options.repository!);
     app.use("/api/*", sessionMiddleware(options.sessionResolver ?? (async () => null)));
-    app.use("/api/*", requireViewer);
+    app.use("/api/*", (c, next) =>
+      c.req.method === "GET" && c.req.path === "/api/games" ? next() : requireViewer(c, next),
+    );
     app.route("/api/games", gamesRoutes(coordinator));
     app.route("/api", commandRoutes(coordinator));
     app.route("/api", eventRoutes(coordinator));
