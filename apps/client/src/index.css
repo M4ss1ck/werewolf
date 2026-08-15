@@ -431,31 +431,12 @@ body {
   font-weight: 600;
 }
 
-/* Glyphs are pure CSS shapes, never images or icons. */
 .tabbar__glyph {
-  box-sizing: border-box;
-  width: 18px;
-  height: 18px;
-}
-
-.tabbar__glyph--square {
-  border: 2px solid currentColor;
-  border-radius: 4px;
-}
-
-.tabbar__glyph--circle {
-  border: 2px solid currentColor;
-  border-radius: 50%;
-}
-
-.tabbar__glyph--diamond {
-  border: 2px solid currentColor;
-  transform: rotate(45deg);
+  flex-shrink: 0;
 }
 
 .tabbar__item--active .tabbar__glyph {
-  border: 0;
-  background-color: var(--color-blood);
+  color: var(--color-blood);
 }
 
 /* --- Typography helpers --------------------------------------------------- */

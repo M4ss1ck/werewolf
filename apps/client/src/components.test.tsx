@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import { MessageCircle, Moon, Users } from "lucide-react";
 import { afterEach, expect, test, vi } from "vitest";
 
 import { AvatarStack, Countdown, Segmented, Stepper, TabBar, Toggle } from "./components.tsx";
@@ -92,9 +93,9 @@ test("AvatarStack shows +N once names exceed the max", () => {
 
 test("TabBar marks the current item with aria-current and selects on click", () => {
   const items = [
-    { id: "village", label: "Village", glyph: "square" as const },
-    { id: "talk", label: "Talk", glyph: "circle" as const },
-    { id: "act", label: "Act", glyph: "diamond" as const },
+    { id: "village", label: "Village", icon: Users },
+    { id: "talk", label: "Talk", icon: MessageCircle },
+    { id: "act", label: "Act", icon: Moon },
   ];
   const onSelect = vi.fn();
   render(<TabBar current="talk" items={items} onSelect={onSelect} />);

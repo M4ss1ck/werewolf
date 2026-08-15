@@ -1,4 +1,5 @@
 import type { GamePhase, ViewerGameSnapshot } from "@werewolf/protocol";
+import type { LucideIcon } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -268,22 +269,22 @@ export function TabBar({
   current,
   onSelect,
 }: {
-  items: { id: string; label: string; glyph: "square" | "circle" | "diamond" }[];
+  items: { id: string; label: string; icon: LucideIcon }[];
   current: string;
   onSelect: (id: string) => void;
 }) {
   return (
     <nav className="tabbar">
-      {items.map((item) => (
+      {items.map(({ id, label, icon: Icon }) => (
         <button
-          aria-current={item.id === current ? "page" : undefined}
-          className={`tabbar__item${item.id === current ? " tabbar__item--active" : ""}`}
-          key={item.id}
-          onClick={() => onSelect(item.id)}
+          aria-current={id === current ? "page" : undefined}
+          className={`tabbar__item${id === current ? " tabbar__item--active" : ""}`}
+          key={id}
+          onClick={() => onSelect(id)}
           type="button"
         >
-          <span aria-hidden="true" className={`tabbar__glyph tabbar__glyph--${item.glyph}`} />
-          {item.label}
+          <Icon aria-hidden="true" className="tabbar__glyph" size={18} strokeWidth={2} />
+          {label}
         </button>
       ))}
     </nav>

@@ -1,3 +1,4 @@
+import { Plus, Swords, User } from "lucide-react";
 import { useEffect, useState } from "react";
 import { I18nextProvider, useTranslation } from "react-i18next";
 
@@ -72,9 +73,9 @@ function Shell() {
         <TabBar
           current={route.type}
           items={[
-            { id: "games", label: t("ui.tabs.games"), glyph: "square" },
-            { id: "create", label: t("ui.tabs.create"), glyph: "square" },
-            { id: "profile", label: t("ui.tabs.profile"), glyph: "circle" },
+            { id: "games", label: t("ui.tabs.games"), icon: Swords },
+            { id: "create", label: t("ui.tabs.create"), icon: Plus },
+            { id: "profile", label: t("ui.tabs.profile"), icon: User },
           ]}
           onSelect={(id) => navigate(id === "games" ? "/" : `/${id}`)}
         />

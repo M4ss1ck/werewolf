@@ -1,4 +1,5 @@
 import type { GameEvent, GameplayCommand, ViewerGameSnapshot } from "@werewolf/protocol";
+import { IdCard, MessageCircle, Moon, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -11,10 +12,10 @@ import { Talk } from "./talk.tsx";
 import { VillageTab } from "./village.tsx";
 
 const TABS = [
-  { id: "village", labelKey: "village", glyph: "square" },
-  { id: "talk", labelKey: "talk", glyph: "circle" },
-  { id: "act", labelKey: "act", glyph: "diamond" },
-  { id: "me", labelKey: "me", glyph: "circle" },
+  { id: "village", labelKey: "village", icon: Users },
+  { id: "talk", labelKey: "talk", icon: MessageCircle },
+  { id: "act", labelKey: "act", icon: Moon },
+  { id: "me", labelKey: "me", icon: IdCard },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
@@ -86,7 +87,7 @@ export function GameScreen({
         items={TABS.map((item) => ({
           id: item.id,
           label: t(`ui.tabs.${item.labelKey}`),
-          glyph: item.glyph,
+          icon: item.icon,
         }))}
         onSelect={(id) => setTab(id as TabId)}
       />
