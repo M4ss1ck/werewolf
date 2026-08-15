@@ -229,7 +229,7 @@ export const es: TranslationResource = {
     usernamePlaceholder: "p. ej. vigilalunas",
     usernameHint: "3–24 caracteres",
     chooseUsername: "Elige un nombre de usuario",
-    chooseUsernameIntro: "Este es el nombre que verá la aldea. No podrás cambiarlo después.",
+    chooseUsernameIntro: "Este es el nombre que verá la aldea.",
     saveUsername: "Guardar nombre",
     tabs: {
       games: "Partidas",
@@ -284,6 +284,7 @@ export const es: TranslationResource = {
       summary: "{{wolves}} frente a {{villagers}} en {{nights}}.",
     },
     profile: {
+      editUsername: "Editar nombre",
       games: "partidas",
       survived: "supervivencia",
       asWolf: "como lobo",

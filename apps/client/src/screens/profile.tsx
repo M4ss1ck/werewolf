@@ -1,11 +1,12 @@
 import type { Locale } from "@werewolf/i18n";
 import type { MeStats } from "@werewolf/protocol";
-import { type ReactNode, useEffect, useState } from "react";
+import { Pencil } from "lucide-react";
+import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client.ts";
 import type { SessionUser } from "../auth/session.ts";
-import { Avatar, Segmented, Toggle } from "../components.tsx";
+import { Avatar, ErrorMessage, Segmented, Toggle } from "../components.tsx";
 import { changeLocale } from "../i18n/i18n.ts";
 
 const PREFS = {
@@ -26,9 +27,11 @@ function StatTile({ value, label }: { value: ReactNode; label: string }) {
 export function ProfileScreen({
   user,
   onSignedOut,
+  onUsernameSaved,
 }: {
   user: SessionUser;
   onSignedOut: () => void;
+  onUsernameSaved: () => void;
 }) {
   const { t, i18n } = useTranslation();
   const [stats, setStats] = useState<MeStats | null>(null);
@@ -38,6 +41,9 @@ export function ProfileScreen({
   const [reducedMotion, setReducedMotion] = useState(
     () => localStorage.getItem(PREFS.reducedMotion) === "true",
   );
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [error, setError] = useState<unknown>();
   useEffect(() => {
     void api
       .getStats()
@@ -50,12 +56,77 @@ export function ProfileScreen({
   const survived =
     stats !== null && stats.games > 0 ? Math.round((stats.survived / stats.games) * 100) : 0;
   const displayName = user.username ?? user.name ?? user.email ?? user.id;
+  const valid = draft.trim().length >= 3;
+  const closeEditor = () => {
+    setDraft("");
+    setError(undefined);
+    setEditing(false);
+  };
+  const save = async (event: FormEvent) => {
+    event.preventDefault();
+    try {
+      await api.setUsername(draft.trim());
+      setError(undefined);
+      setEditing(false);
+      onUsernameSaved();
+    } catch (caught) {
+      setError(caught);
+    }
+  };
   return (
     <div className="screen__scroll flex flex-col gap-6 px-[18px] pb-5 pt-6">
       <header className="flex items-center gap-4">
         <Avatar name={displayName} size="xl" />
         <div>
-          <h1 className="text-[26px] font-semibold tracking-[-0.03em]">{displayName}</h1>
+          {editing ? (
+            <form className="flex flex-col gap-2.5" onSubmit={(event) => void save(event)}>
+              <input
+                aria-label={t("ui.username")}
+                className="field-input"
+                maxLength={24}
+                minLength={3}
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") closeEditor();
+                }}
+                required
+                value={draft}
+              />
+              <div className="flex justify-between text-[13px] text-fog">
+                <span>{t("ui.usernameHint")}</span>
+                <span className="font-mono">{draft.length}/24</span>
+              </div>
+              <ErrorMessage error={error} />
+              <div className="flex gap-2.5">
+                <button className="btn" onClick={closeEditor} type="button">
+                  {t("ui.cancel")}
+                </button>
+                <button
+                  className={`btn btn--primary${valid ? "" : " btn--disabled"}`}
+                  disabled={!valid}
+                  type="submit"
+                >
+                  {t("ui.saveUsername")}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div className="flex items-center gap-2">
+              <h1 className="text-[26px] font-semibold tracking-[-0.03em]">{displayName}</h1>
+              <button
+                aria-label={t("ui.profile.editUsername")}
+                className="text-fog transition-colors hover:text-paper"
+                onClick={() => {
+                  setDraft(user.username ?? "");
+                  setError(undefined);
+                  setEditing(true);
+                }}
+                type="button"
+              >
+                <Pencil aria-hidden="true" size={16} />
+              </button>
+            </div>
+          )}
           {user.email !== undefined && (
             <p className="mt-1 font-mono text-xs text-fog">{user.email}</p>
           )}

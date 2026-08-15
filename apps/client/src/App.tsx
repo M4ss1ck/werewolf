@@ -60,7 +60,11 @@ function Shell() {
       ) : route.type === "create" ? (
         <CreateGameScreen />
       ) : (
-        <ProfileScreen onSignedOut={refreshSession} user={session.user} />
+        <ProfileScreen
+          onSignedOut={refreshSession}
+          onUsernameSaved={refreshSession}
+          user={session.user}
+        />
       );
     return (
       <div className="screen mx-auto w-full max-w-[480px]">

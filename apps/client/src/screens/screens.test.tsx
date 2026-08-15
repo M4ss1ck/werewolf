@@ -207,7 +207,13 @@ test("profile: renders the three stats and flips a toggle", async () => {
         new Response(JSON.stringify({ games: 4, survived: 2, asWolf: 1 }), { status: 200 }),
       ),
   );
-  renderWithI18n(<ProfileScreen onSignedOut={() => undefined} user={SESSION_USER} />);
+  renderWithI18n(
+    <ProfileScreen
+      onSignedOut={() => undefined}
+      onUsernameSaved={() => undefined}
+      user={SESSION_USER}
+    />,
+  );
 
   expect(await screen.findByText("50%")).toBeInTheDocument();
   expect(screen.getByText("4")).toBeInTheDocument();
@@ -225,6 +231,68 @@ test("profile: renders the three stats and flips a toggle", async () => {
   fireEvent.click(motion);
   expect(localStorage.getItem("werewolf.prefs.reducedMotion")).toBe("true");
   expect(document.documentElement.dataset.reducedMotion).toBe("true");
+});
+
+test("profile: edits the username", async () => {
+  const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+    (input) =>
+      Promise.resolve(
+        new Response(
+          String(input) === "/api/me/username"
+            ? JSON.stringify({ userId: "me", username: "fox" })
+            : JSON.stringify({ games: 4, survived: 2, asWolf: 1 }),
+          { status: 200 },
+        ),
+      ),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  const onUsernameSaved = vi.fn();
+  renderWithI18n(
+    <ProfileScreen
+      onSignedOut={() => undefined}
+      onUsernameSaved={onUsernameSaved}
+      user={SESSION_USER}
+    />,
+  );
+
+  await screen.findByText("50%");
+  fireEvent.click(screen.getByRole("button", { name: /Edit username/ }));
+  const input = screen.getByLabelText("Username");
+  expect(input).toHaveValue("wren");
+  fireEvent.change(input, { target: { value: "fox" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save username" }));
+
+  await waitFor(() => expect(onUsernameSaved).toHaveBeenCalledTimes(1));
+  expect(fetchMock).toHaveBeenCalledWith(
+    "/api/me/username",
+    expect.objectContaining({ method: "PATCH" }),
+  );
+  const patch = fetchMock.mock.calls.find((call) => call[0] === "/api/me/username");
+  expect(JSON.parse(String(patch?.[1]?.body))).toEqual({ username: "fox" });
+});
+
+test("profile: cancels the username edit", async () => {
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValue(
+      new Response(JSON.stringify({ games: 4, survived: 2, asWolf: 1 }), { status: 200 }),
+    );
+  vi.stubGlobal("fetch", fetchMock);
+  renderWithI18n(
+    <ProfileScreen
+      onSignedOut={() => undefined}
+      onUsernameSaved={() => undefined}
+      user={SESSION_USER}
+    />,
+  );
+
+  await screen.findByText("50%");
+  fireEvent.click(screen.getByRole("button", { name: /Edit username/ }));
+  fireEvent.change(screen.getByLabelText("Username"), { target: { value: "fox" } });
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+  expect(screen.getByRole("heading", { name: "wren" })).toBeInTheDocument();
+  expect(fetchMock.mock.calls.filter((call) => call[0] === "/api/me/username")).toHaveLength(0);
 });
 
 test("voting sends vote.set on lock", () => {

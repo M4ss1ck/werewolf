@@ -18,6 +18,7 @@
     "@werewolf/protocol": "workspace:*",
     "i18next": "^25.6.0",
     "i18next-browser-languagedetector": "^8.2.0",
+    "lucide-react": "^1.31.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-i18next": "^16.0.0"

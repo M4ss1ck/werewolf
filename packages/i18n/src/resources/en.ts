@@ -229,7 +229,7 @@ export const en = {
     usernamePlaceholder: "e.g. moonwatcher",
     usernameHint: "3–24 characters",
     chooseUsername: "Choose a username",
-    chooseUsernameIntro: "This is the name the village will see. You can't change it later.",
+    chooseUsernameIntro: "This is the name the village will see.",
     saveUsername: "Save username",
     tabs: {
       games: "Games",
@@ -284,6 +284,7 @@ export const en = {
       summary: "{{wolves}} outlasted {{villagers}} over {{nights}}.",
     },
     profile: {
+      editUsername: "Edit username",
       games: "games",
       survived: "survived",
       asWolf: "as wolf",

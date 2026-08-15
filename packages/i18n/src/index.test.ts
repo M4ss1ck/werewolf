@@ -190,9 +190,7 @@ test("plurals render differently for one and for several in each language", () =
 test("design-exact copy is preserved in English", () => {
   expect(en.ui.vote.title).toBe("Who hangs today?");
   expect(en.ui.night.villageSleeps).toBe("The village sleeps. Public chat is closed until dawn.");
-  expect(en.ui.chooseUsernameIntro).toBe(
-    "This is the name the village will see. You can't change it later.",
-  );
+  expect(en.ui.chooseUsernameIntro).toBe("This is the name the village will see.");
   expect(en.ui.lobby.youHost).toBe("You · host");
   expect(en.ui.lobby.emptySeat).toBe("Empty seat");
   expect(en.ui.lobby.waitingForPlayers).toBe("Waiting for players");
