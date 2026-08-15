@@ -8,6 +8,7 @@ import { CoordinatorError } from "../game/coordinator.ts";
 const gameBody = z.object({
   name: z.string().min(1),
   visibility: z.enum(["public", "private"]).default("public"),
+  scheduledAt: z.number().int().positive().optional(),
   settings: z
     .object({
       discussionDurationMs: z.number().int().nonnegative().default(60_000),

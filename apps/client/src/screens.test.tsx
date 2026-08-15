@@ -151,7 +151,13 @@ test("the create form labels every control visibly and accessibly", () => {
   expect(screen.getByLabelText("Visibility")).toBeInTheDocument();
   expect(screen.getByText("Visibility")).toBeVisible();
   expect(screen.getByLabelText("Allow spectating")).toBeInTheDocument();
-  expect(screen.getByLabelText("Scheduled start")).toBeInTheDocument();
+  // The scheduled-start control is a radio preset picker, "manual" by default.
+  expect(screen.getByRole("radio", { name: "Start manually" })).toBeChecked();
+  expect(screen.getByRole("radio", { name: "In 5 minutes" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("radio", { name: "Pick a time" }));
+  expect(
+    screen.getByLabelText("Pick a time", { selector: "input[type='datetime-local']" }),
+  ).toBeInTheDocument();
   // Phase durations carry unit context next to each labelled field.
   expect(screen.getByLabelText("Discussion")).toBeInTheDocument();
   expect(screen.getByLabelText("Voting")).toBeInTheDocument();

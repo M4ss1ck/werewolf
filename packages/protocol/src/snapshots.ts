@@ -53,6 +53,8 @@ export interface ViewerGameSnapshot {
     ownerUserId: UserId;
     status: GameStatus;
     day: number;
+    /** Present only while the game is waiting for its scheduled start. */
+    scheduledAt?: number;
     phase: {
       id: PhaseId;
       type: GamePhase;
@@ -96,6 +98,7 @@ export const ViewerGameSnapshotSchema = z.object({
     ownerUserId: UserIdSchema,
     status: GameStatusSchema,
     day: z.number(),
+    scheduledAt: z.number().optional(),
     phase: z
       .object({
         id: PhaseIdSchema,

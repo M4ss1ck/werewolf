@@ -43,16 +43,31 @@ export class PhaseScheduler {
     this.timers.clear();
   }
 
+  /** Arm, re-arm or drop this game's timer from its authoritative columns. */
+  async watch(gameId: GameId) {
+    if (this.stopped) return;
+    const game = await this.repository.getGame(gameId);
+    if (!game) return;
+    if (game.status === "scheduled") this.register(gameId, game.scheduledAt ?? undefined, true);
+    else if (game.status === "running") this.register(gameId, game.phaseEndsAt ?? undefined, false);
+    else this.clear(gameId);
+  }
+
   private register(gameId: GameId, deadline: number | undefined, scheduled: boolean) {
     if (this.stopped || deadline === undefined) return;
-    const old = this.timers.get(gameId);
-    if (old) clearTimeout(old);
+    this.clear(gameId);
     const delay = Math.max(0, deadline - this.clock());
     const timer = setTimeout(() => {
       this.timers.delete(gameId);
       void this.fire(gameId, scheduled);
     }, delay);
     this.timers.set(gameId, timer);
+  }
+
+  private clear(gameId: GameId) {
+    const timer = this.timers.get(gameId);
+    if (timer) clearTimeout(timer);
+    this.timers.delete(gameId);
   }
 
   private async fire(gameId: GameId, scheduled: boolean) {
@@ -69,10 +84,6 @@ export class PhaseScheduler {
       )
         console.error("phase scheduler transition failed", error);
     }
-    if (this.stopped) return;
-    const game = await this.repository.getGame(gameId);
-    if (!game) return;
-    if (game.status === "scheduled") this.register(gameId, game.scheduledAt ?? undefined, true);
-    else if (game.status === "running") this.register(gameId, game.phaseEndsAt ?? undefined, false);
+    await this.watch(gameId);
   }
 }

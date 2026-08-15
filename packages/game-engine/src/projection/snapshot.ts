@@ -58,6 +58,7 @@ export function projectSnapshot(
       name: state.name ?? state.id,
       ownerUserId: state.ownerUserId,
       status: state.status,
+      ...(state.scheduledAt ? { scheduledAt: state.scheduledAt } : {}),
       day: state.day,
       phase: state.phase,
       settings: {

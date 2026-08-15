@@ -15,6 +15,7 @@ export type CreateGameInput = {
   settings: unknown;
   balanceVersion: number;
   rngSeed?: string;
+  scheduledAt?: number;
   createdAt: number;
 };
 export type AddPlayerInput = {
@@ -41,6 +42,7 @@ export class GameRepository {
       joinCode: input.joinCode,
       visibility: input.visibility,
       status: input.status,
+      scheduledAt: input.scheduledAt,
       settingsJson: JSON.stringify(input.settings),
       balanceVersion: input.balanceVersion,
       rngSeed: input.rngSeed,

@@ -84,6 +84,19 @@ function GameCard({ game, onOpen }: { game: PublicGame; onOpen: (id: string) => 
   );
 }
 
+const SCHEDULE_PRESETS = [2, 5, 10, 30, 60] as const;
+type Schedule = "manual" | "custom" | (typeof SCHEDULE_PRESETS)[number];
+
+/** The absolute start time a schedule choice means right now, if any. */
+function scheduledAtFor(schedule: Schedule, customAt: string): number | undefined {
+  if (schedule === "manual") return undefined;
+  if (schedule === "custom") {
+    const parsed = Date.parse(customAt);
+    return Number.isNaN(parsed) ? undefined : parsed;
+  }
+  return Date.now() + schedule * 60_000;
+}
+
 export function GamesScreen({ onOpen }: { onOpen: (id: string) => void }) {
   const { t } = useTranslation();
   const [games, setGames] = useState<PublicGame[]>([]);
@@ -91,26 +104,33 @@ export function GamesScreen({ onOpen }: { onOpen: (id: string) => void }) {
   const [name, setName] = useState("");
   const [visibility, setVisibility] = useState<"public" | "private">("public");
   const [spectatingEnabled, setSpectatingEnabled] = useState(true);
-  const [scheduledAt, setScheduledAt] = useState("");
+  const [schedule, setSchedule] = useState<Schedule>("manual");
+  const [customAt, setCustomAt] = useState("");
   const [durations, setDurations] = useState({ discussion: 120, voting: 60, night: 60 });
   useEffect(() => {
     void api.listGames().then(setGames).catch(setError);
   }, []);
   const create = async (event: FormEvent) => {
     event.preventDefault();
+    const startsAt = scheduledAtFor(schedule, customAt);
+    if (schedule === "custom" && (startsAt === undefined || startsAt <= Date.now())) return;
     try {
       const game = await api.createGame({
         name,
         visibility,
-        ...(scheduledAt ? { scheduledAt: Date.parse(scheduledAt) } : {}),
+        ...(startsAt ? { scheduledAt: startsAt } : {}),
         settings: { ...durations, spectatingEnabled },
       });
       setGames((current) => [...current, game]);
       setName("");
+      setSchedule("manual");
+      setCustomAt("");
     } catch (caught) {
       setError(caught);
     }
   };
+  const preview = scheduledAtFor(schedule, customAt);
+  const startsAtPreview = preview !== undefined && preview > Date.now() ? preview : undefined;
   return (
     <div className="w-full space-y-8">
       <ErrorMessage error={error} />
@@ -173,18 +193,56 @@ export function GamesScreen({ onOpen }: { onOpen: (id: string) => void }) {
               />
               {t("ui.allowSpectating")}
             </label>
-            <div className="space-y-1.5">
-              <label className="field-label" htmlFor="create-scheduled">
-                {t("ui.scheduledStart")}
-              </label>
-              <input
-                className="field-input w-full"
-                id="create-scheduled"
-                onChange={(event) => setScheduledAt(event.target.value)}
-                type="datetime-local"
-                value={scheduledAt}
-              />
-            </div>
+            <fieldset className="space-y-2.5">
+              <legend className="field-label">{t("ui.scheduledStart")}</legend>
+              <div className="flex flex-wrap gap-2">
+                {(["manual", ...SCHEDULE_PRESETS, "custom"] as const).map((option) => (
+                  <label className="schedule-option" key={option}>
+                    <input
+                      checked={schedule === option}
+                      className="sr-only"
+                      name="schedule"
+                      onChange={() => setSchedule(option)}
+                      type="radio"
+                      value={String(option)}
+                    />
+                    {option === "manual"
+                      ? t("ui.scheduleManual")
+                      : option === "custom"
+                        ? t("ui.schedulePickTime")
+                        : option === 60
+                          ? t("ui.scheduleInHour")
+                          : t("ui.scheduleInMinutes.count", { count: option })}
+                  </label>
+                ))}
+              </div>
+              {schedule === "custom" && (
+                <>
+                  <label className="sr-only" htmlFor="create-scheduled">
+                    {t("ui.schedulePickTime")}
+                  </label>
+                  <input
+                    className="field-input w-full"
+                    id="create-scheduled"
+                    onChange={(event) => setCustomAt(event.target.value)}
+                    type="datetime-local"
+                    value={customAt}
+                  />
+                </>
+              )}
+              {schedule !== "manual" && (
+                <p className="font-mono text-xs text-fog">
+                  {startsAtPreview === undefined
+                    ? t("ui.schedulePastTime")
+                    : t("ui.scheduleStartsAt", {
+                        time: new Date(startsAtPreview).toLocaleTimeString(undefined, {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        }),
+                      })}
+                </p>
+              )}
+            </fieldset>
             <fieldset className="space-y-2.5">
               <legend className="field-label">{t("ui.phaseDurations")}</legend>
               {Object.entries(durations).map(([key, value]) => (
@@ -247,6 +305,16 @@ export function LobbyScreen({
             <span className="chip chip--gold">{t("ui.readyToStart")}</span>
           ) : (
             <span className="chip">{t("ui.waitingForPlayers")}</span>
+          )}
+          {snapshot.game.scheduledAt !== undefined && (
+            <span className="font-mono text-xs text-fog">
+              {t("ui.scheduleStartsAt", {
+                time: new Date(snapshot.game.scheduledAt).toLocaleTimeString(undefined, {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                }),
+              })}
+            </span>
           )}
         </p>
       </header>

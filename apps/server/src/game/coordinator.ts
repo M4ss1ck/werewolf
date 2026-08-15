@@ -58,14 +58,19 @@ export class GameCoordinator {
     name: string;
     visibility: string;
     settings: unknown;
+    scheduledAt?: number | undefined;
   }) {
     const id = crypto.randomUUID() as GameId;
+    // A start time in the past is not a schedule: fall through to a plain lobby
+    // rather than creating a game whose deadline has already gone.
+    const scheduled = input.scheduledAt !== undefined && input.scheduledAt > this.now();
     await this.repository.createGame({
       id,
       ownerUserId: input.ownerUserId,
       name: input.name,
       visibility: input.visibility,
-      status: "lobby",
+      status: scheduled ? "scheduled" : "lobby",
+      ...(scheduled && input.scheduledAt !== undefined ? { scheduledAt: input.scheduledAt } : {}),
       settings: input.settings,
       balanceVersion: 1,
       rngSeed: crypto.randomUUID(),
@@ -77,13 +82,17 @@ export class GameCoordinator {
       displayName: input.ownerUserId,
       joinedAt: this.now(),
     });
+    // Creation is a state change like any other: tell the hooks so the scheduler
+    // can arm this game's timer. No events yet, and no subscribers either.
+    await Promise.all([...this.hooks].map((hook) => hook(id, [])));
     return this.repository.loadGameState(id);
   }
   async joinGame(gameId: GameId, userId: UserId, displayName = userId) {
     return this.lock.run(gameId, async () => {
       const game = await this.repository.getGame(gameId);
       if (!game) throw new CoordinatorError("GAME_NOT_FOUND");
-      if (game.status !== "lobby") throw new CoordinatorError("GAME_ALREADY_STARTED");
+      if (game.status !== "lobby" && game.status !== "scheduled")
+        throw new CoordinatorError("GAME_ALREADY_STARTED");
       const players = await this.repository.getPlayers(gameId);
       if (!players.some((p) => p.userId === userId))
         await this.repository.addPlayer({ gameId, userId, displayName, joinedAt: this.now() });

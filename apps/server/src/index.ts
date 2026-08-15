@@ -18,6 +18,9 @@ const auth = createAuth(db, env);
 const repository = new GameRepository(db);
 const coordinator = new GameCoordinator(repository);
 const scheduler = new PhaseScheduler(repository, coordinator);
+// Timers are an optimisation over the authoritative columns; re-arm this
+// game's timer whenever the coordinator commits a change to it.
+coordinator.onCommitted((gameId) => void scheduler.watch(gameId));
 const hub = new GameHub(coordinator);
 const app = createApp({
   repository,
