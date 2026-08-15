@@ -144,6 +144,7 @@ export const es: TranslationResource = {
     leave: "Salir",
     start: "Comenzar",
     cancel: "Cancelar",
+    save: "Guardar",
     lobby: {
       label: "Sala de espera",
       waitingForPlayers: "Esperando jugadores",

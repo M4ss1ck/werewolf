@@ -77,58 +77,60 @@ export function ProfileScreen({
     <div className="screen__scroll flex flex-col gap-6 px-[18px] pb-5 pt-6">
       <header className="flex items-center gap-4">
         <Avatar name={displayName} size="xl" />
-        <div>
+        <div className="min-w-0 flex-1">
           {editing ? (
-            <form className="flex flex-col gap-2.5" onSubmit={(event) => void save(event)}>
-              <input
-                aria-label={t("ui.username")}
-                className="field-input"
-                maxLength={24}
-                minLength={3}
-                onChange={(event) => setDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Escape") closeEditor();
-                }}
-                required
-                value={draft}
-              />
+            <form className="flex flex-col gap-1.5" onSubmit={(event) => void save(event)}>
+              <div className="flex items-center gap-2">
+                <input
+                  aria-label={t("ui.username")}
+                  className="field-input min-w-0 flex-1"
+                  maxLength={24}
+                  minLength={3}
+                  onChange={(event) => setDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") closeEditor();
+                  }}
+                  required
+                  value={draft}
+                />
+                <button className="btn btn--sm" onClick={closeEditor} type="button">
+                  {t("ui.cancel")}
+                </button>
+                <button
+                  className={`btn btn--sm btn--primary${valid ? "" : " btn--disabled"}`}
+                  disabled={!valid}
+                  type="submit"
+                >
+                  {t("ui.save")}
+                </button>
+              </div>
               <div className="flex justify-between text-[13px] text-fog">
                 <span>{t("ui.usernameHint")}</span>
                 <span className="font-mono">{draft.length}/24</span>
               </div>
               <ErrorMessage error={error} />
-              <div className="flex gap-2.5">
-                <button className="btn" onClick={closeEditor} type="button">
-                  {t("ui.cancel")}
-                </button>
-                <button
-                  className={`btn btn--primary${valid ? "" : " btn--disabled"}`}
-                  disabled={!valid}
-                  type="submit"
-                >
-                  {t("ui.saveUsername")}
-                </button>
-              </div>
             </form>
           ) : (
-            <div className="flex items-center gap-2">
-              <h1 className="text-[26px] font-semibold tracking-[-0.03em]">{displayName}</h1>
-              <button
-                aria-label={t("ui.profile.editUsername")}
-                className="text-fog transition-colors hover:text-paper"
-                onClick={() => {
-                  setDraft(user.username ?? "");
-                  setError(undefined);
-                  setEditing(true);
-                }}
-                type="button"
-              >
-                <Pencil aria-hidden="true" size={16} />
-              </button>
-            </div>
-          )}
-          {user.email !== undefined && (
-            <p className="mt-1 font-mono text-xs text-fog">{user.email}</p>
+            <>
+              <div className="flex items-center gap-2">
+                <h1 className="text-[26px] font-semibold tracking-[-0.03em]">{displayName}</h1>
+                <button
+                  aria-label={t("ui.profile.editUsername")}
+                  className="text-fog transition-colors hover:text-paper"
+                  onClick={() => {
+                    setDraft(user.username ?? "");
+                    setError(undefined);
+                    setEditing(true);
+                  }}
+                  type="button"
+                >
+                  <Pencil aria-hidden="true" size={16} />
+                </button>
+              </div>
+              {user.email !== undefined && (
+                <p className="mt-1 font-mono text-xs text-fog">{user.email}</p>
+              )}
+            </>
           )}
         </div>
       </header>

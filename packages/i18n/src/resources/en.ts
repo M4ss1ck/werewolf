@@ -146,6 +146,7 @@ export const en = {
     leave: "Leave",
     start: "Start",
     cancel: "Cancel",
+    save: "Save",
     lobby: {
       label: "Lobby",
       waitingForPlayers: "Waiting for players",

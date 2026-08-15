@@ -257,10 +257,11 @@ test("profile: edits the username", async () => {
 
   await screen.findByText("50%");
   fireEvent.click(screen.getByRole("button", { name: /Edit username/ }));
+  expect(screen.queryByText("wren@example.com")).not.toBeInTheDocument();
   const input = screen.getByLabelText("Username");
   expect(input).toHaveValue("wren");
   fireEvent.change(input, { target: { value: "fox" } });
-  fireEvent.click(screen.getByRole("button", { name: "Save username" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
   await waitFor(() => expect(onUsernameSaved).toHaveBeenCalledTimes(1));
   expect(fetchMock).toHaveBeenCalledWith(
@@ -291,6 +292,7 @@ test("profile: cancels the username edit", async () => {
   fireEvent.change(screen.getByLabelText("Username"), { target: { value: "fox" } });
   fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
+  expect(screen.getByText("wren@example.com")).toBeInTheDocument();
   expect(screen.getByRole("heading", { name: "wren" })).toBeInTheDocument();
   expect(fetchMock.mock.calls.filter((call) => call[0] === "/api/me/username")).toHaveLength(0);
 });
