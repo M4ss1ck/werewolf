@@ -495,6 +495,120 @@ test("the roster shows usernames, not user ids", async () => {
   expect(displayNames.join(" ")).not.toContain(USERS[1]!);
 });
 
+test("lobby mutations answer with the caller's viewer projection", async () => {
+  const { app } = await setup();
+  const game = await createGame(app, USERS[0]!);
+
+  // Joining answers with the joiner's projection, not the raw GameState.
+  const joined = await as(app, USERS[1]!, `/api/games/${game.id}/join`, jsonRequest("POST", {}));
+  expect(joined.status).toBe(200);
+  const joinBody = (await joined.json()) as ViewerGameSnapshot;
+  expect(joinBody.game.id).toBe(game.id);
+  expect(Array.isArray(joinBody.players)).toBe(true);
+  expect(joinBody).not.toHaveProperty("balanceVersion");
+  expect(joinBody).not.toHaveProperty("version");
+
+  const joined2 = await as(app, USERS[2]!, `/api/games/${game.id}/join`, jsonRequest("POST", {}));
+  expect(joined2.status).toBe(200);
+  const joinBody2 = (await joined2.json()) as ViewerGameSnapshot;
+  expect(joinBody2.game.id).toBe(game.id);
+  expect(joinBody2.players.some((player) => player.userId === USERS[2]!)).toBe(true);
+
+  // Kicking answers with the owner's projection; the kicked player is gone.
+  const kicked = await as(
+    app,
+    USERS[0]!,
+    `/api/games/${game.id}/players/${USERS[2]}`,
+    jsonRequest("DELETE", {}, USERS[0]!),
+  );
+  expect(kicked.status).toBeLessThan(300);
+  const kickBody = (await kicked.json()) as ViewerGameSnapshot;
+  expect(kickBody.game.id).toBe(game.id);
+  expect(Array.isArray(kickBody.players)).toBe(true);
+  expect(kickBody.players.some((player) => player.userId === USERS[2]!)).toBe(false);
+  expect(kickBody).not.toHaveProperty("balanceVersion");
+  expect(kickBody).not.toHaveProperty("version");
+
+  // Leaving answers with the leaver's projection; the leaver is gone.
+  const left = await as(app, USERS[1]!, `/api/games/${game.id}/membership`, { method: "DELETE" });
+  expect(left.status).toBeLessThan(300);
+  const leaveBody = (await left.json()) as ViewerGameSnapshot;
+  expect(leaveBody.game.id).toBe(game.id);
+  expect(Array.isArray(leaveBody.players)).toBe(true);
+  expect(leaveBody.players.some((player) => player.userId === USERS[1]!)).toBe(false);
+  expect(leaveBody).not.toHaveProperty("balanceVersion");
+  expect(leaveBody).not.toHaveProperty("version");
+
+  // Cancelling answers with the owner's projection of the cancelled game.
+  const cancelled = await as(
+    app,
+    USERS[0]!,
+    `/api/games/${game.id}/cancel`,
+    jsonRequest("POST", {}, USERS[0]!),
+  );
+  expect(cancelled.status).toBe(200);
+  const cancelBody = (await cancelled.json()) as ViewerGameSnapshot;
+  expect(cancelBody.game.id).toBe(game.id);
+  expect(cancelBody.game.status).toBe("cancelled");
+  expect(Array.isArray(cancelBody.players)).toBe(true);
+  expect(cancelBody).not.toHaveProperty("balanceVersion");
+  expect(cancelBody).not.toHaveProperty("version");
+});
+
+test("starting answers with the starter's projection and hides other roles", async () => {
+  const { app } = await setup();
+  const game = await createGame(app, USERS[0]!);
+  for (const userId of [USERS[1]!, USERS[2]!, USERS[3]!, USERS[4]!]) {
+    const response = await as(app, userId, `/api/games/${game.id}/join`, jsonRequest("POST", {}));
+    expect(response.status).toBe(200);
+  }
+
+  const start = await as(app, USERS[0]!, `/api/games/${game.id}/start`, jsonRequest("POST", {}));
+  expect(start.status).toBe(200);
+  const body = (await start.json()) as ViewerGameSnapshot;
+  expect(body.game.id).toBe(game.id);
+  expect(body.game.status).toBe("running");
+  expect(body.me?.role).toBeDefined();
+  expect(Array.isArray(body.players)).toBe(true);
+  // The projection reveals no other living player's role or faction: the
+  // roster entries are ViewerPlayers, never PlayerState rows.
+  for (const player of body.players) {
+    expect((player as unknown as Record<string, unknown>).role).toBeUndefined();
+    expect((player as unknown as Record<string, unknown>).faction).toBeUndefined();
+  }
+});
+
+test("a command answers with the caller's projection, never the full role table", async () => {
+  const { app } = await setup();
+  const gameId = await startGameWithPlayers(app, USERS[0]!, [
+    USERS[1]!,
+    USERS[2]!,
+    USERS[3]!,
+    USERS[4]!,
+  ]);
+  const game = await snapshot(app, USERS[1]!, gameId);
+  const phaseId = game.game.phase!.id as number;
+
+  const response = await as(
+    app,
+    USERS[1]!,
+    `/api/games/${gameId}/commands`,
+    jsonRequest("POST", chatCommand("c-proj", phaseId), USERS[1]!),
+  );
+  expect(response.status).toBe(200);
+  const body = (await response.json()) as ViewerGameSnapshot;
+  expect(body.game.id).toBe(gameId);
+  expect(Array.isArray(body.players)).toBe(true);
+  expect(body.me?.userId as string).toBe(USERS[1]!);
+  for (const player of body.players) {
+    expect((player as unknown as Record<string, unknown>).role).toBeUndefined();
+    expect((player as unknown as Record<string, unknown>).faction).toBeUndefined();
+  }
+  // The old { state, events } envelope is gone: the response is a projection.
+  expect(body).not.toHaveProperty("state");
+  expect(body).not.toHaveProperty("events");
+});
+
 test("creating or joining without a username is refused", async () => {
   const { app } = await setup();
   const game = await createGame(app, USERS[0]!);

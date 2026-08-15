@@ -105,7 +105,7 @@ export class GameCoordinator {
       const players = await this.repository.getPlayers(gameId);
       if (!players.some((p) => p.userId === userId))
         await this.repository.addPlayer({ gameId, userId, displayName, joinedAt: this.now() });
-      return this.repository.loadGameState(gameId);
+      return this.snapshot(gameId, userId);
     });
   }
   async spectateGame(gameId: GameId, userId: UserId, displayName: string) {
@@ -125,7 +125,7 @@ export class GameCoordinator {
           status: "spectator",
           joinedAt: this.now(),
         });
-      return this.repository.loadGameState(gameId);
+      return this.snapshot(gameId, userId);
     });
   }
   async leaveLobby(gameId: GameId, userId: UserId) {
@@ -135,7 +135,7 @@ export class GameCoordinator {
       if (game.status !== "lobby" && game.status !== "scheduled")
         throw new CoordinatorError("GAME_ALREADY_STARTED");
       await this.repository.removePlayer(gameId, userId);
-      return this.repository.loadGameState(gameId);
+      return this.snapshot(gameId, userId);
     });
   }
   async kickLobbyPlayer(gameId: GameId, owner: UserId, userId: UserId) {
@@ -146,7 +146,7 @@ export class GameCoordinator {
       if (game.status !== "lobby" && game.status !== "scheduled")
         throw new CoordinatorError("GAME_ALREADY_STARTED");
       await this.repository.removePlayer(gameId, userId);
-      return this.repository.loadGameState(gameId);
+      return this.snapshot(gameId, owner);
     });
   }
   async updateGame(
@@ -161,7 +161,7 @@ export class GameCoordinator {
       if (game.status !== "lobby" && game.status !== "scheduled")
         throw new CoordinatorError("GAME_ALREADY_STARTED");
       await this.repository.updateGame(gameId, patch);
-      return this.repository.loadGameState(gameId);
+      return this.snapshot(gameId, userId);
     });
   }
   async startGame(gameId: GameId, userId: UserId) {
@@ -169,11 +169,12 @@ export class GameCoordinator {
       const row = await this.repository.getGame(gameId);
       if (!row) throw new CoordinatorError("GAME_NOT_FOUND");
       if (row.ownerUserId !== userId) throw new CoordinatorError("NOT_GAME_OWNER");
-      return this.transitionUnlocked(gameId, (state) => {
+      await this.transitionUnlocked(gameId, (state) => {
         if (state.players[userId] === undefined)
           return { ok: false, error: { code: "NOT_A_MEMBER" } };
         return engineStartGame(state, { now: this.now(), seed: row.rngSeed ?? gameId });
       });
+      return this.snapshot(gameId, userId);
     });
   }
   async cancelGame(gameId: GameId, userId: UserId) {
@@ -187,11 +188,11 @@ export class GameCoordinator {
         { gamePatch: { status: "cancelled" }, playerPatches: [], events: [], ephemeral: [] },
         this.now(),
       );
-      return this.repository.loadGameState(gameId);
+      return this.snapshot(gameId, userId);
     });
   }
   async executeCommand(gameId: GameId, userId: UserId, command: GameplayCommand) {
-    return this.transition(gameId, (state) => {
+    await this.transition(gameId, (state) => {
       const result = applyCommand(state, userId, command, { now: this.now() });
       // Commands are idempotent via command_id: stamp every event the engine
       // produced with the command's id so a retry cannot insert a duplicate
@@ -201,6 +202,7 @@ export class GameCoordinator {
           (event as { commandId?: string }).commandId = command.commandId;
       return result;
     });
+    return this.snapshot(gameId, userId);
   }
   async resolvePhase(gameId: GameId) {
     return this.transition(gameId, (state) =>
