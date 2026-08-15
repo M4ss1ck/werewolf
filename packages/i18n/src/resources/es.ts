@@ -145,6 +145,7 @@ export const es: TranslationResource = {
     start: "Comenzar",
     cancel: "Cancelar",
     save: "Guardar",
+    backToGames: "Volver a las partidas",
     lobby: {
       label: "Sala de espera",
       waitingForPlayers: "Esperando jugadores",
@@ -262,7 +263,6 @@ export const es: TranslationResource = {
     cancelled: {
       title: "Partida cancelada",
       body: "El anfitrión canceló esta partida.",
-      backToGames: "Volver a las partidas",
     },
     over: {
       villageWins: "la aldea gana",

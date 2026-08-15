@@ -1,4 +1,4 @@
-import { Plus, Swords, User } from "lucide-react";
+import { ChevronLeft, Plus, Swords, User } from "lucide-react";
 import { useEffect, useState } from "react";
 import { I18nextProvider, useTranslation } from "react-i18next";
 
@@ -24,6 +24,22 @@ export function App() {
     <I18nextProvider i18n={i18n}>
       <Shell />
     </I18nextProvider>
+  );
+}
+
+/** Single-use app-level escape hatch for game routes, which have no TabBar. */
+function BackToGames() {
+  const { t } = useTranslation();
+  return (
+    <button
+      aria-label={t("ui.backToGames")}
+      className="flex h-11 items-center gap-1.5 self-start text-fog"
+      onClick={() => navigate("/")}
+      type="button"
+    >
+      <ChevronLeft aria-hidden="true" size={18} strokeWidth={2} />
+      {t("ui.tabs.games")}
+    </button>
   );
 }
 
@@ -88,6 +104,7 @@ function Shell() {
     <div className="app-shell">
       <div aria-hidden="true" className="app-shell__atmosphere" />
       <main className="relative mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6">
+        <BackToGames />
         {snapshot ? (
           route.type === "replay" ? (
             <GameOverScreen snapshot={snapshot} />

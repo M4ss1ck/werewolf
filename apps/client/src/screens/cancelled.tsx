@@ -21,7 +21,7 @@ export function CancelledScreen({ snapshot }: { snapshot: ViewerGameSnapshot }) 
       </div>
       <div className="flex gap-2.5 border-t border-paper/8 bg-bar px-[18px] py-3 pb-4">
         <button className="btn btn--primary flex-1" onClick={() => navigate("/")} type="button">
-          {t("ui.cancelled.backToGames")}
+          {t("ui.backToGames")}
         </button>
       </div>
     </div>

@@ -147,6 +147,7 @@ export const en = {
     start: "Start",
     cancel: "Cancel",
     save: "Save",
+    backToGames: "Back to games",
     lobby: {
       label: "Lobby",
       waitingForPlayers: "Waiting for players",
@@ -262,7 +263,6 @@ export const en = {
     cancelled: {
       title: "Game cancelled",
       body: "The host cancelled this game.",
-      backToGames: "Back to games",
     },
     over: {
       villageWins: "the village wins",

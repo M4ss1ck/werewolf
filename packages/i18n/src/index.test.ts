@@ -229,7 +229,7 @@ test("every new screen surface renders a non-empty string in both locales", () =
     "ui.night.noAction",
     "ui.cancelled.title",
     "ui.cancelled.body",
-    "ui.cancelled.backToGames",
+    "ui.backToGames",
     "ui.over.villageWins",
     "ui.over.packWins",
     "ui.over.villageWinsTitle",

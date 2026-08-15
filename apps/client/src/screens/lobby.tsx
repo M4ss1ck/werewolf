@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client.ts";
 import { Avatar, ErrorMessage, Meter } from "../components.tsx";
+import { navigate } from "../routes.tsx";
 
 /** Design 05 · the game lobby: waiting card, roster, empty seats, start bar. */
 export function LobbyScreen({
@@ -25,6 +26,16 @@ export function LobbyScreen({
   const act = async (operation: () => Promise<ViewerGameSnapshot>) => {
     try {
       onUpdate(await operation());
+    } catch (caught) {
+      setError(caught);
+    }
+  };
+  // The owner's cancel feeds the snapshot back so the shell lands on the
+  // cancelled screen; a guest just leaves and heads home to the list.
+  const leave = async () => {
+    try {
+      await api.leave(snapshot.game.id);
+      navigate("/");
     } catch (caught) {
       setError(caught);
     }
@@ -102,9 +113,7 @@ export function LobbyScreen({
       <div className="flex gap-2.5 border-t border-paper/8 bg-bar px-[18px] py-3 pb-4">
         <button
           className="btn btn--danger"
-          onClick={() =>
-            void act(() => (isOwner ? api.cancel(snapshot.game.id) : api.leave(snapshot.game.id)))
-          }
+          onClick={() => void (isOwner ? act(() => api.cancel(snapshot.game.id)) : leave())}
           type="button"
         >
           {isOwner ? t("ui.cancel") : t("ui.leave")}

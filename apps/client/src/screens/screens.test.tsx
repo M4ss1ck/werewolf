@@ -407,6 +407,29 @@ test("lobby owner controls appear for exactly the owner", () => {
   expect(screen.queryByRole("button", { name: "Leave" })).not.toBeInTheDocument();
 });
 
+test("lobby: leaving takes the player back to the games list", async () => {
+  // The file's afterEach resets the URL to "/", so pin it to a game route
+  // first or the pathname assertion below would pass without any navigation.
+  window.history.replaceState({}, "", "/games/g1");
+  const leave = vi
+    .spyOn(api, "leave")
+    .mockResolvedValue(makeGameSnapshot({ game: { status: "lobby", phase: null } }));
+  renderWithI18n(
+    <LobbyScreen
+      onUpdate={() => undefined}
+      snapshot={makeGameSnapshot({
+        game: { status: "lobby", phase: null },
+        me: { userId: "bob" as UserId, status: "lobby" },
+      })}
+    />,
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: "Leave" }));
+
+  await waitFor(() => expect(leave).toHaveBeenCalledWith("g1"));
+  await waitFor(() => expect(window.location.pathname).toBe("/"));
+});
+
 test("action controls render from availableActions; none offered renders none even for a seer", () => {
   // The viewer's own role is seer, but the server offered no actions: nothing
   // renders. The client renders the server's action model, never its own
