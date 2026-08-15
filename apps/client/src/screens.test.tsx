@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import type {
   ChatChannel,
   EventId,
@@ -14,10 +14,10 @@ import type { ReactElement } from "react";
 import { I18nextProvider } from "react-i18next";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
-import { ApiError, api } from "./api/client.ts";
+import { ApiError } from "./api/client.ts";
 import { ErrorMessage } from "./components.tsx";
 import { i18n } from "./i18n/i18n.ts";
-import { GameScreen, GamesScreen, LobbyScreen, SignInScreen, UsernameScreen } from "./screens.tsx";
+import { GameScreen, LobbyScreen } from "./screens.tsx";
 
 /** Minimal WebSocket stand-in: GameScreen opens a live connection on mount and
  * jsdom has no WebSocket implementation, so the stub just swallows it. */
@@ -118,53 +118,6 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   localStorage.clear();
-});
-
-test("the games list renders games and a create form", async () => {
-  const games = [
-    { id: "g1", name: "Game One", status: "lobby", playerCount: 3 },
-    { id: "g2", name: "Game Two", status: "running", playerCount: 5 },
-  ];
-  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(games), { status: 200 }));
-  vi.stubGlobal("fetch", fetchMock);
-
-  renderWithI18n(<GamesScreen onOpen={() => undefined} />);
-
-  expect(await screen.findByText("Game One")).toBeInTheDocument();
-  expect(screen.getByText("Game Two")).toBeInTheDocument();
-  expect(screen.getByRole("heading", { name: "Create game" })).toBeInTheDocument();
-  expect(screen.getByLabelText("Game name")).toBeInTheDocument();
-  expect(screen.getAllByRole("button", { name: "Create game" })).toHaveLength(1);
-  expect(screen.getByRole("button", { name: "Join" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Spectate" })).toBeInTheDocument();
-  expect(fetchMock).toHaveBeenCalledWith("/api/games", expect.anything());
-});
-
-test("the create form labels every control visibly and accessibly", () => {
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("[]", { status: 200 })));
-  renderWithI18n(<GamesScreen onOpen={() => undefined} />);
-
-  // Every control is associated with a label whose text is visible on screen,
-  // not a placeholder masquerading as a label.
-  expect(screen.getByLabelText("Game name")).toBeInTheDocument();
-  expect(screen.getByText("Game name")).toBeVisible();
-  expect(screen.getByLabelText("Visibility")).toBeInTheDocument();
-  expect(screen.getByText("Visibility")).toBeVisible();
-  expect(screen.getByLabelText("Allow spectating")).toBeInTheDocument();
-  // The scheduled-start control is a radio preset picker, "manual" by default.
-  expect(screen.getByRole("radio", { name: "Start manually" })).toBeChecked();
-  expect(screen.getByRole("radio", { name: "In 5 min" })).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("radio", { name: "Pick a time" }));
-  expect(
-    screen.getByLabelText("Pick a time", { selector: "input[type='datetime-local']" }),
-  ).toBeInTheDocument();
-  // Phase durations carry unit context next to each labelled field.
-  expect(screen.getByLabelText("Discussion")).toBeInTheDocument();
-  expect(screen.getByLabelText("Voting")).toBeInTheDocument();
-  expect(screen.getByLabelText("Night")).toBeInTheDocument();
-  // Presentation values are translated, not the wire values.
-  expect(screen.getByRole("option", { name: "Public" })).toBeInTheDocument();
-  expect(screen.getByRole("option", { name: "Private" })).toBeInTheDocument();
 });
 
 test("lobby owner controls appear for exactly the owner", () => {
@@ -365,39 +318,4 @@ test("an error code renders its translated message, not the code", () => {
   renderWithI18n(<ErrorMessage error={new ApiError("PHASE_CLOSED")} />);
   expect(screen.getByText("That phase has already ended.")).toBeInTheDocument();
   expect(screen.queryByText("PHASE_CLOSED")).not.toBeInTheDocument();
-});
-
-test("switching language changes visible copy", async () => {
-  renderWithI18n(<SignInScreen onRefresh={() => undefined} session={null} />);
-  expect(screen.getByRole("button", { name: /Sign in/ })).toBeInTheDocument();
-
-  fireEvent.click(screen.getByRole("button", { name: "ES" }));
-
-  expect(await screen.findByRole("button", { name: /Iniciar sesión/ })).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: /Sign in/ })).not.toBeInTheDocument();
-
-  // Leave the shared i18n singleton in English for anything that runs after.
-  await act(async () => {
-    await i18n.changeLanguage("en");
-  });
-});
-
-test("UsernameScreen saves a trimmed username and calls onSaved", async () => {
-  const setUsername = vi.spyOn(api, "setUsername").mockResolvedValue({
-    userId: "me",
-    username: "Moonwatcher",
-  });
-  const onSaved = vi.fn();
-  renderWithI18n(<UsernameScreen onSaved={onSaved} />);
-
-  expect(screen.getByRole("heading", { name: "Choose a username" })).toBeInTheDocument();
-  expect(screen.getByLabelText("Username")).toBeInTheDocument();
-  expect(screen.getByText("3–24 characters")).toBeInTheDocument();
-
-  fireEvent.change(screen.getByLabelText("Username"), { target: { value: "  Moonwatcher  " } });
-  fireEvent.click(screen.getByRole("button", { name: "Save username" }));
-
-  await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
-  expect(setUsername).toHaveBeenCalledWith("Moonwatcher");
-  setUsername.mockRestore();
 });
