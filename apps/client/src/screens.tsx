@@ -564,7 +564,7 @@ export function GameScreen({
   useEffect(() => {
     if (replay) {
       void api.getReplay(initial.game.id).then((result) => {
-        setSnapshot(result.state);
+        setSnapshot(result.snapshot);
         setEvents(result.events);
       });
       return;
@@ -600,7 +600,7 @@ export function GameScreen({
       {isVoting && snapshot.progress && snapshot.game.phase && (
         <section className="panel space-y-3">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="font-display text-lg text-gold">{t("ui.vote")}</h2>
+            <h2 className="font-display text-lg text-gold">{t("ui.vote.label")}</h2>
             <p
               aria-label={t("ui.votingProgress")}
               className="font-mono text-sm text-fog"

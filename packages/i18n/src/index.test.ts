@@ -186,3 +186,173 @@ test("plurals render differently for one and for several in each language", () =
     expect(one).not.toBe(several);
   }
 });
+
+test("design-exact copy is preserved in English", () => {
+  expect(en.ui.vote.title).toBe("Who hangs today?");
+  expect(en.ui.night.villageSleeps).toBe("The village sleeps. Public chat is closed until dawn.");
+  expect(en.ui.chooseUsernameIntro).toBe(
+    "This is the name the village will see. You can't change it later.",
+  );
+  expect(en.ui.lobby.youHost).toBe("You · host");
+  expect(en.ui.lobby.emptySeat).toBe("Empty seat");
+  expect(en.ui.lobby.waitingForPlayers).toBe("Waiting for players");
+  expect(en.ui.over.packWins).toBe("the pack wins");
+  expect(en.ui.over.wolvesWinTitle).toBe("The village falls");
+  expect(en.ui.allowSpectatingHint).toBe("Dead players and guests can watch");
+  expect(en.ui.browser.dayPhase).toBe("day {{day}} · {{phase}}");
+  // The old string values survive inside the sub-objects they now live under.
+  expect(en.ui.lobby.label).toBe("Lobby");
+  expect(en.ui.vote.label).toBe("Vote");
+});
+
+test("every new screen surface renders a non-empty string in both locales", () => {
+  const plainKeys = [
+    "ui.tabs.games",
+    "ui.tabs.create",
+    "ui.tabs.profile",
+    "ui.tabs.village",
+    "ui.tabs.talk",
+    "ui.tabs.act",
+    "ui.tabs.me",
+    "ui.browser.filterAll",
+    "ui.browser.filterLobby",
+    "ui.browser.filterRunning",
+    "ui.browser.finished",
+    "ui.lobby.label",
+    "ui.lobby.waitingForPlayers",
+    "ui.lobby.inTheVillage",
+    "ui.lobby.emptySeat",
+    "ui.lobby.youHost",
+    "ui.vote.label",
+    "ui.vote.title",
+    "ui.vote.lockAbstain",
+    "ui.vote.voteLocked",
+    "ui.night.yourMove",
+    "ui.night.noAction",
+    "ui.over.villageWins",
+    "ui.over.packWins",
+    "ui.over.villageWinsTitle",
+    "ui.over.wolvesWinTitle",
+    "ui.over.reasonWolvesEliminated",
+    "ui.over.reasonWolvesOutnumber",
+    "ui.over.rolesRevealed",
+    "ui.over.replay",
+    "ui.over.watchReplay",
+    "ui.over.newGame",
+    "ui.profile.games",
+    "ui.profile.survived",
+    "ui.profile.asWolf",
+    "ui.profile.settings",
+    "ui.profile.language",
+    "ui.profile.phaseNotifications",
+    "ui.profile.phaseNotificationsHint",
+    "ui.profile.reducedMotion",
+    "ui.profile.reducedMotionHint",
+    "ui.profile.signOut",
+    "ui.intel.title",
+    "ui.allowSpectatingHint",
+  ];
+  for (const locale of SUPPORTED_LOCALES) {
+    const t = createI18n(locale).t;
+    for (const key of plainKeys) {
+      const rendered = t(key);
+      expect(rendered, `${key} in ${locale}`).not.toBe("");
+      expect(rendered, `${key} in ${locale}`).not.toBe(key);
+    }
+    // The faction line fills the faction name from the factions bundle.
+    expect(t("ui.factionTeam", { faction: t("factions.village") })).toContain(
+      t("factions.village"),
+    );
+  }
+});
+
+test("new sentence plurals distinguish one from several in each language", () => {
+  const cases = [
+    { key: "ui.lobby.oneMoreNeeded.count", one: { count: 1 }, several: { count: 4 } },
+    { key: "ui.over.wolvesCount.count", one: { count: 1 }, several: { count: 2 } },
+    { key: "ui.over.villagersCount.count", one: { count: 1 }, several: { count: 5 } },
+    { key: "ui.over.nightsCount.count", one: { count: 1 }, several: { count: 3 } },
+  ];
+  for (const locale of SUPPORTED_LOCALES) {
+    const t = createI18n(locale).t;
+    for (const c of cases) {
+      const one = t(c.key, c.one);
+      const several = t(c.key, c.several);
+      expect(one, `${c.key} one in ${locale}`).not.toBe("");
+      expect(several, `${c.key} several in ${locale}`).not.toBe("");
+      expect(one, `${c.key} in ${locale}`).not.toBe(several);
+    }
+  }
+});
+
+test("the game-over summary composes from already-pluralized counts", () => {
+  for (const locale of SUPPORTED_LOCALES) {
+    const t = createI18n(locale).t;
+    const rendered = t("ui.over.summary", {
+      wolves: t("ui.over.wolvesCount.count", { count: 2 }),
+      villagers: t("ui.over.villagersCount.count", { count: 5 }),
+      nights: t("ui.over.nightsCount.count", { count: 3 }),
+    });
+    expect(rendered).not.toBe("");
+    expect(rendered).not.toContain("{{");
+    expect(rendered).toContain(t("ui.over.wolvesCount.count", { count: 2 }));
+  }
+});
+
+test("Spanish distinguishes one from several where English does not", () => {
+  const t = createI18n("es").t;
+  expect(t("ui.lobby.startNeeds.count", { count: 1 })).not.toBe(
+    t("ui.lobby.startNeeds.count", { count: 5 }),
+  );
+  expect(t("ui.intel.villageAlive.count", { count: 1 })).not.toBe(
+    t("ui.intel.villageAlive.count", { count: 5 }),
+  );
+});
+
+test("new templates expose exactly the variables they interpolate", () => {
+  const placeholders = (value: string): string[] =>
+    [...value.matchAll(/\{\{(\w+)\}\}/g)].map((match) => match[1] ?? "");
+  const cases = [
+    { path: "ui.browser.startsIn", vars: ["time"] },
+    { path: "ui.browser.dayPhase", vars: ["day", "phase"] },
+    { path: "ui.lobby.seatsFilled", vars: ["count", "min"] },
+    { path: "ui.lobby.oneMoreNeeded.count_one", vars: [] },
+    { path: "ui.lobby.oneMoreNeeded.count_other", vars: ["count"] },
+    { path: "ui.lobby.startNeeds.count_one", vars: ["count"] },
+    { path: "ui.lobby.startNeeds.count_other", vars: ["count"] },
+    { path: "ui.lobby.kickPlayer", vars: ["player"] },
+    { path: "ui.vote.progress", vars: ["acted", "eligible"] },
+    { path: "ui.vote.lockVote", vars: ["player"] },
+    { path: "ui.night.label.count_one", vars: ["count"] },
+    { path: "ui.night.label.count_other", vars: ["count"] },
+    { path: "ui.night.yourMove", vars: ["role"] },
+    { path: "ui.night.confirm", vars: ["player"] },
+    { path: "ui.over.wolvesCount.count_one", vars: ["count"] },
+    { path: "ui.over.wolvesCount.count_other", vars: ["count"] },
+    { path: "ui.over.villagersCount.count_one", vars: ["count"] },
+    { path: "ui.over.villagersCount.count_other", vars: ["count"] },
+    { path: "ui.over.nightsCount.count_one", vars: ["count"] },
+    { path: "ui.over.nightsCount.count_other", vars: ["count"] },
+    { path: "ui.over.summary", vars: ["wolves", "villagers", "nights"] },
+    { path: "ui.intel.nightMarker", vars: ["count"] },
+    { path: "ui.intel.dayMarker", vars: ["count"] },
+    { path: "ui.intel.villageAlive.count_one", vars: ["count"] },
+    { path: "ui.intel.villageAlive.count_other", vars: ["count"] },
+    { path: "ui.factionTeam", vars: ["faction"] },
+  ];
+  for (const locale of SUPPORTED_LOCALES) {
+    const resource = locale === "en" ? en : es;
+    for (const { path, vars } of cases) {
+      const value = path.split(".").reduce<unknown>((node, part) => {
+        if (typeof node !== "object" || node === null) {
+          throw new Error(`no such key: ${path} in ${locale}`);
+        }
+        return (node as Record<string, unknown>)[part];
+      }, resource);
+      expect(typeof value).toBe("string");
+      expect(placeholders(value as string).sort(), `${path} in ${locale}`).toEqual(
+        [...vars].sort(),
+      );
+    }
+  }
+});
