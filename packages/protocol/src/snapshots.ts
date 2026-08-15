@@ -23,6 +23,8 @@ import {
   GameVisibilitySchema,
   RoleIdSchema,
 } from "./enums.ts";
+import type { VictoryReason } from "./events.ts";
+import { VictoryReasonSchema } from "./events.ts";
 import type { EventId, GameId, PhaseId, UserId } from "./ids.ts";
 import { EventIdSchema, GameIdSchema, PhaseIdSchema, UserIdSchema } from "./ids.ts";
 
@@ -46,6 +48,13 @@ export interface ViewerPlayer {
   revealedRole?: RoleId;
 }
 
+/** The viewer's own pending intent for the current phase, as stored on the
+ * server. Aggregates only: the viewer's own vote/action, never anyone else's. */
+export interface ViewerIntent {
+  vote?: { type: "player"; targetId: UserId } | { type: "abstain" };
+  actions?: Record<string, { targetId?: UserId }>;
+}
+
 export interface ViewerGameSnapshot {
   game: {
     id: GameId;
@@ -62,8 +71,16 @@ export interface ViewerGameSnapshot {
       endsAt: number;
     } | null;
     settings: ViewerGameSettings;
+    /** Present only once the game is finished. */
+    winner?: {
+      winningFactions: FactionId[];
+      winningPlayers: UserId[];
+      reason: VictoryReason;
+    };
   };
   players: ViewerPlayer[];
+  /** Aggregate live tally. Voter identities are deliberately absent. */
+  voteTallies?: { targetId: UserId; count: number }[];
   /** Present only when the viewer is a member of the game. */
   me?: {
     userId: UserId;
@@ -71,7 +88,7 @@ export interface ViewerGameSnapshot {
     role?: RoleId;
     faction?: FactionId;
     roleState?: unknown;
-    currentIntent?: unknown;
+    currentIntent?: ViewerIntent;
   };
   availableActions: AvailableAction[];
   availableChannels: ChatChannel[];
@@ -88,6 +105,16 @@ export const ViewerPlayerSchema = z.object({
   displayName: z.string(),
   status: GamePlayerStatusSchema,
   revealedRole: RoleIdSchema.optional(),
+});
+
+export const ViewerIntentSchema = z.object({
+  vote: z
+    .discriminatedUnion("type", [
+      z.object({ type: z.literal("player"), targetId: UserIdSchema }),
+      z.object({ type: z.literal("abstain") }),
+    ])
+    .optional(),
+  actions: z.record(z.string(), z.object({ targetId: UserIdSchema.optional() })).optional(),
 });
 
 /** Runtime validation for the viewer-specific projection. */
@@ -116,8 +143,16 @@ export const ViewerGameSnapshotSchema = z.object({
         night: z.number(),
       }),
     }),
+    winner: z
+      .object({
+        winningFactions: z.array(FactionIdSchema),
+        winningPlayers: z.array(UserIdSchema),
+        reason: VictoryReasonSchema,
+      })
+      .optional(),
   }),
   players: z.array(ViewerPlayerSchema),
+  voteTallies: z.array(z.object({ targetId: UserIdSchema, count: z.number() })).optional(),
   me: z
     .object({
       userId: UserIdSchema,
@@ -125,7 +160,7 @@ export const ViewerGameSnapshotSchema = z.object({
       role: RoleIdSchema.optional(),
       faction: FactionIdSchema.optional(),
       roleState: z.unknown().optional(),
-      currentIntent: z.unknown().optional(),
+      currentIntent: ViewerIntentSchema.optional(),
     })
     .optional(),
   availableActions: z.array(AvailableActionSchema),

@@ -12,4 +12,6 @@ export * from "./errors.ts";
 export * from "./events.ts";
 export * from "./ids.ts";
 export * from "./snapshots.ts";
+export * from "./stats.ts";
+export * from "./summaries.ts";
 export * from "./websocket.ts";

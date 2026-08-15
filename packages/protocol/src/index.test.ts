@@ -5,11 +5,15 @@ import {
   ChatSendCommandSchema,
   EVENT_KINDS,
   GameplayCommandSchema,
+  MeStatsSchema,
   MIN_PLAYERS,
   NightActionSetCommandSchema,
+  PublicGameSummarySchema,
   ROLE_IDS,
   RoleIdSchema,
   SubscribeFrameSchema,
+  ViewerGameSnapshotSchema,
+  ViewerIntentSchema,
 } from "./index.ts";
 
 test("a game needs at least five active players", () => {
@@ -227,4 +231,177 @@ test("a player.eliminated event can be narrowed by kind", () => {
 
   // Narrowing on `kind` exposes the right payload shape.
   expect(event.payload.cause).toBe("day_vote");
+});
+
+function snapshotInput(): Record<string, unknown> {
+  return {
+    game: {
+      id: "game-1",
+      name: "Game",
+      ownerUserId: "user-1",
+      status: "running",
+      day: 2,
+      phase: { id: 5, type: "voting", startedAt: 0, endsAt: 60 },
+      settings: {
+        visibility: "public",
+        spectatingEnabled: true,
+        durations: { discussion: 120, voting: 60, night: 60 },
+      },
+    },
+    players: [],
+    availableActions: [],
+    availableChannels: ["public"],
+    cursor: 5,
+    serverNow: 1_000,
+  };
+}
+
+test("the snapshot schema keeps the winner of a finished game", () => {
+  const input = snapshotInput();
+  input.game = {
+    ...(input.game as Record<string, unknown>),
+    status: "finished",
+    winner: {
+      winningFactions: ["village"],
+      winningPlayers: ["user-1"],
+      reason: "wolves_eliminated",
+    },
+  };
+  const result = ViewerGameSnapshotSchema.safeParse(input);
+  expect(result.success).toBe(true);
+  if (result.success) {
+    expect(result.data.game.winner).toEqual({
+      winningFactions: ["village"],
+      winningPlayers: ["user-1" as UserId],
+      reason: "wolves_eliminated",
+    });
+  }
+});
+
+test("the snapshot schema keeps voteTallies during a voting phase", () => {
+  const input = snapshotInput();
+  input.voteTallies = [
+    { targetId: "user-2", count: 3 },
+    { targetId: "user-3", count: 1 },
+  ];
+  const result = ViewerGameSnapshotSchema.safeParse(input);
+  expect(result.success).toBe(true);
+  if (result.success) {
+    expect(result.data.voteTallies).toEqual([
+      { targetId: "user-2" as UserId, count: 3 },
+      { targetId: "user-3" as UserId, count: 1 },
+    ]);
+  }
+});
+
+test("the snapshot schema keeps a typed currentIntent", () => {
+  const input = snapshotInput();
+  input.me = {
+    userId: "user-1",
+    status: "alive",
+    currentIntent: {
+      vote: { type: "player", targetId: "user-2" },
+      actions: { "wolf.attack": { targetId: "user-2" }, "harlot.stay": {} },
+    },
+  };
+  const result = ViewerGameSnapshotSchema.safeParse(input);
+  expect(result.success).toBe(true);
+  if (result.success) {
+    expect(result.data.me?.currentIntent).toEqual({
+      vote: { type: "player", targetId: "user-2" as UserId },
+      actions: {
+        "wolf.attack": { targetId: "user-2" as UserId },
+        "harlot.stay": {},
+      },
+    });
+  }
+});
+
+test("ViewerIntentSchema accepts player votes, abstain votes and actions", () => {
+  expect(
+    ViewerIntentSchema.safeParse({ vote: { type: "player", targetId: "user-2" } }).success,
+  ).toBe(true);
+  expect(ViewerIntentSchema.safeParse({ vote: { type: "abstain" } }).success).toBe(true);
+  expect(
+    ViewerIntentSchema.safeParse({ actions: { "wolf.attack": { targetId: "user-2" } } }).success,
+  ).toBe(true);
+});
+
+test("ViewerIntentSchema rejects a player vote without a targetId", () => {
+  expect(ViewerIntentSchema.safeParse({ vote: { type: "player" } }).success).toBe(false);
+});
+
+test("the game summary schema parses a running game with a phase", () => {
+  const result = PublicGameSummarySchema.safeParse({
+    id: "game-1",
+    name: "Game",
+    ownerUserId: "user-1",
+    status: "running",
+    visibility: "public",
+    day: 2,
+    playerCount: 6,
+    players: [{ userId: "user-1", displayName: "Ada" }],
+    phase: { type: "voting", endsAt: 1_234 },
+    serverNow: 1_000,
+  });
+  expect(result.success).toBe(true);
+  if (result.success) {
+    expect(result.data.phase).toEqual({ type: "voting", endsAt: 1_234 });
+    expect(result.data.scheduledAt).toBeUndefined();
+  }
+});
+
+test("the game summary schema parses a scheduled game with a scheduledAt", () => {
+  const result = PublicGameSummarySchema.safeParse({
+    id: "game-1",
+    name: "Game",
+    ownerUserId: "user-1",
+    status: "scheduled",
+    visibility: "private",
+    day: 0,
+    playerCount: 3,
+    players: [],
+    scheduledAt: 1_700_000_000,
+    serverNow: 1_000,
+  });
+  expect(result.success).toBe(true);
+  if (result.success) {
+    expect(result.data.scheduledAt).toBe(1_700_000_000);
+    expect(result.data.phase).toBeUndefined();
+  }
+});
+
+test("the game summary schema never carries secret or internal fields", () => {
+  const result = PublicGameSummarySchema.safeParse({
+    id: "game-1",
+    name: "Game",
+    ownerUserId: "user-1",
+    status: "running",
+    visibility: "public",
+    day: 2,
+    playerCount: 6,
+    players: [],
+    serverNow: 1_000,
+    rngSeed: 42,
+    joinCode: "ABCD",
+    settingsJson: "{}",
+    winnerJson: "{}",
+    version: 1,
+  });
+  expect(result.success).toBe(true);
+  if (result.success) {
+    expect(result.data).not.toHaveProperty("rngSeed");
+    expect(result.data).not.toHaveProperty("joinCode");
+    expect(result.data).not.toHaveProperty("settingsJson");
+    expect(result.data).not.toHaveProperty("winnerJson");
+    expect(result.data).not.toHaveProperty("version");
+  }
+});
+
+test("the stats schema parses a valid MeStats", () => {
+  const result = MeStatsSchema.safeParse({ games: 10, survived: 4, asWolf: 3 });
+  expect(result.success).toBe(true);
+  if (result.success) {
+    expect(result.data).toEqual({ games: 10, survived: 4, asWolf: 3 });
+  }
 });

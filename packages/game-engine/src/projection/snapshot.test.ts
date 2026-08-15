@@ -56,6 +56,24 @@ const event = (id: number, scope: GameEvent["scope"], kind: GameEvent["kind"], s
       kind === "seer.result" ? { targetId: "wolf" as UserId, role: "werewolf" as const } : {},
   }) as GameEvent;
 
+function addPlayer(
+  state: GameState,
+  userId: string,
+  role: NonNullable<PlayerState["role"]>,
+  status: PlayerState["status"],
+): void {
+  state.players[id(userId)] = {
+    id: id(userId),
+    displayName: userId,
+    status,
+    originalRole: role,
+    role,
+    faction: role === "werewolf" ? "wolves" : "village",
+    roleState: {},
+    phaseState: { phaseId: state.phase!.id },
+  };
+}
+
 describe("viewer projection security", () => {
   test("living roles stay hidden, dead roles are public, and a member sees only their own role", () => {
     const state = makeState();
@@ -107,5 +125,119 @@ describe("viewer projection security", () => {
     expect(canViewEvent(event(10, "faction", "chat.message", "wolves"), id("seer"), state)).toBe(
       true,
     );
+  });
+});
+
+describe("finished games reveal roles and expose the winner", () => {
+  function finishedState(): GameState {
+    const state = makeState();
+    state.status = "finished";
+    state.phase = null;
+    state.winner = {
+      winningFactions: ["village"],
+      winningPlayers: [id("seer")],
+      reason: "wolves_eliminated",
+    };
+    return state;
+  }
+
+  test("every role is revealed once the game is finished, alive or dead", () => {
+    const snapshot = projectSnapshot(finishedState(), id("seer"));
+    for (const player of snapshot.players) {
+      expect(player.revealedRole).toBe(player.userId === id("seer") ? "seer" : "werewolf");
+    }
+  });
+
+  test("the winner is exposed on the snapshot when finished", () => {
+    const snapshot = projectSnapshot(finishedState(), id("seer"));
+    expect(snapshot.game.winner).toEqual({
+      winningFactions: ["village"],
+      winningPlayers: [id("seer")],
+      reason: "wolves_eliminated",
+    });
+  });
+
+  test("the winner stays absent while the game is running", () => {
+    const snapshot = projectSnapshot(makeState(), id("seer"));
+    expect(snapshot.game.winner).toBeUndefined();
+  });
+});
+
+describe("voting tallies", () => {
+  function votingState(): GameState {
+    const state = makeState();
+    state.status = "running";
+    state.day = 2;
+    state.phase = { id: 7 as never, type: "voting", startedAt: 0, endsAt: 60 };
+    return state;
+  }
+
+  test("voteTallies aggregate live players' votes for the current phase", () => {
+    const state = votingState();
+    // Stale vote from a previous phase and a dead player's vote are both excluded.
+    state.players[id("wolf")]!.phaseState = {
+      phaseId: 6 as never,
+      vote: { type: "player", targetId: id("seer") },
+    };
+    state.players[id("dead-wolf")]!.phaseState = {
+      phaseId: 7 as never,
+      vote: { type: "player", targetId: id("seer") },
+    };
+    addPlayer(state, "hunter", "villager", "alive");
+    state.players[id("seer")]!.phaseState = {
+      phaseId: 7 as never,
+      vote: { type: "player", targetId: id("hunter") },
+    };
+    const snapshot = projectSnapshot(state, id("seer"));
+    expect(snapshot.voteTallies).toEqual([{ targetId: id("hunter"), count: 1 }]);
+  });
+
+  test("voteTallies sort by count descending then target ascending, omitting zero-vote targets", () => {
+    const state = votingState();
+    addPlayer(state, "hunter", "villager", "alive");
+    addPlayer(state, "mason", "mason", "alive");
+    state.players[id("wolf")]!.phaseState = {
+      phaseId: 7 as never,
+      vote: { type: "player", targetId: id("seer") },
+    };
+    state.players[id("seer")]!.phaseState = {
+      phaseId: 7 as never,
+      vote: { type: "player", targetId: id("hunter") },
+    };
+    state.players[id("hunter")]!.phaseState = {
+      phaseId: 7 as never,
+      vote: { type: "player", targetId: id("seer") },
+    };
+    // Mason abstains: no pseudo-target, and targets nobody voted for stay omitted.
+    state.players[id("mason")]!.phaseState = {
+      phaseId: 7 as never,
+      vote: { type: "abstain" },
+    };
+    const snapshot = projectSnapshot(state, id("seer"));
+    expect(snapshot.voteTallies).toEqual([
+      { targetId: id("seer"), count: 2 },
+      { targetId: id("hunter"), count: 1 },
+    ]);
+  });
+
+  test("voteTallies never expose voter identities", () => {
+    const state = votingState();
+    addPlayer(state, "hunter", "villager", "alive");
+    state.players[id("wolf")]!.phaseState = {
+      phaseId: 7 as never,
+      vote: { type: "player", targetId: id("seer") },
+    };
+    state.players[id("seer")]!.phaseState = { phaseId: 7 as never, vote: { type: "abstain" } };
+    state.players[id("hunter")]!.phaseState = { phaseId: 7 as never, vote: { type: "abstain" } };
+    const snapshot = projectSnapshot(state, id("seer"));
+    expect(snapshot.voteTallies).toEqual([{ targetId: id("seer"), count: 1 }]);
+    const serialized = JSON.stringify(snapshot.voteTallies);
+    expect(serialized).not.toContain(id("wolf"));
+    expect(serialized).not.toContain(id("hunter"));
+  });
+
+  test("voteTallies is absent outside a voting phase", () => {
+    const snapshot = projectSnapshot(makeState(), id("seer"));
+    expect(snapshot).not.toHaveProperty("voteTallies");
   });
 });
