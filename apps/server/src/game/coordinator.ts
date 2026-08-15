@@ -8,7 +8,15 @@ import {
   resolveExpiredPhase,
   resolveScheduledGame,
 } from "@werewolf/game-engine";
-import type { GameId, GameplayCommand, UserId } from "@werewolf/protocol";
+import type {
+  GameId,
+  GamePhase,
+  GameplayCommand,
+  GameStatus,
+  GameVisibility,
+  PublicGameSummary,
+  UserId,
+} from "@werewolf/protocol";
 import { type GameLock, gameLocks } from "./locks.ts";
 
 export class CoordinatorError extends Error {
@@ -209,8 +217,24 @@ export class GameCoordinator {
     if (!state) throw new CoordinatorError("GAME_NOT_FOUND");
     return projectSnapshot(state, userId, undefined, this.now());
   }
-  async listPublicGames() {
-    return this.repository.listPublicGames();
+  async listGameSummaries(): Promise<PublicGameSummary[]> {
+    const rows = await this.repository.listGameSummaries();
+    const serverNow = this.now();
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      ownerUserId: row.ownerUserId,
+      status: row.status as GameStatus,
+      visibility: row.visibility as GameVisibility,
+      day: row.day,
+      playerCount: row.players.length,
+      players: row.players,
+      ...(row.scheduledAt !== null ? { scheduledAt: row.scheduledAt } : {}),
+      ...(row.status === "running" && row.phase !== null && row.phaseEndsAt !== null
+        ? { phase: { type: row.phase as GamePhase, endsAt: row.phaseEndsAt } }
+        : {}),
+      serverNow,
+    }));
   }
   async getGame(gameId: GameId) {
     return this.repository.getGame(gameId);

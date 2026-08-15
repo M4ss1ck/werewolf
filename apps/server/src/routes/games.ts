@@ -59,7 +59,7 @@ function failure(c: Context, error: unknown) {
 
 export function gamesRoutes(coordinator: GameCoordinator) {
   const app = new Hono();
-  app.get("/", async (c) => c.json(await coordinator.listPublicGames()));
+  app.get("/", async (c) => c.json(await coordinator.listGameSummaries()));
   app.post("/", async (c) => {
     const parsed = gameBody.safeParse(await c.req.json());
     if (!parsed.success) return c.json({ error: { code: "VALIDATION" } }, 400);

@@ -1,6 +1,6 @@
 import type { DomainTransition, PlayerPatch } from "@werewolf/game-engine";
 import type { EventId, GameId, UserId } from "@werewolf/protocol";
-import { and, asc, eq, gt, isNotNull } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, ne } from "drizzle-orm";
 import type { Db } from "./client.ts";
 import { mapEvent, mapGame } from "./mapper.ts";
 import { gameEvents, gamePlayers, games } from "./schema.ts";
@@ -32,6 +32,21 @@ export type CommitResult =
   | { ok: true; events: ReturnType<typeof mapEvent>[]; version: number }
   | { ok: false; stale: true };
 
+/** A public game row plus its roster, shaped for the coordinator to map into
+ * `PublicGameSummary`. Never carries rngSeed, joinCode or the JSON blobs. */
+export type GameSummaryRow = {
+  id: GameId;
+  ownerUserId: UserId;
+  name: string;
+  status: string;
+  visibility: string;
+  day: number;
+  phase: string | null;
+  phaseEndsAt: number | null;
+  scheduledAt: number | null;
+  players: { userId: UserId; displayName: string }[];
+};
+
 export class GameRepository {
   constructor(private readonly db: Db) {}
   async createGame(input: CreateGameInput) {
@@ -50,12 +65,54 @@ export class GameRepository {
     });
     return this.getGame(input.id);
   }
-  async listPublicGames() {
-    return this.db
-      .select()
+  async listGameSummaries(): Promise<GameSummaryRow[]> {
+    const rows = await this.db
+      .select({
+        id: games.id,
+        ownerUserId: games.ownerUserId,
+        name: games.name,
+        status: games.status,
+        visibility: games.visibility,
+        day: games.day,
+        phase: games.phase,
+        phaseEndsAt: games.phaseEndsAt,
+        scheduledAt: games.scheduledAt,
+      })
       .from(games)
-      .where(eq(games.visibility, "public"))
+      .where(and(eq(games.visibility, "public"), ne(games.status, "cancelled")))
       .orderBy(asc(games.createdAt));
+    if (rows.length === 0) return [];
+    const players = await this.db
+      .select({
+        gameId: gamePlayers.gameId,
+        userId: gamePlayers.userId,
+        displayName: gamePlayers.displayName,
+      })
+      .from(gamePlayers)
+      .where(
+        inArray(
+          gamePlayers.gameId,
+          rows.map((row) => row.id),
+        ),
+      );
+    const byGame = new Map<string, { userId: UserId; displayName: string }[]>();
+    for (const player of players) {
+      const list = byGame.get(player.gameId) ?? [];
+      list.push({ userId: player.userId as UserId, displayName: player.displayName });
+      byGame.set(player.gameId, list);
+    }
+    return rows.map((row) => ({
+      id: row.id as GameId,
+      ownerUserId: row.ownerUserId as UserId,
+      name: row.name,
+      status: row.status,
+      visibility: row.visibility,
+      day: row.day,
+      phase: row.phase,
+      phaseEndsAt: row.phaseEndsAt,
+      scheduledAt: row.scheduledAt,
+      players: byGame.get(row.id) ?? [],
+    }));
   }
   async listScheduledGames() {
     return this.db.select().from(games).where(eq(games.status, "scheduled"));

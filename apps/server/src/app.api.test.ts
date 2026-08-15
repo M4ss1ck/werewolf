@@ -7,7 +7,7 @@
 import { expect, test } from "bun:test";
 import { type Db, GameRepository } from "@werewolf/db";
 import type { DomainTransition, GameState } from "@werewolf/game-engine";
-import type { GameId, UserId } from "@werewolf/protocol";
+import type { GameEvent, GameId, UserId, ViewerGameSnapshot } from "@werewolf/protocol";
 import {
   as,
   chatCommand,
@@ -148,7 +148,7 @@ test("a viewer's snapshot never reveals another living player's role", async () 
   }
 });
 
-test("the replay endpoint refuses while running and returns the hidden history once finished", async () => {
+test("the replay endpoint refuses while running and returns a projected snapshot once finished", async () => {
   const { app, coordinator, repo, clock } = await setup();
   const gameId = await startGameWithPlayers(app, USERS[0]!, [
     USERS[1]!,
@@ -190,11 +190,15 @@ test("the replay endpoint refuses while running and returns the hidden history o
 
   const replay = await as(app, USERS[0]!, `/api/games/${gameId}/replay`);
   expect(replay.status).toBe(200);
-  const body = (await replay.json()) as { state: GameState; events: unknown[] };
-  expect(body.state.status).toBe("finished");
-  // The hidden history: original roles and server-scope audit events.
-  expect(body.state.players[wolf.id]?.originalRole).toBe("werewolf");
-  expect(body.events.some((event) => (event as { scope: string }).scope === "server")).toBe(true);
+  const body = (await replay.json()) as { snapshot: ViewerGameSnapshot; events: GameEvent[] };
+  expect(body.snapshot.game.status).toBe("finished");
+  // Projected, not the raw GameState: players is an array of ViewerPlayer.
+  expect(Array.isArray(body.snapshot.players)).toBe(true);
+  // Reveal-on-finish: every player's current role is public in the replay.
+  const wolfInReplay = body.snapshot.players.find((player) => player.userId === wolf.id);
+  expect(wolfInReplay?.revealedRole).toBe("werewolf");
+  // The replay is filtered like any live event stream: no audit.* server rows.
+  expect(body.events.some((event) => event.kind.startsWith("audit."))).toBe(false);
 });
 
 test("spectating works in the lobby and while running, and never deals a role", async () => {
@@ -422,6 +426,47 @@ test("a signed-out visitor can browse public games but cannot act", async () => 
   });
   expect(created.status).toBe(401);
   expect(await created.json()).toEqual({ error: { code: "UNAUTHENTICATED" } });
+});
+
+test("GET /api/games returns the PublicGameSummary allowlist, never raw game rows", async () => {
+  const { app } = await setup();
+  await createGame(app, USERS[0]!);
+  // A running game carries the live phase and roster, so every column is
+  // exercised: the leak test must not pass merely because the game is empty.
+  await startGameWithPlayers(app, USERS[0]!, [USERS[1]!, USERS[2]!, USERS[3]!, USERS[4]!]);
+
+  const listing = await app.request("/api/games");
+  expect(listing.status).toBe(200);
+  const body = (await listing.json()) as unknown as {
+    id: string;
+    name: string;
+    ownerUserId: string;
+    status: string;
+    visibility: string;
+    day: number;
+    playerCount: number;
+    players: { userId: string; displayName: string }[];
+    serverNow: number;
+  }[];
+  expect(body).toHaveLength(2);
+
+  // The allowlist shape, and nothing else.
+  for (const summary of body) {
+    expect(summary.ownerUserId).toBe(USERS[0]!);
+    expect(summary.playerCount).toBeGreaterThanOrEqual(1);
+    expect(Array.isArray(summary.players)).toBe(true);
+    expect(typeof summary.serverNow).toBe("number");
+  }
+
+  // The security assertion is on the serialized body, not on a typed view of
+  // it: none of the secret columns may appear anywhere in the response.
+  const serialized = JSON.stringify(body);
+  expect(serialized).not.toContain("rngSeed");
+  expect(serialized).not.toContain("joinCode");
+  expect(serialized).not.toContain("settingsJson");
+  expect(serialized).not.toContain("winnerJson");
+  expect(serialized).not.toContain("balanceVersion");
+  expect(serialized).not.toContain("version");
 });
 
 test("the roster shows usernames, not user ids", async () => {

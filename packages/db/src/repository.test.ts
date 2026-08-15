@@ -332,6 +332,135 @@ describe("GameRepository", () => {
     expect(afterCursor[0]?.kind).toBe("chat.message");
   });
 
+  test("listGameSummaries returns public non-cancelled games, oldest first, with players grouped", async () => {
+    const { repo } = await setup();
+    await repo.createGame({
+      id: "g-public-1" as GameId,
+      ownerUserId: OWNER_ID,
+      name: "Public 1",
+      visibility: "public",
+      status: "lobby",
+      settings: SETTINGS,
+      balanceVersion: 1,
+      createdAt: 1_000,
+    });
+    await repo.createGame({
+      id: "g-public-2" as GameId,
+      ownerUserId: OWNER_ID,
+      name: "Public 2",
+      visibility: "public",
+      status: "lobby",
+      settings: SETTINGS,
+      balanceVersion: 1,
+      createdAt: 3_000,
+    });
+    await repo.createGame({
+      id: "g-private" as GameId,
+      ownerUserId: OWNER_ID,
+      name: "Private",
+      visibility: "private",
+      status: "lobby",
+      settings: SETTINGS,
+      balanceVersion: 1,
+      createdAt: 2_000,
+    });
+    await repo.createGame({
+      id: "g-cancelled" as GameId,
+      ownerUserId: OWNER_ID,
+      name: "Cancelled",
+      visibility: "public",
+      status: "cancelled",
+      settings: SETTINGS,
+      balanceVersion: 1,
+      createdAt: 1_500,
+    });
+    await repo.addPlayer({
+      gameId: "g-public-1" as GameId,
+      userId: USER_IDS[0]!,
+      displayName: "P0",
+      joinedAt: 1_000,
+    });
+    await repo.addPlayer({
+      gameId: "g-public-1" as GameId,
+      userId: USER_IDS[1]!,
+      displayName: "P1",
+      joinedAt: 1_001,
+    });
+    await repo.addPlayer({
+      gameId: "g-public-2" as GameId,
+      userId: USER_IDS[0]!,
+      displayName: "P0",
+      joinedAt: 3_000,
+    });
+
+    const summaries = await repo.listGameSummaries();
+    expect(summaries.map((row) => row.id as string)).toEqual(["g-public-1", "g-public-2"]);
+    const first = summaries[0]!;
+    expect(first.name).toBe("Public 1");
+    expect(first.ownerUserId).toBe(OWNER_ID);
+    expect(first.status).toBe("lobby");
+    expect(first.players).toEqual([
+      { userId: USER_IDS[0]!, displayName: "P0" },
+      { userId: USER_IDS[1]!, displayName: "P1" },
+    ]);
+    expect(summaries[1]!.players).toEqual([{ userId: USER_IDS[0]!, displayName: "P0" }]);
+  });
+
+  test("listGameSummaries carries phase and schedule columns when set", async () => {
+    const { repo } = await setup();
+    await repo.createGame({
+      id: "g-running" as GameId,
+      ownerUserId: OWNER_ID,
+      name: "Running",
+      visibility: "public",
+      status: "running",
+      settings: SETTINGS,
+      balanceVersion: 1,
+      createdAt: 1_000,
+    });
+    await repo.createGame({
+      id: "g-scheduled" as GameId,
+      ownerUserId: OWNER_ID,
+      name: "Scheduled",
+      visibility: "public",
+      status: "scheduled",
+      settings: SETTINGS,
+      balanceVersion: 1,
+      scheduledAt: 5_000,
+      createdAt: 2_000,
+    });
+    const commit = await repo.commitTransition(
+      "g-running" as GameId,
+      0,
+      {
+        gamePatch: {
+          status: "running",
+          day: 2,
+          phase: {
+            id: 9 as PhaseId,
+            type: "discussion",
+            startedAt: 4_000,
+            endsAt: 4_100,
+          },
+        },
+        playerPatches: [],
+        events: [],
+        ephemeral: [],
+      },
+      4_000,
+    );
+    expect(commit.ok).toBe(true);
+
+    const summaries = await repo.listGameSummaries();
+    expect(summaries).toHaveLength(2);
+    expect(summaries[0]!.day).toBe(2);
+    expect(summaries[0]!.phase).toBe("discussion");
+    expect(summaries[0]!.phaseEndsAt).toBe(4_100);
+    expect(summaries[0]!.scheduledAt).toBeNull();
+    expect(summaries[1]!.phase).toBeNull();
+    expect(summaries[1]!.scheduledAt).toBe(5_000);
+  });
+
   test("wolves.member_joined sets the converted player's wolf_since_event_id to the event's own id", async () => {
     const { db, repo } = await setup();
     await createGame(repo);
