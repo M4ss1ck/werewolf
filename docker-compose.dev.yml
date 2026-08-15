@@ -23,6 +23,9 @@ services:
       TURSO_DATABASE_URL: file:/app/data/werewolf.db
       TURSO_AUTH_TOKEN: ""
       BETTER_AUTH_URL: http://localhost:3000
+      # Browser requests arrive through Vite, so Better Auth must accept the
+      # development page origin in addition to its API base URL.
+      BETTER_AUTH_TRUSTED_ORIGINS: http://localhost:1420
       # Lets the Vite dev server reach the API from inside the container.
       VITE_SERVER_ORIGIN: http://localhost:3000
       # Bind mounts do not deliver inotify events; poll instead.
