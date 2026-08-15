@@ -626,6 +626,7 @@ body {
   line-height: 1.2;
   text-transform: uppercase;
   color: var(--color-fog);
+  margin-bottom: 8px;
 }
 
 .field-input {
