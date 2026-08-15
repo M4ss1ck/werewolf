@@ -29,10 +29,12 @@ export function SignInScreen({
       {session ? (
         <div className="flex min-w-0 items-center gap-2">
           <span aria-hidden="true" className="avatar">
-            {initialsOf(session.user.name ?? session.user.email ?? session.user.id)}
+            {initialsOf(
+              session.user.username ?? session.user.name ?? session.user.email ?? session.user.id,
+            )}
           </span>
           <span className="hidden max-w-40 truncate text-sm text-fog sm:inline">
-            {session.user.name ?? session.user.email ?? session.user.id}
+            {session.user.username ?? session.user.name ?? session.user.email ?? session.user.id}
           </span>
           <button
             className="btn btn--quiet btn--sm"
@@ -55,6 +57,51 @@ export function SignInScreen({
           {t("ui.signIn")} · Google
         </button>
       )}
+    </div>
+  );
+}
+
+export function UsernameScreen({ onSaved }: { onSaved: () => void }) {
+  const { t } = useTranslation();
+  const [username, setUsername] = useState("");
+  const [error, setError] = useState<unknown>();
+  const save = async (event: FormEvent) => {
+    event.preventDefault();
+    try {
+      await api.setUsername(username.trim());
+      onSaved();
+    } catch (caught) {
+      setError(caught);
+    }
+  };
+  return (
+    <div className="w-full max-w-md space-y-4">
+      <ErrorMessage error={error} />
+      <form className="panel space-y-4" onSubmit={(event) => void save(event)}>
+        <div className="space-y-1.5">
+          <h1 className="font-display text-xl text-gold">{t("ui.chooseUsername")}</h1>
+          <p className="text-sm text-fog">{t("ui.chooseUsernameIntro")}</p>
+        </div>
+        <div className="space-y-1.5">
+          <label className="field-label" htmlFor="username">
+            {t("ui.username")}
+          </label>
+          <input
+            className="field-input w-full"
+            id="username"
+            maxLength={24}
+            minLength={3}
+            onChange={(event) => setUsername(event.target.value)}
+            placeholder={t("ui.usernamePlaceholder")}
+            required
+            value={username}
+          />
+          <p className="text-xs text-fog">{t("ui.usernameHint")}</p>
+        </div>
+        <button className="btn btn--primary w-full" type="submit">
+          {t("ui.saveUsername")}
+        </button>
+      </form>
     </div>
   );
 }

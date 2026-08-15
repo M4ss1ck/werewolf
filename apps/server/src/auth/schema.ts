@@ -11,6 +11,7 @@ import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 export const authUser = sqliteTable("user", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
+  username: text("username"),
   email: text("email").notNull().unique(),
   emailVerified: integer("emailVerified", { mode: "boolean" }).notNull(),
   image: text("image"),
@@ -69,6 +70,7 @@ export const AUTH_TABLES_SQL = `
 CREATE TABLE IF NOT EXISTS "user" (
   "id" text PRIMARY KEY NOT NULL,
   "name" text NOT NULL,
+  "username" text,
   "email" text NOT NULL UNIQUE,
   "emailVerified" integer NOT NULL,
   "image" text,
@@ -118,4 +120,12 @@ export async function createAuthTables(client: {
   executeMultiple: (sql: string) => Promise<unknown>;
 }): Promise<void> {
   await client.executeMultiple(AUTH_TABLES_SQL);
+  // Databases created before usernames existed still need the column, and
+  // SQLite has no ADD COLUMN IF NOT EXISTS: a duplicate-column error here is
+  // the success case, not a failure.
+  try {
+    await client.executeMultiple(`ALTER TABLE "user" ADD COLUMN "username" text;`);
+  } catch {
+    // Already present.
+  }
 }

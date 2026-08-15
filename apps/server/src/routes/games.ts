@@ -2,6 +2,7 @@ import type { GameId, UserId } from "@werewolf/protocol";
 import type { Context } from "hono";
 import { Hono } from "hono";
 import { z } from "zod";
+import type { ViewerContext } from "../auth/auth.ts";
 import type { GameCoordinator } from "../game/coordinator.ts";
 import { CoordinatorError } from "../game/coordinator.ts";
 
@@ -28,12 +29,22 @@ const patchBody = z.object({
   visibility: z.enum(["public", "private"]).optional(),
 });
 const viewer = (c: Context) => c.get("viewer") as { userId: string };
+
+/** A viewer who may take a seat: the roster needs a name for them. */
+function player(c: Context) {
+  const context = c.get("viewer") as ViewerContext;
+  if (!context.username) throw new CoordinatorError("USERNAME_REQUIRED");
+  return { userId: context.userId as UserId, username: context.username };
+}
 function failure(c: Context, error: unknown) {
   const code = error instanceof CoordinatorError ? error.code : "VALIDATION";
   const status =
     code === "GAME_NOT_FOUND"
       ? 404
-      : code === "NOT_GAME_OWNER" || code === "NOT_A_MEMBER" || code === "ACTION_NOT_AVAILABLE"
+      : code === "NOT_GAME_OWNER" ||
+          code === "NOT_A_MEMBER" ||
+          code === "ACTION_NOT_AVAILABLE" ||
+          code === "USERNAME_REQUIRED"
         ? 403
         : code === "UNAUTHENTICATED"
           ? 401
@@ -52,9 +63,18 @@ export function gamesRoutes(coordinator: GameCoordinator) {
   app.post("/", async (c) => {
     const parsed = gameBody.safeParse(await c.req.json());
     if (!parsed.success) return c.json({ error: { code: "VALIDATION" } }, 400);
-    return c.json(
-      await coordinator.createGame({ ownerUserId: viewer(c).userId as UserId, ...parsed.data }),
-    );
+    try {
+      const { userId, username } = player(c);
+      return c.json(
+        await coordinator.createGame({
+          ownerUserId: userId,
+          displayName: username,
+          ...parsed.data,
+        }),
+      );
+    } catch (error) {
+      return failure(c, error);
+    }
   });
   app.get("/:id", async (c) => {
     try {
@@ -82,18 +102,16 @@ export function gamesRoutes(coordinator: GameCoordinator) {
   });
   app.post("/:id/join", async (c) => {
     try {
-      return c.json(
-        await coordinator.joinGame(c.req.param("id") as GameId, viewer(c).userId as UserId),
-      );
+      const { userId, username } = player(c);
+      return c.json(await coordinator.joinGame(c.req.param("id") as GameId, userId, username));
     } catch (error) {
       return failure(c, error);
     }
   });
   app.post("/:id/spectate", async (c) => {
     try {
-      return c.json(
-        await coordinator.spectateGame(c.req.param("id") as GameId, viewer(c).userId as UserId),
-      );
+      const { userId, username } = player(c);
+      return c.json(await coordinator.spectateGame(c.req.param("id") as GameId, userId, username));
     } catch (error) {
       return failure(c, error);
     }

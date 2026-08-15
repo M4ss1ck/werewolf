@@ -4,7 +4,7 @@ import { api } from "./api/client.ts";
 import { getSession, type Session } from "./auth/session.ts";
 import { i18n } from "./i18n/i18n.ts";
 import { currentRoute, navigate } from "./routes.tsx";
-import { GameScreen, GamesScreen, LobbyScreen, SignInScreen } from "./screens.tsx";
+import { GameScreen, GamesScreen, LobbyScreen, SignInScreen, UsernameScreen } from "./screens.tsx";
 
 export function App() {
   return (
@@ -50,7 +50,9 @@ function Shell() {
           )}
           <SignInScreen onRefresh={() => void getSession().then(setSession)} session={session} />
         </header>
-        {route.type === "games" ? (
+        {session && !session.user.username ? (
+          <UsernameScreen onSaved={() => void getSession().then(setSession)} />
+        ) : route.type === "games" ? (
           <GamesScreen onOpen={open} />
         ) : snapshot ? (
           route.type === "replay" ? (

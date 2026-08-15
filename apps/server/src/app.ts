@@ -1,4 +1,4 @@
-import type { GameRepository } from "@werewolf/db";
+import type { Db, GameRepository } from "@werewolf/db";
 import { Hono } from "hono";
 import { upgradeWebSocket } from "hono/bun";
 import {
@@ -12,6 +12,7 @@ import type { GameHub } from "./live/game-hub.ts";
 import { commandRoutes } from "./routes/commands.ts";
 import { eventRoutes } from "./routes/events.ts";
 import { gamesRoutes } from "./routes/games.ts";
+import { meRoutes } from "./routes/me.ts";
 import { preferenceRoutes } from "./routes/preferences.ts";
 import { replayRoutes } from "./routes/replay.ts";
 
@@ -23,6 +24,7 @@ import { serveClient } from "./static/serve-client.ts";
 // Route modules mount themselves here as they land; this file owns only the
 // composition order.
 export type AppOptions = {
+  db?: Db;
   repository?: GameRepository;
   sessionResolver?: (request: Request) => Promise<ViewerContext | null>;
   coordinator?: GameCoordinator;
@@ -48,6 +50,7 @@ export function createApp(options: AppOptions = {}) {
     app.route("/api", eventRoutes(coordinator));
     app.route("/api", replayRoutes(coordinator));
     app.route("/api", preferenceRoutes());
+    if (options.db) app.route("/api", meRoutes(options.db));
     if (options.gameHub)
       app.get(
         "/api/games/:id/live",

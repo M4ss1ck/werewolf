@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type {
   ChatChannel,
   EventId,
@@ -14,10 +14,10 @@ import type { ReactElement } from "react";
 import { I18nextProvider } from "react-i18next";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
-import { ApiError } from "./api/client.ts";
+import { ApiError, api } from "./api/client.ts";
 import { ErrorMessage } from "./components.tsx";
 import { i18n } from "./i18n/i18n.ts";
-import { GameScreen, GamesScreen, LobbyScreen, SignInScreen } from "./screens.tsx";
+import { GameScreen, GamesScreen, LobbyScreen, SignInScreen, UsernameScreen } from "./screens.tsx";
 
 /** Minimal WebSocket stand-in: GameScreen opens a live connection on mount and
  * jsdom has no WebSocket implementation, so the stub just swallows it. */
@@ -380,4 +380,26 @@ test("switching language changes visible copy", async () => {
   await act(async () => {
     await i18n.changeLanguage("en");
   });
+});
+
+test("UsernameScreen saves a trimmed username and calls onSaved", async () => {
+  const setUsername = vi.spyOn(api, "setUsername").mockResolvedValue({
+    userId: "me",
+    username: "Moonwatcher",
+  });
+  const onSaved = vi.fn();
+  renderWithI18n(<UsernameScreen onSaved={onSaved} />);
+
+  expect(screen.getByRole("heading", { name: "Choose your username" })).toBeInTheDocument();
+  expect(screen.getByLabelText("Username")).toBeInTheDocument();
+  expect(
+    screen.getByText("3-24 characters: letters, numbers, spaces, hyphens or underscores."),
+  ).toBeInTheDocument();
+
+  fireEvent.change(screen.getByLabelText("Username"), { target: { value: "  Moonwatcher  " } });
+  fireEvent.click(screen.getByRole("button", { name: "Save username" }));
+
+  await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+  expect(setUsername).toHaveBeenCalledWith("Moonwatcher");
+  setUsername.mockRestore();
 });

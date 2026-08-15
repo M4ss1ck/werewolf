@@ -55,6 +55,7 @@ export class GameCoordinator {
 
   async createGame(input: {
     ownerUserId: UserId;
+    displayName: string;
     name: string;
     visibility: string;
     settings: unknown;
@@ -79,7 +80,7 @@ export class GameCoordinator {
     await this.repository.addPlayer({
       gameId: id,
       userId: input.ownerUserId,
-      displayName: input.ownerUserId,
+      displayName: input.displayName,
       joinedAt: this.now(),
     });
     // Creation is a state change like any other: tell the hooks so the scheduler
@@ -87,7 +88,7 @@ export class GameCoordinator {
     await Promise.all([...this.hooks].map((hook) => hook(id, [])));
     return this.repository.loadGameState(id);
   }
-  async joinGame(gameId: GameId, userId: UserId, displayName = userId) {
+  async joinGame(gameId: GameId, userId: UserId, displayName: string) {
     return this.lock.run(gameId, async () => {
       const game = await this.repository.getGame(gameId);
       if (!game) throw new CoordinatorError("GAME_NOT_FOUND");
@@ -99,7 +100,7 @@ export class GameCoordinator {
       return this.repository.loadGameState(gameId);
     });
   }
-  async spectateGame(gameId: GameId, userId: UserId, displayName = userId) {
+  async spectateGame(gameId: GameId, userId: UserId, displayName: string) {
     return this.lock.run(gameId, async () => {
       const game = await this.repository.getGame(gameId);
       if (!game) throw new CoordinatorError("GAME_NOT_FOUND");

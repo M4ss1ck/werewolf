@@ -423,3 +423,50 @@ test("a signed-out visitor can browse public games but cannot act", async () => 
   expect(created.status).toBe(401);
   expect(await created.json()).toEqual({ error: { code: "UNAUTHENTICATED" } });
 });
+
+test("the roster shows usernames, not user ids", async () => {
+  const { app } = await setup();
+  // An extra `x-username` header stands in for the session's username.
+  const created = await as(app, USERS[0]!, "/api/games", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-username": "Moonwatcher" },
+    body: JSON.stringify({ name: "Lobby", settings: { spectatingEnabled: true } }),
+  });
+  expect(created.status).toBe(200);
+  const gameId = ((await created.json()) as GameState).id;
+
+  const joined = await as(app, USERS[1]!, `/api/games/${gameId}/join`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-username": "Nightwarden" },
+    body: "{}",
+  });
+  expect(joined.status).toBe(200);
+
+  const view = await snapshot(app, USERS[0]!, gameId);
+  const displayNames = view.players.map((player) => player.displayName);
+  expect(displayNames).toHaveLength(2);
+  expect(displayNames).toEqual(expect.arrayContaining(["Moonwatcher", "Nightwarden"]));
+  expect(displayNames.join(" ")).not.toContain(USERS[0]!);
+  expect(displayNames.join(" ")).not.toContain(USERS[1]!);
+});
+
+test("creating or joining without a username is refused", async () => {
+  const { app } = await setup();
+  const game = await createGame(app, USERS[0]!);
+
+  const created = await as(app, USERS[2]!, "/api/games", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-username": "" },
+    body: JSON.stringify({ name: "anonymous" }),
+  });
+  expect(created.status).toBe(403);
+  expect(await created.json()).toEqual({ error: { code: "USERNAME_REQUIRED" } });
+
+  const joined = await as(app, USERS[1]!, `/api/games/${game.id}/join`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-username": "" },
+    body: "{}",
+  });
+  expect(joined.status).toBe(403);
+  expect(await joined.json()).toEqual({ error: { code: "USERNAME_REQUIRED" } });
+});

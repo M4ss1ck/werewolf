@@ -6,7 +6,7 @@ import { createMiddleware } from "hono/factory";
 import type { Env } from "../env.ts";
 import { authSchema } from "./schema.ts";
 
-export type ViewerContext = { userId: string };
+export type ViewerContext = { userId: string; username: string | null };
 
 export function createAuth(db: Db, env: Env) {
   return betterAuth({
@@ -16,6 +16,10 @@ export function createAuth(db: Db, env: Env) {
     socialProviders: {
       google: { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET },
     },
+    // Exposed on the session so the game layer can name players without a
+    // second query. Written only through PATCH /api/me/username, never by the
+    // client directly.
+    user: { additionalFields: { username: { type: "string", required: false, input: false } } },
     advanced: {
       // The app always runs behind a reverse proxy, so the socket address is
       // the proxy's. Without this every request shares one rate-limit bucket
@@ -42,5 +46,10 @@ export const requireViewer = createMiddleware(async (c, next) => {
 
 export async function resolveAuthSession(auth: ReturnType<typeof createAuth>, request: Request) {
   const session = await auth.api.getSession({ headers: request.headers });
-  return session?.user?.id ? { userId: session.user.id } : null;
+  return session?.user?.id
+    ? {
+        userId: session.user.id,
+        username: (session.user as { username?: string | null }).username ?? null,
+      }
+    : null;
 }

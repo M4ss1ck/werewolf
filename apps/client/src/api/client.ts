@@ -89,6 +89,11 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ locale }),
     }),
+  setUsername: (username: string) =>
+    request<{ userId: string; username: string }>("/api/me/username", {
+      method: "PATCH",
+      body: JSON.stringify({ username }),
+    }),
 };
 
 export type ApiClient = typeof api;

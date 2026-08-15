@@ -13,6 +13,7 @@ import type { GameState } from "@werewolf/game-engine";
 import type { GameId, ViewerGameSnapshot } from "@werewolf/protocol";
 import type { App } from "../app.ts";
 import { createApp } from "../app.ts";
+import { createAuthTables } from "../auth/schema.ts";
 import { GameCoordinator } from "../game/coordinator.ts";
 import { GameLock } from "../game/locks.ts";
 
@@ -22,6 +23,7 @@ export type Harness = {
   app: App;
   coordinator: GameCoordinator;
   repo: GameRepository;
+  db: Db;
   clock: { now: number };
   close: () => void;
 };
@@ -41,17 +43,24 @@ export async function setup(
     rmSync(dir, { recursive: true, force: true });
   });
   await applyMigrations(db);
+  await createAuthTables(client);
   const repo = overrides.createRepo ? overrides.createRepo(db) : new GameRepository(db);
   const clock = { now: 1_000_000 };
   const coordinator = new GameCoordinator(repo, overrides.lock ?? new GameLock(), () => clock.now);
   const app = createApp({
+    db,
     coordinator,
     sessionResolver: async (request) => {
       const userId = request.headers.get("x-user-id");
-      return userId ? { userId } : null;
+      if (!userId) return null;
+      // Tests get a username matching their user id by default; an explicit
+      // empty `x-username` stands in for a signed-in visitor who has not
+      // chosen one yet.
+      const header = request.headers.get("x-username");
+      return { userId, username: header === null ? userId : header || null };
     },
   });
-  return { app, coordinator, repo, clock, close: () => client.close() };
+  return { app, coordinator, repo, db, clock, close: () => client.close() };
 }
 
 export function as(app: App, userId: string, path: string, init: RequestInit = {}) {

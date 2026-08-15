@@ -23,6 +23,7 @@ const scheduler = new PhaseScheduler(repository, coordinator);
 coordinator.onCommitted((gameId) => void scheduler.watch(gameId));
 const hub = new GameHub(coordinator);
 const app = createApp({
+  db,
   repository,
   coordinator,
   gameHub: hub,

@@ -101,6 +101,9 @@ export const en = {
     CHAT_READ_ONLY: "Chat is read-only right now.",
     CHANNEL_NOT_AVAILABLE: "That chat channel is not available.",
     MIN_PLAYERS_NOT_REACHED: "Not enough players have joined to start the game.",
+    USERNAME_REQUIRED: "Choose a username before joining a game.",
+    INVALID_USERNAME:
+      "That username is not allowed. Use 3-24 characters: letters, numbers, spaces, hyphens or underscores.",
   },
   events: {
     // Scopes mirror the protocol: public events are seen by everyone, player
@@ -197,6 +200,12 @@ export const en = {
     language: "Language",
     phaseRail: "Game phase",
     readyToStart: "Ready to start",
+    username: "Username",
+    usernamePlaceholder: "e.g. moonwatcher",
+    usernameHint: "3-24 characters: letters, numbers, spaces, hyphens or underscores.",
+    chooseUsername: "Choose your username",
+    chooseUsernameIntro: "Other players see this name in the lobby, the roster and the vote.",
+    saveUsername: "Save username",
   },
 };
 
