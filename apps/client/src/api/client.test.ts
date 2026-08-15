@@ -66,4 +66,31 @@ describe("api client", () => {
       expect.objectContaining({ method: "POST" }),
     );
   });
+
+  test("getStats hits the stats endpoint and returns the viewer's lifetime stats", async () => {
+    const body = { games: 3, survived: 1, asWolf: 2 };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify(body), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const stats = await api.getStats();
+
+    expect(stats).toEqual(body);
+    expect(fetchMock).toHaveBeenCalledWith("/api/me/stats", expect.anything());
+  });
+
+  test("getReplay resolves the snapshot field the server now sends", async () => {
+    const body = { snapshot: { game: { id: "g1" }, players: [] }, events: [] };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify(body), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await api.getReplay("game-1");
+
+    expect(result.snapshot).toEqual({ game: { id: "g1" }, players: [] });
+    expect(result.events).toEqual([]);
+    expect(fetchMock).toHaveBeenCalledWith("/api/games/game-1/replay", expect.anything());
+  });
 });

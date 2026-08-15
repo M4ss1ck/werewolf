@@ -1,5 +1,7 @@
 export type Route =
   | { type: "games" }
+  | { type: "create" }
+  | { type: "profile" }
   | { type: "game"; id: string }
   | { type: "replay"; id: string };
 
@@ -8,6 +10,8 @@ export function currentRoute(pathname = window.location.pathname): Route {
   if (parts[0] === "games" && parts[1] && parts[2] === "replay")
     return { type: "replay", id: parts[1] };
   if (parts[0] === "games" && parts[1]) return { type: "game", id: parts[1] };
+  if (parts[0] === "create") return { type: "create" };
+  if (parts[0] === "profile") return { type: "profile" };
   return { type: "games" };
 }
 

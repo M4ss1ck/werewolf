@@ -2,6 +2,8 @@ import type {
   GameEvent,
   GameId,
   GameplayCommand,
+  MeStats,
+  PublicGameSummary,
   UserId,
   ViewerGameSnapshot,
 } from "@werewolf/protocol";
@@ -16,12 +18,9 @@ export class ApiError extends Error {
   }
 }
 
-export interface PublicGame {
-  id: GameId;
-  name: string;
-  status: string;
-  playerCount?: number;
-}
+/** TEMP re-export: the old screens.tsx imports `PublicGame` from this module.
+ * Delete together with src/screens.tsx in the next task. */
+export type PublicGame = PublicGameSummary;
 
 export interface CreateGameInput {
   name: string;
@@ -58,7 +57,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 const json = (body: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(body) });
 
 export const api = {
-  listGames: () => request<PublicGame[]>("/api/games"),
+  listGames: () => request<PublicGameSummary[]>("/api/games"),
   createGame: (input: CreateGameInput) => request<PublicGame>("/api/games", { ...json(input) }),
   getSnapshot: (id: GameId | string) => request<ViewerGameSnapshot>(`/api/games/${id}`),
   join: (id: GameId | string) => request<ViewerGameSnapshot>(`/api/games/${id}/join`, json({})),
@@ -83,7 +82,8 @@ export const api = {
   getEvents: (id: GameId | string, cursor = 0) =>
     request<{ events: GameEvent[] }>(`/api/games/${id}/events?cursor=${cursor}`),
   getReplay: (id: GameId | string) =>
-    request<{ state: ViewerGameSnapshot; events: GameEvent[] }>(`/api/games/${id}/replay`),
+    request<{ snapshot: ViewerGameSnapshot; events: GameEvent[] }>(`/api/games/${id}/replay`),
+  getStats: () => request<MeStats>("/api/me/stats"),
   patchLocale: (locale: "en" | "es") =>
     request<{ locale: "en" | "es" }>("/api/me/locale", {
       method: "PATCH",

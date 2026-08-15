@@ -27,9 +27,9 @@ function Shell() {
     return () => window.removeEventListener("popstate", update);
   }, []);
   useEffect(() => {
-    if (route.type !== "games")
+    if (route.type === "game" || route.type === "replay")
       void (route.type === "replay"
-        ? api.getReplay(route.id).then((result) => setSnapshot(result.state))
+        ? api.getReplay(route.id).then((result) => setSnapshot(result.snapshot))
         : api.getSnapshot(route.id).then(setSnapshot));
   }, [route]);
   const open = (id: string) => navigate(`/games/${id}`);
