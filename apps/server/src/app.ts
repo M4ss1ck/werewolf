@@ -1,4 +1,4 @@
-import type { Db, GameRepository } from "@werewolf/db";
+import { type Db, GameRepository } from "@werewolf/db";
 import { Hono } from "hono";
 import { upgradeWebSocket } from "hono/bun";
 import {
@@ -50,7 +50,12 @@ export function createApp(options: AppOptions = {}) {
     app.route("/api", eventRoutes(coordinator));
     app.route("/api", replayRoutes(coordinator));
     app.route("/api", preferenceRoutes());
-    if (options.db) app.route("/api", meRoutes(options.db));
+    if (options.db) {
+      // The stats route reads the repository; tests may hand in only a
+      // coordinator, so fall back to a fresh repository over the same db.
+      const repository = options.repository ?? new GameRepository(options.db);
+      app.route("/api", meRoutes(options.db, repository));
+    }
     if (options.gameHub)
       app.get(
         "/api/games/:id/live",

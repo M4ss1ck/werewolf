@@ -461,6 +461,115 @@ describe("GameRepository", () => {
     expect(summaries[1]!.scheduledAt).toBe(5_000);
   });
 
+  test("getUserStats is all zeros for a player with no finished games", async () => {
+    const { repo } = await setup();
+    await createGame(repo);
+    await repo.addPlayer({
+      gameId: GAME_ID,
+      userId: USER_IDS[0]!,
+      displayName: "P0",
+      status: "lobby",
+      joinedAt: 1_000,
+    });
+
+    expect(await repo.getUserStats(USER_IDS[0]!)).toEqual({ games: 0, survived: 0, asWolf: 0 });
+  });
+
+  test("getUserStats counts finished games, survivors and wolves in one aggregate", async () => {
+    const { repo } = await setup();
+    // One finished game: the player survives as a wolf.
+    await repo.createGame({
+      id: "g-wolf" as GameId,
+      ownerUserId: OWNER_ID,
+      name: "Wolf game",
+      visibility: "private",
+      status: "finished",
+      settings: SETTINGS,
+      balanceVersion: 1,
+      createdAt: 1_000,
+    });
+    await repo.addPlayer({
+      gameId: "g-wolf" as GameId,
+      userId: USER_IDS[0]!,
+      displayName: "P0",
+      status: "alive",
+      faction: "wolves",
+      joinedAt: 1_000,
+    });
+    await repo.addPlayer({
+      gameId: "g-wolf" as GameId,
+      userId: USER_IDS[1]!,
+      displayName: "P1",
+      status: "dead",
+      faction: "village",
+      joinedAt: 1_001,
+    });
+    // A second finished game: the player dies as a villager.
+    await repo.createGame({
+      id: "g-village" as GameId,
+      ownerUserId: OWNER_ID,
+      name: "Village game",
+      visibility: "private",
+      status: "finished",
+      settings: SETTINGS,
+      balanceVersion: 1,
+      createdAt: 2_000,
+    });
+    await repo.addPlayer({
+      gameId: "g-village" as GameId,
+      userId: USER_IDS[0]!,
+      displayName: "P0",
+      status: "dead",
+      faction: "village",
+      joinedAt: 2_000,
+    });
+
+    expect(await repo.getUserStats(USER_IDS[0]!)).toEqual({ games: 2, survived: 1, asWolf: 1 });
+  });
+
+  test("getUserStats excludes spectators and unfinished games", async () => {
+    const { repo } = await setup();
+    // Spectated finished game: the player never played.
+    await repo.createGame({
+      id: "g-spectated" as GameId,
+      ownerUserId: OWNER_ID,
+      name: "Spectated",
+      visibility: "private",
+      status: "finished",
+      settings: SETTINGS,
+      balanceVersion: 1,
+      createdAt: 1_000,
+    });
+    await repo.addPlayer({
+      gameId: "g-spectated" as GameId,
+      userId: USER_IDS[0]!,
+      displayName: "P0",
+      status: "spectator",
+      joinedAt: 1_000,
+    });
+    // Unfinished game: the player is alive and a wolf, but it has not ended.
+    await repo.createGame({
+      id: "g-running" as GameId,
+      ownerUserId: OWNER_ID,
+      name: "Running",
+      visibility: "private",
+      status: "running",
+      settings: SETTINGS,
+      balanceVersion: 1,
+      createdAt: 2_000,
+    });
+    await repo.addPlayer({
+      gameId: "g-running" as GameId,
+      userId: USER_IDS[0]!,
+      displayName: "P0",
+      status: "alive",
+      faction: "wolves",
+      joinedAt: 2_000,
+    });
+
+    expect(await repo.getUserStats(USER_IDS[0]!)).toEqual({ games: 0, survived: 0, asWolf: 0 });
+  });
+
   test("wolves.member_joined sets the converted player's wolf_since_event_id to the event's own id", async () => {
     const { db, repo } = await setup();
     await createGame(repo);

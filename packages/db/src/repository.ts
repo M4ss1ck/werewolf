@@ -1,6 +1,6 @@
 import type { DomainTransition, PlayerPatch } from "@werewolf/game-engine";
 import type { EventId, GameId, UserId } from "@werewolf/protocol";
-import { and, asc, eq, gt, inArray, isNotNull, ne } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import type { Db } from "./client.ts";
 import { mapEvent, mapGame } from "./mapper.ts";
 import { gameEvents, gamePlayers, games } from "./schema.ts";
@@ -46,6 +46,8 @@ export type GameSummaryRow = {
   scheduledAt: number | null;
   players: { userId: UserId; displayName: string }[];
 };
+
+export type UserStats = { games: number; survived: number; asWolf: number };
 
 export class GameRepository {
   constructor(private readonly db: Db) {}
@@ -113,6 +115,27 @@ export class GameRepository {
       scheduledAt: row.scheduledAt,
       players: byGame.get(row.id) ?? [],
     }));
+  }
+  /** Lifetime stats over finished games the viewer actually played (spectated
+   * games and unfinished games excluded), in one aggregate query. */
+  async getUserStats(userId: UserId): Promise<UserStats> {
+    const rows = await this.db
+      .select({
+        games: sql<number>`count(*)`,
+        survived: sql<number>`coalesce(sum(case when ${gamePlayers.status} = 'alive' then 1 else 0 end), 0)`,
+        asWolf: sql<number>`coalesce(sum(case when ${gamePlayers.faction} = 'wolves' then 1 else 0 end), 0)`,
+      })
+      .from(gamePlayers)
+      .innerJoin(games, eq(gamePlayers.gameId, games.id))
+      .where(
+        and(
+          eq(gamePlayers.userId, userId),
+          eq(games.status, "finished"),
+          inArray(gamePlayers.status, ["alive", "dead"]),
+        ),
+      );
+    const row = rows[0] ?? { games: 0, survived: 0, asWolf: 0 };
+    return { games: row.games, survived: row.survived, asWolf: row.asWolf };
   }
   async listScheduledGames() {
     return this.db.select().from(games).where(eq(games.status, "scheduled"));
