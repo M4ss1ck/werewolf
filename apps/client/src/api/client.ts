@@ -1,4 +1,5 @@
 import type {
+  ChatMessage,
   GameEvent,
   GameId,
   GameplayCommand,
@@ -81,6 +82,10 @@ export const api = {
   getReplay: (id: GameId | string) =>
     request<{ snapshot: ViewerGameSnapshot; events: GameEvent[] }>(`/api/games/${id}/replay`),
   getStats: () => request<MeStats>("/api/me/stats"),
+  sendChatMessage: (text: string) =>
+    request<ChatMessage>("/api/chat/messages", { ...json({ text }) }),
+  getChatHistory: (before: number) =>
+    request<{ messages: ChatMessage[] }>(`/api/chat/messages?before=${before}`),
   patchLocale: (locale: "en" | "es") =>
     request<{ locale: "en" | "es" }>("/api/me/locale", {
       method: "PATCH",

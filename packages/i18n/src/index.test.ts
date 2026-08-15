@@ -208,6 +208,7 @@ test("every new screen surface renders a non-empty string in both locales", () =
     "ui.tabs.games",
     "ui.tabs.create",
     "ui.tabs.profile",
+    "ui.tabs.chat",
     "ui.tabs.village",
     "ui.tabs.talk",
     "ui.tabs.act",
@@ -252,6 +253,8 @@ test("every new screen surface renders a non-empty string in both locales", () =
     "ui.profile.signOut",
     "ui.intel.title",
     "ui.allowSpectatingHint",
+    "ui.globalChat",
+    "ui.globalChatEmpty",
   ];
   for (const locale of SUPPORTED_LOCALES) {
     const t = createI18n(locale).t;

@@ -3,6 +3,7 @@ export { CreateGameScreen } from "./create-game.tsx";
 export { GameScreen } from "./game.tsx";
 export { GameOverScreen } from "./game-over.tsx";
 export { GamesScreen } from "./games.tsx";
+export { GlobalChatScreen } from "./global-chat.tsx";
 export { LobbyScreen } from "./lobby.tsx";
 export { ProfileScreen } from "./profile.tsx";
 export { SignInScreen } from "./sign-in.tsx";

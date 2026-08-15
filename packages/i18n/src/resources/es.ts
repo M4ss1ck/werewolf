@@ -234,10 +234,13 @@ export const es: TranslationResource = {
     chooseUsername: "Elige un nombre de usuario",
     chooseUsernameIntro: "Este es el nombre que verá la aldea.",
     saveUsername: "Guardar nombre",
+    globalChat: "Chat global",
+    globalChatEmpty: "Aún no hay mensajes. Saluda.",
     tabs: {
       games: "Partidas",
       create: "Crear",
       profile: "Perfil",
+      chat: "Chat",
       village: "Aldea",
       talk: "Charlar",
       act: "Actuar",

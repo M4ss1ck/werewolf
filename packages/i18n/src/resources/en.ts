@@ -234,10 +234,13 @@ export const en = {
     chooseUsername: "Choose a username",
     chooseUsernameIntro: "This is the name the village will see.",
     saveUsername: "Save username",
+    globalChat: "Global chat",
+    globalChatEmpty: "No messages yet. Say hello.",
     tabs: {
       games: "Games",
       create: "Create",
       profile: "Profile",
+      chat: "Chat",
       village: "Village",
       talk: "Talk",
       act: "Act",
