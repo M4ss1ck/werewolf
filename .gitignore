@@ -22,7 +22,10 @@ data/
 .vscode/*
 !.vscode/extensions.json
 
-# Planning artifacts stay local (global CLAUDE.md rule 5)
+# AI artifacts
 werewolf-product-technical-spec-v1.md
 docs/superpowers/
 docs/plans/
+.agents/skills/
+.claude/skills/
+skills-lock.json
