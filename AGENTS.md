@@ -130,3 +130,15 @@ it now.
 
 Commit whole, working changes. Don't commit planning documents, design notes or
 implementation plans; they stay local. Don't commit unless asked.
+
+**One commit per logical change.** A commit is the unit a reviewer reads, so it
+carries one idea: a single feature, a single fix, a single refactor. Don't let a
+working tree accumulate several finished units of work and then land them as one
+undifferentiated pile — split them, and keep a security or correctness fix in its
+own commit rather than burying it inside a feature. Every commit must pass the
+gate on its own, not merely at the end of the series.
+
+For a task large enough to need several commits, work out the division before
+starting, so the units land as they are finished instead of being reconstructed
+afterwards. When a task is delegated, that division is the supervisor's job, not
+the worker's: workers never commit.
