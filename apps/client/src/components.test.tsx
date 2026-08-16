@@ -149,14 +149,16 @@ test("ChatBubble omits the author for your own messages", () => {
   expect(screen.getByText("on my way")).toBeInTheDocument();
 });
 
-test("ChatComposer sends the trimmed text and clears the input", () => {
+test("ChatComposer sends the trimmed text and clears the input", async () => {
   const sent: string[] = [];
   render(
     <ChatComposer
       className="flex"
       inputId="test-message"
       label="Message"
-      onSend={(text) => sent.push(text)}
+      onSend={(text) => {
+        sent.push(text);
+      }}
       placeholder="Say something"
       sendLabel="Send"
     />,
@@ -164,7 +166,10 @@ test("ChatComposer sends the trimmed text and clears the input", () => {
 
   const input = screen.getByLabelText("Message");
   fireEvent.change(input, { target: { value: "hello" } });
-  fireEvent.click(screen.getByLabelText("Send"));
+  await act(async () => {
+    fireEvent.click(screen.getByLabelText("Send"));
+    await Promise.resolve();
+  });
 
   expect(sent).toEqual(["hello"]);
   expect(input).toHaveValue("");
@@ -177,7 +182,9 @@ test("ChatComposer ignores a blank message", () => {
       className="flex"
       inputId="test-message"
       label="Message"
-      onSend={(text) => sent.push(text)}
+      onSend={(text) => {
+        sent.push(text);
+      }}
       placeholder="Say something"
       sendLabel="Send"
     />,
@@ -191,6 +198,62 @@ test("ChatComposer ignores a blank message", () => {
   expect(sent).toEqual([]);
 });
 
+test("ChatComposer clears the input only after a resolving onSend settles", async () => {
+  let resolveSend: () => void = () => {};
+  const onSend = vi.fn(
+    () =>
+      new Promise<void>((resolve) => {
+        resolveSend = resolve;
+      }),
+  );
+  render(
+    <ChatComposer
+      className="flex"
+      inputId="test-message"
+      label="Message"
+      onSend={onSend}
+      placeholder="Say something"
+      sendLabel="Send"
+    />,
+  );
+
+  const input = screen.getByLabelText("Message");
+  fireEvent.change(input, { target: { value: "hello" } });
+  fireEvent.click(screen.getByLabelText("Send"));
+
+  expect(input).toHaveValue("hello");
+  await act(async () => {
+    resolveSend();
+    await Promise.resolve();
+  });
+  expect(input).toHaveValue("");
+});
+
+test("ChatComposer leaves the typed text in place when onSend rejects", async () => {
+  const onSend = vi.fn(() => Promise.reject(new Error("rate limited")));
+  render(
+    <ChatComposer
+      className="flex"
+      inputId="test-message"
+      label="Message"
+      onSend={onSend}
+      placeholder="Say something"
+      sendLabel="Send"
+    />,
+  );
+
+  const input = screen.getByLabelText("Message");
+  fireEvent.change(input, { target: { value: "hello" } });
+  await act(async () => {
+    fireEvent.click(screen.getByLabelText("Send"));
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  expect(onSend).toHaveBeenCalledWith("hello");
+  expect(input).toHaveValue("hello");
+});
+
 test("ChatComposer disabled blocks input and sending", () => {
   const sent: string[] = [];
   render(
@@ -199,7 +262,9 @@ test("ChatComposer disabled blocks input and sending", () => {
       disabled={true}
       inputId="test-message"
       label="Message"
-      onSend={(text) => sent.push(text)}
+      onSend={(text) => {
+        sent.push(text);
+      }}
       placeholder="Say something"
       sendLabel="Send"
     />,

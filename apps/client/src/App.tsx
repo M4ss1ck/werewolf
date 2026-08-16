@@ -76,6 +76,7 @@ function Shell() {
     return () => window.removeEventListener("popstate", update);
   }, []);
   useEffect(() => {
+    setChatSendError(undefined);
     if (route.type === "game" || route.type === "replay")
       void (route.type === "replay"
         ? api.getReplay(route.id).then((result) => setSnapshot(result.snapshot))
@@ -85,8 +86,9 @@ function Shell() {
   // while the player browses games — presence will depend on that, and
   // messages accumulate meanwhile.
   const inLobby = route.type !== "game" && route.type !== "replay";
+  const signedInWithUsername = session !== null && !!session.user.username;
   useEffect(() => {
-    if (!inLobby) return;
+    if (!inLobby || !signedInWithUsername) return;
     const connection = new GlobalChatConnection(
       {
         onHistory: (messages, cursor) =>
@@ -97,14 +99,19 @@ function Shell() {
     );
     connection.connect();
     return () => connection.close();
-  }, [inLobby]);
+  }, [inLobby, signedInWithUsername]);
   const refreshSession = () => void getSession().then(setSession);
-  const sendChatMessage = (text: string) => {
-    void api
+  const sendChatMessage = (text: string) =>
+    api
       .sendChatMessage(text)
-      .then(() => setChatSendError(undefined))
-      .catch((caught: unknown) => setChatSendError(caught));
-  };
+      .then((message) => {
+        setChat((current) => withMessage(current, message));
+        setChatSendError(undefined);
+      })
+      .catch((caught: unknown) => {
+        setChatSendError(caught);
+        throw caught;
+      });
   const loadOlderChat = () => {
     const oldest = chat.messages[0];
     // Virtuoso fires startReached repeatedly while the reader sits at the top,

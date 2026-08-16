@@ -31,6 +31,18 @@ export function withHistory(
   cursor: ChatMessageId,
 ): ChatState {
   const first = state.messages.length === 0;
+  if (!first && messages.length === CHAT_PAGE_SIZE) {
+    // A full page onto a non-empty state may have been truncated by the
+    // server's page cap, so it cannot be trusted contiguous with what we
+    // already hold. Treat it as a cold open rather than risk a silent gap.
+    return {
+      ...state,
+      messages,
+      cursor,
+      firstItemIndex: CHAT_FIRST_INDEX,
+      hasOlder: true,
+    };
+  }
   return {
     ...state,
     messages: [...state.messages, ...messages],

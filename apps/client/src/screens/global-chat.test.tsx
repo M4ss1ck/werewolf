@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import type { ChatMessage, ChatMessageId, UserId } from "@werewolf/protocol";
 import type { ReactElement } from "react";
 import { I18nextProvider } from "react-i18next";
@@ -80,12 +80,14 @@ test("shows the empty state when there are no messages", () => {
   expect(screen.getByText("No messages yet. Say hello.")).toBeInTheDocument();
 });
 
-test("sending a message calls onSend and clears the composer", () => {
+test("sending a message calls onSend and clears the composer", async () => {
   const sent: string[] = [];
   renderWithI18n(
     <GlobalChatScreen
       onLoadOlder={() => undefined}
-      onSend={(text) => sent.push(text)}
+      onSend={(text) => {
+        sent.push(text);
+      }}
       state={initialChatState}
       viewerId={"u2" as UserId}
     />,
@@ -93,7 +95,10 @@ test("sending a message calls onSend and clears the composer", () => {
 
   const input = screen.getByLabelText("Message");
   fireEvent.change(input, { target: { value: "21:00 works" } });
-  fireEvent.submit(input.closest("form")!);
+  await act(async () => {
+    fireEvent.submit(input.closest("form")!);
+    await Promise.resolve();
+  });
 
   expect(sent).toEqual(["21:00 works"]);
   expect(input).toHaveValue("");

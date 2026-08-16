@@ -86,7 +86,11 @@ export function ChatComposer({
   label: string;
   placeholder: string;
   sendLabel: string;
-  onSend: (text: string) => void;
+  // A union of two function types, not one function returning a union: Talk's
+  // plain event handler infers a `void` return and only a `void`-return
+  // function type accepts it, while the chat screen's returns a promise the
+  // composer awaits before clearing.
+  onSend: ((text: string) => void) | ((text: string) => Promise<unknown>);
 }) {
   const [text, setText] = useState("");
   return (
@@ -95,8 +99,15 @@ export function ChatComposer({
       onSubmit={(event) => {
         event.preventDefault();
         if (disabled || text.trim() === "") return;
-        onSend(text);
-        setText("");
+        const submitted = text;
+        void (async () => {
+          try {
+            await Promise.resolve(onSend(submitted));
+            setText("");
+          } catch {
+            // Leave the typed text in place; the caller surfaces the error.
+          }
+        })();
       }}
     >
       <label className="sr-only" htmlFor={inputId}>

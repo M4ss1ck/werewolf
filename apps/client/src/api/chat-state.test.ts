@@ -47,6 +47,19 @@ test("a reconnect history appends without disturbing hasOlder", () => {
   expect(reconnected.hasOlder).toBe(true);
 });
 
+test("a full page history frame onto a non-empty state is treated as a cold open", () => {
+  const opened = withHistory(initialChatState, page(151, 50), 200 as ChatMessageId);
+  const scrolled = withOlderPage(opened, page(101, 50));
+
+  const reconnected = withHistory(scrolled, page(271, 50), 320 as ChatMessageId);
+
+  expect(reconnected.messages).toHaveLength(50);
+  expect(reconnected.messages[0]!.text).toBe("message 271");
+  expect(reconnected.cursor).toBe(320);
+  expect(reconnected.firstItemIndex).toBe(CHAT_FIRST_INDEX);
+  expect(reconnected.hasOlder).toBe(true);
+});
+
 test("a live message is appended and moves the cursor", () => {
   const opened = withHistory(initialChatState, page(1, 3), 3 as ChatMessageId);
 
