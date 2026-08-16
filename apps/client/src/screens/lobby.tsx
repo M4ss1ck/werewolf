@@ -24,13 +24,6 @@ export function LobbyScreen({
     { length: emptySeats },
     (_, index) => snapshot.players.length + index + 1,
   );
-  const act = async (operation: () => Promise<ViewerGameSnapshot>) => {
-    try {
-      onUpdate(await operation());
-    } catch (caught) {
-      setError(caught);
-    }
-  };
   // Only the host may list bots, and a failed load just means no roster: the
   // lobby still works, it simply offers nobody to add.
   const loadBots = useCallback(() => {
@@ -41,14 +34,17 @@ export function LobbyScreen({
       .catch(() => setBots([]));
   }, [isOwner, snapshot.game.id]);
   useEffect(loadBots, [loadBots]);
-  // Seating changes availability, so re-read the roster rather than guessing
-  // at it from the snapshot.
-  const addBot = (botId: string) =>
-    act(async () => {
-      const next = await api.addBot(snapshot.game.id, botId);
+  // Every lobby action can change who is at the table — seating a bot, but
+  // equally removing one — and availability is computed from that. Re-read the
+  // roster after any of them rather than trying to infer it here.
+  const act = async (operation: () => Promise<ViewerGameSnapshot>) => {
+    try {
+      onUpdate(await operation());
       loadBots();
-      return next;
-    });
+    } catch (caught) {
+      setError(caught);
+    }
+  };
   // The owner's cancel feeds the snapshot back so the shell lands on the
   // cancelled screen; a guest just leaves and heads home to the list.
   const leave = async () => {
@@ -142,7 +138,7 @@ export function LobbyScreen({
                   className="flex items-center gap-[14px] rounded-[14px] border border-dashed border-paper/20 px-3.5 py-3 text-left text-[17px] text-fog transition-colors enabled:hover:border-paper/40 enabled:hover:text-paper disabled:opacity-40"
                   disabled={!bot.available}
                   key={bot.id}
-                  onClick={() => void addBot(bot.id)}
+                  onClick={() => void act(() => api.addBot(snapshot.game.id, bot.id))}
                   type="button"
                 >
                   <span

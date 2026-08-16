@@ -458,6 +458,39 @@ test("lobby: the host picks a bot from the roster, and unavailable ones are disa
   expect(api.listBots).toHaveBeenCalledTimes(2);
 });
 
+test("lobby: removing a bot re-reads the roster, so it can be added again", async () => {
+  // The roster's availability lives on the server; the lobby must re-read it
+  // after any seat change, not only after adding.
+  vi.spyOn(api, "listBots")
+    .mockResolvedValueOnce([
+      { id: "mira", displayName: "Mira", model: "m", available: false, reason: "ALREADY_SEATED" },
+    ])
+    .mockResolvedValue([{ id: "mira", displayName: "Mira", model: "m", available: true }]);
+  vi.spyOn(api, "kick").mockResolvedValue(
+    makeGameSnapshot({ game: { status: "lobby", phase: null } }),
+  );
+  renderWithI18n(
+    <LobbyScreen
+      onUpdate={() => undefined}
+      snapshot={makeGameSnapshot({
+        game: { ownerUserId: "owner" as UserId, status: "lobby", phase: null },
+        me: { userId: "owner" as UserId, status: "lobby" },
+        players: [
+          { userId: "owner" as UserId, displayName: "Owner", status: "lobby" },
+          { userId: "bot:1" as UserId, displayName: "Mira", status: "lobby", isBot: true },
+        ],
+      })}
+    />,
+  );
+
+  // Anchored, so this is the roster entry rather than the "Remove Mira" button.
+  expect(await screen.findByRole("button", { name: /^Mira/ })).toBeDisabled();
+  await reactAct(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Remove Mira" }));
+  });
+  await waitFor(() => expect(screen.getByRole("button", { name: /^Mira/ })).toBeEnabled());
+});
+
 test("lobby: leaving takes the player back to the games list", async () => {
   // The file's afterEach resets the URL to "/", so pin it to a game route
   // first or the pathname assertion below would pass without any navigation.

@@ -139,6 +139,35 @@ describe("bot lobby routes", () => {
     harness.close();
   });
 
+  test("removing a seated bot makes it selectable again", async () => {
+    const harness = await setup({ apiKey: "secret" });
+    const seated = await (
+      await harness.as("host", `/api/games/${harness.gameId}/bots`, {
+        method: "POST",
+        body: JSON.stringify({ botId: "mira" }),
+      })
+    ).json();
+    const bot = (seated as ViewerGameSnapshot).players.find((player) => player.isBot)!;
+
+    await harness.as("host", `/api/games/${harness.gameId}/players/${bot.userId}`, {
+      method: "DELETE",
+    });
+
+    const roster = (await (
+      await harness.as("host", `/api/games/${harness.gameId}/bots`)
+    ).json()) as BotRosterEntry[];
+    const mira = roster.find((entry) => entry.id === "mira")!;
+    expect(mira.available).toBe(true);
+    expect(mira.reason).toBeUndefined();
+    // And it can genuinely be seated a second time.
+    const again = await harness.as("host", `/api/games/${harness.gameId}/bots`, {
+      method: "POST",
+      body: JSON.stringify({ botId: "mira" }),
+    });
+    expect(again.status).toBe(200);
+    harness.close();
+  });
+
   test("only the host may list or seat bots", async () => {
     const harness = await setup({ apiKey: "secret" });
     await harness.as("guest", `/api/games/${harness.gameId}/join`, { method: "POST", body: "{}" });
