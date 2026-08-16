@@ -78,6 +78,13 @@ export function LobbyScreen({
                 <li className={`row${isHost ? " row--selected" : ""}`} key={player.userId}>
                   <Avatar name={player.displayName} size="md" />
                   <span className="row__name text-[17px]">{player.displayName}</span>
+                  {/* A bot seat is marked but still removable: the host added
+                   * it, so the host must be able to take it back out. */}
+                  {player.isBot && !isHost && (
+                    <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-fog">
+                      {t("ui.lobby.botTag")}
+                    </span>
+                  )}
                   {isHost ? (
                     <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-sage-light">
                       {t("ui.lobby.youHost")}
@@ -108,6 +115,21 @@ export function LobbyScreen({
               </li>
             ))}
           </ul>
+          {isOwner && (
+            <button
+              className="flex items-center gap-[14px] rounded-[14px] border border-dashed border-paper/20 px-3.5 py-3 text-[17px] text-fog transition-colors hover:border-paper/40 hover:text-paper"
+              onClick={() => void act(() => api.addBots(snapshot.game.id))}
+              type="button"
+            >
+              <span
+                aria-hidden="true"
+                className="flex h-[42px] w-[42px] items-center justify-center rounded-full border border-dashed border-paper/20"
+              >
+                +
+              </span>
+              {t("ui.lobby.addBot")}
+            </button>
+          )}
         </section>
       </div>
       <div className="flex gap-2.5 border-t border-paper/8 bg-bar px-[18px] py-3 pb-4">

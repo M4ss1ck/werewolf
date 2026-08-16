@@ -158,6 +158,8 @@ export const es: TranslationResource = {
       inTheVillage: "En la aldea",
       emptySeat: "Asiento vacío",
       youHost: "Tú · anfitrión",
+      botTag: "Bot",
+      addBot: "Añadir bot",
       startNeeds: {
         count_one: "Comenzar · falta {{count}}",
         count_other: "Comenzar · faltan {{count}}",

@@ -160,6 +160,8 @@ export const en = {
       inTheVillage: "In the village",
       emptySeat: "Empty seat",
       youHost: "You · host",
+      botTag: "Bot",
+      addBot: "Add bot",
       startNeeds: {
         count_one: "Start · needs {{count}}",
         count_other: "Start · needs {{count}}",
