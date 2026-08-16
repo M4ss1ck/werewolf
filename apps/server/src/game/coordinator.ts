@@ -42,6 +42,13 @@ export class GameCoordinator {
     return () => this.hooks.delete(hook);
   }
 
+  /** Membership and meta changes commit no events, but waiting players still
+   * need a fresh snapshot (lobby roster, game name, visibility). Fire the
+   * commit hooks with an empty event list — the hub answers with a sync frame. */
+  private async notify(gameId: GameId) {
+    await Promise.all([...this.hooks].map((hook) => hook(gameId, [])));
+  }
+
   private async transition(gameId: GameId, resolve: (state: GameState) => DomainResult) {
     return this.lock.run(gameId, async () => {
       for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -113,6 +120,7 @@ export class GameCoordinator {
       const players = await this.repository.getPlayers(gameId);
       if (!players.some((p) => p.userId === userId))
         await this.repository.addPlayer({ gameId, userId, displayName, joinedAt: this.now() });
+      await this.notify(gameId);
       return this.snapshot(gameId, userId);
     });
   }
@@ -133,6 +141,7 @@ export class GameCoordinator {
           status: "spectator",
           joinedAt: this.now(),
         });
+      await this.notify(gameId);
       return this.snapshot(gameId, userId);
     });
   }
@@ -174,6 +183,7 @@ export class GameCoordinator {
         joinedAt: this.now(),
         controller: { type: "bot", config: input.config },
       });
+      await this.notify(gameId);
       return this.snapshot(gameId, owner);
     });
   }
@@ -184,6 +194,7 @@ export class GameCoordinator {
       if (game.status !== "lobby" && game.status !== "scheduled")
         throw new CoordinatorError("GAME_ALREADY_STARTED");
       await this.repository.removePlayer(gameId, userId);
+      await this.notify(gameId);
       return this.snapshot(gameId, userId);
     });
   }
@@ -195,6 +206,7 @@ export class GameCoordinator {
       if (game.status !== "lobby" && game.status !== "scheduled")
         throw new CoordinatorError("GAME_ALREADY_STARTED");
       await this.repository.removePlayer(gameId, userId);
+      await this.notify(gameId);
       return this.snapshot(gameId, owner);
     });
   }
@@ -210,6 +222,7 @@ export class GameCoordinator {
       if (game.status !== "lobby" && game.status !== "scheduled")
         throw new CoordinatorError("GAME_ALREADY_STARTED");
       await this.repository.updateGame(gameId, patch);
+      await this.notify(gameId);
       return this.snapshot(gameId, userId);
     });
   }

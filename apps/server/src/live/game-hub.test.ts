@@ -190,6 +190,37 @@ test("a subscriber receives a fresh sync frame when the phase changes", async ()
   hub.stop();
 });
 
+test("a lobby subscriber receives a fresh snapshot when the roster changes", async () => {
+  const { app, coordinator } = await setup();
+  const game = await createGame(app, USERS[0]!);
+  const hub = new GameHub(coordinator);
+  const socket = fakeSocket();
+  await subscribe(hub.connect(game.id, USERS[0]! as UserId, socket), 0);
+
+  const initial = socket.frames.filter((frame) => frame.type === "sync");
+  expect(initial).toHaveLength(1);
+  if (initial[0]?.type !== "sync") return;
+
+  await coordinator.joinGame(game.id, USERS[1]! as UserId, USERS[1]!);
+  const afterJoin = socket.frames.filter((frame) => frame.type === "sync");
+  const joinSync = afterJoin.at(-1);
+  expect(joinSync?.type).toBe("sync");
+  if (joinSync?.type !== "sync") return;
+  const joinedIds = joinSync.snapshot.players.map((player) => player.userId);
+  expect(joinedIds).toContain(USERS[0]! as UserId);
+  expect(joinedIds).toContain(USERS[1]! as UserId);
+
+  await coordinator.kickLobbyPlayer(game.id, USERS[0]! as UserId, USERS[1]! as UserId);
+  const afterKick = socket.frames.filter((frame) => frame.type === "sync");
+  const kickSync = afterKick.at(-1);
+  expect(kickSync?.type).toBe("sync");
+  if (kickSync?.type !== "sync") return;
+  const kickedIds = kickSync.snapshot.players.map((player) => player.userId);
+  expect(kickedIds).toContain(USERS[0]! as UserId);
+  expect(kickedIds).not.toContain(USERS[1]! as UserId);
+  hub.stop();
+});
+
 test("an unusable cursor produces resync_required", async () => {
   const { app, coordinator, repo } = await setup();
   const gameId = await startGameWithPlayers(app, USERS[0]!, [
