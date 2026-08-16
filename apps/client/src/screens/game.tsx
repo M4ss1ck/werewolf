@@ -1,4 +1,4 @@
-import type { GameEvent, GameplayCommand, ViewerGameSnapshot } from "@werewolf/protocol";
+import type { EventId, GameEvent, GameplayCommand, ViewerGameSnapshot } from "@werewolf/protocol";
 import { IdCard, MessageCircle, Moon, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -40,7 +40,10 @@ export function GameScreen({
       });
       return;
     }
-    const connection = new LiveGameConnection(initial.game.id, initial.cursor, {
+    // Subscribe from the start on mount so the sync frame backfills the full
+    // event history (the lobby handoff may pass a latest-cursor snapshot); the
+    // connection's own cursor, advanced by incoming frames, is what reconnects use.
+    const connection = new LiveGameConnection(initial.game.id, 0 as EventId, {
       onSnapshot: setSnapshot,
       onEvent: (event) => setEvents((current) => [...current, event]),
       onStatus: setStatus,

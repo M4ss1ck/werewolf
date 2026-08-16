@@ -1,8 +1,14 @@
-import { type BotRosterEntry, MIN_PLAYERS, type ViewerGameSnapshot } from "@werewolf/protocol";
+import {
+  type BotRosterEntry,
+  type EventId,
+  MIN_PLAYERS,
+  type ViewerGameSnapshot,
+} from "@werewolf/protocol";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client.ts";
+import { LiveGameConnection } from "../api/live.ts";
 import { Avatar, ErrorMessage, Meter } from "../components.tsx";
 import { navigate } from "../routes.tsx";
 
@@ -34,6 +40,17 @@ export function LobbyScreen({
       .catch(() => setBots([]));
   }, [isOwner, snapshot.game.id]);
   useEffect(loadBots, [loadBots]);
+  // A lobby has no event history the screen needs, so subscribe from cursor 0:
+  // the sync frame's snapshot is the whole update. Without this socket a
+  // scheduled start — or the host starting the game — never reaches a waiting
+  // guest; the snapshot flips to running and the shell swaps screens.
+  useEffect(() => {
+    const connection = new LiveGameConnection(snapshot.game.id, 0 as EventId, {
+      onSnapshot: onUpdate,
+    });
+    connection.connect();
+    return () => connection.close();
+  }, [snapshot.game.id, onUpdate]);
   // Every lobby action can change who is at the table — seating a bot, but
   // equally removing one — and availability is computed from that. Re-read the
   // roster after any of them rather than trying to infer it here.

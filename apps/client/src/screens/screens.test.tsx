@@ -32,6 +32,29 @@ import { ProfileScreen } from "./profile.tsx";
 import { Talk } from "./talk.tsx";
 import { UsernameScreen } from "./username.tsx";
 
+// A stand-in for the game socket: the lobby now subscribes on mount, so these
+// tests must not dial out, and the live-connection test needs to inspect what
+// was constructed and what the socket pushed. No-op connect/close keep every
+// other lobby render harmless.
+const { MockLiveGameConnection } = vi.hoisted(() => {
+  class MockLiveGameConnection {
+    static instances: MockLiveGameConnection[] = [];
+    connect = vi.fn();
+    close = vi.fn();
+
+    constructor(
+      readonly gameId: string,
+      readonly cursor: EventId,
+      readonly handlers: { onSnapshot?: (snapshot: ViewerGameSnapshot) => void },
+    ) {
+      MockLiveGameConnection.instances.push(this);
+    }
+  }
+  return { MockLiveGameConnection };
+});
+
+vi.mock("../api/live.ts", () => ({ LiveGameConnection: MockLiveGameConnection }));
+
 function renderWithI18n(ui: ReactElement) {
   return render(<I18nextProvider i18n={i18n}>{ui}</I18nextProvider>);
 }
@@ -92,6 +115,7 @@ function makeGameSnapshot(
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  MockLiveGameConnection.instances = [];
   localStorage.clear();
   window.history.replaceState({}, "", "/");
 });
@@ -567,6 +591,38 @@ test("lobby: leaving takes the player back to the games list", async () => {
 
   await waitFor(() => expect(leave).toHaveBeenCalledWith("g1"));
   await waitFor(() => expect(window.location.pathname).toBe("/"));
+});
+
+test("lobby: opens a live connection that delivers pushed snapshots to onUpdate", () => {
+  const onUpdate = vi.fn();
+  const { unmount } = renderWithI18n(
+    <LobbyScreen
+      onUpdate={onUpdate}
+      snapshot={makeGameSnapshot({
+        game: { status: "lobby", phase: null },
+        me: { userId: "bob" as UserId, status: "lobby" },
+      })}
+    />,
+  );
+
+  // A lobby subscribes from cursor 0: it has no event history the screen
+  // needs, and the sync frame's snapshot is the whole update.
+  const connection = MockLiveGameConnection.instances[0];
+  expect(connection).toBeDefined();
+  expect(connection!.gameId).toBe("g1");
+  expect(connection!.cursor).toBe(0 as EventId);
+  expect(connection!.connect).toHaveBeenCalledTimes(1);
+  expect(onUpdate).not.toHaveBeenCalled();
+
+  // A pushed frame — the scheduled game starting — reaches App's setter.
+  const running = makeGameSnapshot({ game: { status: "running" } });
+  connection!.handlers.onSnapshot?.(running);
+  expect(onUpdate).toHaveBeenCalledWith(running);
+
+  // Leaving the lobby (game started, cancelled, or a manual navigate) closes
+  // the socket.
+  unmount();
+  expect(connection!.close).toHaveBeenCalledTimes(1);
 });
 
 test("action controls render from availableActions; none offered renders none even for a seer", () => {
