@@ -1,4 +1,5 @@
 import { applyMigrations, createDb, GameRepository, GlobalChatRepository } from "@werewolf/db";
+import { websocket } from "hono/bun";
 import { createApp } from "./app.ts";
 import { createAuth, resolveAuthSession } from "./auth/auth.ts";
 import { createAuthTables } from "./auth/schema.ts";
@@ -38,7 +39,9 @@ const app = createApp({
 const server = Bun.serve({
   port: env.PORT,
   fetch: app.fetch,
-  websocket: { message() {} },
+  // Hono's own dispatcher: it routes open/close/message to the handlers
+  // registered by upgradeWebSocket. A stub here silently drops every one.
+  websocket,
 });
 await scheduler.start();
 
