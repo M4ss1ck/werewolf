@@ -100,6 +100,35 @@ test("POST /api/chat/messages rate-limits a second message within a second", asy
   expect(await second.json()).toEqual({ error: { code: "RATE_LIMITED" } });
 });
 
+test("advancing the clock past the rate limit window allows the next message", async () => {
+  const { app, clock } = await setup();
+
+  const first = await as(
+    app,
+    USERS[0]!,
+    "/api/chat/messages",
+    jsonRequest("POST", { text: "one" }),
+  );
+  clock.now += 999;
+  const stillLimited = await as(
+    app,
+    USERS[0]!,
+    "/api/chat/messages",
+    jsonRequest("POST", { text: "two" }),
+  );
+  clock.now += 1;
+  const allowed = await as(
+    app,
+    USERS[0]!,
+    "/api/chat/messages",
+    jsonRequest("POST", { text: "three" }),
+  );
+
+  expect(first.status).toBe(201);
+  expect(stillLimited.status).toBe(429);
+  expect(allowed.status).toBe(201);
+});
+
 test("the rate limit is per player, not global", async () => {
   const { app } = await setup();
 

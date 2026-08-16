@@ -32,7 +32,7 @@ export type AppOptions = {
   coordinator?: GameCoordinator;
   auth?: ReturnType<typeof createAuth>;
   gameHub?: GameHub;
-  globalChat?: { repository: GlobalChatRepository; hub: GlobalChatHub };
+  globalChat?: { repository: GlobalChatRepository; hub: GlobalChatHub; now?: () => number };
 };
 
 export function createApp(options: AppOptions = {}) {
@@ -83,8 +83,8 @@ export function createApp(options: AppOptions = {}) {
         }),
       );
     if (options.globalChat) {
-      const { repository, hub } = options.globalChat;
-      app.route("/api", chatRoutes(repository, hub));
+      const { repository, hub, now } = options.globalChat;
+      app.route("/api", chatRoutes(repository, hub, now));
       app.get(
         "/api/chat/live",
         upgradeWebSocket((c) => {

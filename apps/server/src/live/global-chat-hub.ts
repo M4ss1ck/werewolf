@@ -16,6 +16,9 @@ type Subscriber = {
   userId: UserId;
   displayName: string;
   subscribed: boolean;
+  // Messages published while the history query is in flight: buffered here
+  // and flushed right after the history frame so none are silently dropped.
+  pending: ChatMessage[];
 };
 
 export class GlobalChatHub {
@@ -38,6 +41,7 @@ export class GlobalChatHub {
       userId: viewer.userId,
       displayName: viewer.displayName,
       subscribed: false,
+      pending: [],
     };
     this.subscribers.add(subscriber);
     return {
@@ -60,17 +64,23 @@ export class GlobalChatHub {
     const parsed = ChatSubscribeFrameSchema.safeParse(frame);
     if (!parsed.success) return;
     const messages = await this.repository.listRecent(parsed.data.cursor);
+    const cursor = messages.at(-1)?.id ?? (parsed.data.cursor as ChatMessageId);
     subscriber.subscribed = true;
-    this.send(subscriber, {
-      type: "history",
-      messages,
-      cursor: messages.at(-1)?.id ?? (parsed.data.cursor as ChatMessageId),
-    });
+    this.send(subscriber, { type: "history", messages, cursor });
+    // Anything published while the SELECT above was in flight was buffered
+    // rather than dropped; flush it now, skipping what the history page
+    // already covered so nothing is delivered twice.
+    const pending = subscriber.pending;
+    subscriber.pending = [];
+    for (const message of pending)
+      if (message.id > cursor) this.send(subscriber, { type: "message", message });
   }
 
   publish(message: ChatMessage) {
-    for (const subscriber of this.subscribers)
+    for (const subscriber of this.subscribers) {
       if (subscriber.subscribed) this.send(subscriber, { type: "message", message });
+      else subscriber.pending.push(message);
+    }
   }
 
   private send(subscriber: Subscriber, frame: ChatServerFrame) {

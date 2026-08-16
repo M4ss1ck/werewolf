@@ -61,7 +61,7 @@ export async function setup(
   const app = createApp({
     db,
     coordinator,
-    globalChat: { repository: chatRepo, hub: chatHub },
+    globalChat: { repository: chatRepo, hub: chatHub, now: () => clock.now },
     sessionResolver: async (request) => {
       const userId = request.headers.get("x-user-id");
       if (!userId) return null;

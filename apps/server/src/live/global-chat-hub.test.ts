@@ -107,6 +107,58 @@ test("a socket that never subscribed receives nothing", async () => {
   expect(socket.frames).toHaveLength(0);
 });
 
+test("a message published during the subscribe window is delivered once, and one already in the history page is not duplicated", async () => {
+  const { chatRepo, chatHub } = await setup();
+  const seeded = await chatRepo.append({
+    userId: USERS[0]! as UserId,
+    displayName: "Ana",
+    text: "seed",
+    createdAt: 1_000_000,
+  });
+
+  // Gate listRecent's return (not its query) so we can commit and publish a
+  // message after the SELECT ran but before `subscribed` flips to true —
+  // exactly the window the fix must cover.
+  const originalListRecent = chatRepo.listRecent.bind(chatRepo);
+  let releaseGate = () => {};
+  const gate = new Promise<void>((resolve) => {
+    releaseGate = resolve;
+  });
+  chatRepo.listRecent = (async (...args: Parameters<typeof originalListRecent>) => {
+    const result = await originalListRecent(...args);
+    await gate;
+    return result;
+  }) as typeof chatRepo.listRecent;
+
+  const socket = fakeSocket();
+  const connection = chatHub.connect(viewer(USERS[0]!), socket);
+  const subscribed = subscribe(connection, 0);
+
+  const racing = await chatRepo.append({
+    userId: USERS[1]! as UserId,
+    displayName: "Bram",
+    text: "racing",
+    createdAt: 1_000_001,
+  });
+  chatHub.publish(racing);
+  // A redundant publish of a message already captured by the SELECT must be
+  // filtered out, not delivered a second time.
+  chatHub.publish(seeded);
+
+  releaseGate();
+  await subscribed;
+
+  const history = socket.frames[0];
+  if (history?.type !== "history") throw new Error("expected a history frame");
+  expect(history.messages.map((message) => message.text)).toEqual(["seed"]);
+
+  const rest = socket.frames.slice(1);
+  expect(rest).toHaveLength(1);
+  const frame = rest[0];
+  expect(frame?.type).toBe("message");
+  if (frame?.type === "message") expect(frame.message.text).toBe("racing");
+});
+
 test("closing a connection removes the subscriber", async () => {
   const { chatHub } = await setup();
   const socket = fakeSocket();
