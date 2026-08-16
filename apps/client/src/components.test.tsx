@@ -114,6 +114,26 @@ test("TabBar marks the current item with aria-current and selects on click", () 
 
   fireEvent.click(screen.getByRole("button", { name: "Act" }));
   expect(onSelect).toHaveBeenCalledWith("act");
+
+  // No-badge call sites (like the lobby tabs) render no dot.
+  expect(
+    screen.getByRole("button", { name: "Village" }).querySelector(".tabbar__badge"),
+  ).toBeNull();
+});
+
+test("TabBar renders a badge dot only for items that ask for one", () => {
+  const items = [
+    { id: "village", label: "Village", icon: Users },
+    { id: "talk", label: "Talk", icon: MessageCircle, badge: true },
+    { id: "act", label: "Act", icon: Moon },
+  ];
+  render(<TabBar current="village" items={items} onSelect={vi.fn()} />);
+
+  const badge = (name: string) =>
+    screen.getByRole("button", { name }).querySelector(".tabbar__badge");
+  expect(badge("Talk")).not.toBeNull();
+  expect(badge("Village")).toBeNull();
+  expect(badge("Act")).toBeNull();
 });
 
 test("Segmented reads like a radio group and reports its value", () => {

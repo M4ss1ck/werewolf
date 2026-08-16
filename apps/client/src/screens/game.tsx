@@ -7,9 +7,9 @@ import { api } from "../api/client.ts";
 import { LiveGameConnection, type LiveStatus } from "../api/live.ts";
 import { Chip, PhaseHeader, TabBar } from "../components.tsx";
 import { Act } from "./act.tsx";
-import { Me } from "./me.tsx";
+import { INTEL_KINDS, Me } from "./me.tsx";
 import { Talk } from "./talk.tsx";
-import { VillageTab } from "./village.tsx";
+import { TIMELINE_KINDS, VillageTab } from "./village.tsx";
 
 const TABS = [
   { id: "village", labelKey: "village", icon: Users },
@@ -18,6 +18,11 @@ const TABS = [
   { id: "me", labelKey: "me", icon: IdCard },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
+type EventTabId = "village" | "talk" | "me";
+
+function maxEventId(events: GameEvent[]): number {
+  return events.reduce((max, event) => Math.max(max, event.id), 0);
+}
 
 /** Design 06–09 · the in-game shell: phase header, four tabs, live wiring. */
 export function GameScreen({
@@ -32,6 +37,25 @@ export function GameScreen({
   const [events, setEvents] = useState<GameEvent[]>([]);
   const [status, setStatus] = useState<LiveStatus>("connected");
   const [tab, setTab] = useState<TabId>("village");
+  // The newest event id each event tab has been shown. Null until the first
+  // batch arrives, because that batch is the mount-time sync and backfill is
+  // not "new" activity.
+  const [lastSeen, setLastSeen] = useState<Record<EventTabId, number> | null>(null);
+  useEffect(() => {
+    const maxId = maxEventId(events);
+    setLastSeen((current) => {
+      if (current === null) {
+        if (events.length === 0) return current;
+        return { village: maxId, talk: maxId, me: maxId };
+      }
+      // Events landing on the open tab are seen as they land; opening a tab
+      // marks its backlog seen.
+      if (tab === "village" && maxId > current.village) return { ...current, village: maxId };
+      if (tab === "talk" && maxId > current.talk) return { ...current, talk: maxId };
+      if (tab === "me" && maxId > current.me) return { ...current, me: maxId };
+      return current;
+    });
+  }, [events, tab]);
   useEffect(() => {
     if (replay) {
       void api.getReplay(initial.game.id).then((result) => {
@@ -71,6 +95,39 @@ export function GameScreen({
   const send = (command: Omit<GameplayCommand, "commandId">) => {
     void api.postCommand(snapshot.game.id, command).catch(() => undefined);
   };
+  // The Act tab is a call to action, not an event badge: alive and not yet
+  // registered as having acted this phase, with an action on offer at night.
+  const me = snapshot.me;
+  const phase = snapshot.game.phase;
+  let actPending = false;
+  if (me?.status === "alive" && phase?.type === "voting") {
+    actPending = me.currentIntent?.vote === undefined;
+  } else if (me?.status === "alive" && phase?.type === "night") {
+    actPending =
+      snapshot.availableActions.length > 0 &&
+      Object.keys(me.currentIntent?.actions ?? {}).length === 0;
+  }
+  const badges: Record<TabId, boolean> = {
+    village:
+      tab !== "village" &&
+      lastSeen !== null &&
+      events.some(
+        (event) =>
+          event.id > lastSeen.village && (TIMELINE_KINDS as readonly string[]).includes(event.kind),
+      ),
+    talk:
+      tab !== "talk" &&
+      lastSeen !== null &&
+      events.some((event) => event.id > lastSeen.talk && event.kind === "chat.message"),
+    act: tab !== "act" && actPending,
+    me:
+      tab !== "me" &&
+      lastSeen !== null &&
+      events.some(
+        (event) =>
+          event.id > lastSeen.me && (INTEL_KINDS as readonly string[]).includes(event.kind),
+      ),
+  };
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="screen__scroll global-chat-scrollbar flex flex-col gap-5 px-[18px] pb-5 pt-6">
@@ -91,6 +148,7 @@ export function GameScreen({
           id: item.id,
           label: t(`ui.tabs.${item.labelKey}`),
           icon: item.icon,
+          badge: badges[item.id],
         }))}
         onSelect={(id) => setTab(id as TabId)}
       />

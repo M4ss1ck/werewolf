@@ -435,6 +435,22 @@ body {
   flex-shrink: 0;
 }
 
+.tabbar__glyph-wrap {
+  position: relative;
+  display: flex;
+}
+
+.tabbar__badge {
+  position: absolute;
+  top: -2px;
+  right: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background-color: var(--color-blood);
+  box-shadow: 0 0 6px rgba(179, 58, 54, 0.8);
+}
+
 .tabbar__item--active .tabbar__glyph {
   color: var(--color-blood);
 }

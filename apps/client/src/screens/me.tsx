@@ -3,6 +3,13 @@ import { useTranslation } from "react-i18next";
 
 import { Avatar } from "../components.tsx";
 
+export const INTEL_KINDS = [
+  "role.assigned",
+  "seer.result",
+  "cursed.converted",
+  "harlot.result",
+] as const;
+
 export function Me({
   snapshot,
   events,
@@ -16,9 +23,7 @@ export function Me({
   const { t } = useTranslation();
   const role = snapshot.me?.role;
   const names = new Map(snapshot.players.map((player) => [player.userId, player.displayName]));
-  const intel = events.filter((event) =>
-    ["role.assigned", "seer.result", "cursed.converted", "harlot.result"].includes(event.kind),
-  );
+  const intel = events.filter((event) => (INTEL_KINDS as readonly string[]).includes(event.kind));
   const alive = snapshot.players.filter((player) => player.status === "alive").length;
   const text = (event: GameEvent) => {
     switch (event.kind) {

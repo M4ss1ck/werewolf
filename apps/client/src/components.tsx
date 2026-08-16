@@ -360,13 +360,13 @@ export function TabBar({
   current,
   onSelect,
 }: {
-  items: { id: string; label: string; icon: LucideIcon }[];
+  items: { id: string; label: string; icon: LucideIcon; badge?: boolean }[];
   current: string;
   onSelect: (id: string) => void;
 }) {
   return (
     <nav className="tabbar">
-      {items.map(({ id, label, icon: Icon }) => (
+      {items.map(({ id, label, icon: Icon, badge }) => (
         <button
           aria-current={id === current ? "page" : undefined}
           className={`tabbar__item${id === current ? " tabbar__item--active" : ""}`}
@@ -374,7 +374,10 @@ export function TabBar({
           onClick={() => onSelect(id)}
           type="button"
         >
-          <Icon aria-hidden="true" className="tabbar__glyph" size={18} strokeWidth={2} />
+          <span className="tabbar__glyph-wrap">
+            <Icon aria-hidden="true" className="tabbar__glyph" size={18} strokeWidth={2} />
+            {badge && <span aria-hidden="true" className="tabbar__badge" />}
+          </span>
           {label}
         </button>
       ))}

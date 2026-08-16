@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { Avatar } from "../components.tsx";
 
-const TIMELINE_KINDS = [
+export const TIMELINE_KINDS = [
   "player.eliminated",
   "vote.resolved",
   "night.resolved",

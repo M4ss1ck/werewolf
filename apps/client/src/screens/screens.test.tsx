@@ -12,6 +12,7 @@ import type {
   ActionId,
   ChatChannel,
   EventId,
+  GameEvent,
   GameId,
   PhaseId,
   PublicGameSummary,
@@ -26,6 +27,7 @@ import { ErrorMessage } from "../components.tsx";
 import { i18n } from "../i18n/i18n.ts";
 import { Act } from "./act.tsx";
 import { CreateGameScreen } from "./create-game.tsx";
+import { GameScreen } from "./game.tsx";
 import { GamesScreen } from "./games.tsx";
 import { LobbyScreen } from "./lobby.tsx";
 import { ProfileScreen } from "./profile.tsx";
@@ -45,7 +47,10 @@ const { MockLiveGameConnection } = vi.hoisted(() => {
     constructor(
       readonly gameId: string,
       readonly cursor: EventId,
-      readonly handlers: { onSnapshot?: (snapshot: ViewerGameSnapshot) => void },
+      readonly handlers: {
+        onSnapshot?: (snapshot: ViewerGameSnapshot) => void;
+        onEvent?: (event: GameEvent) => void;
+      },
     ) {
       MockLiveGameConnection.instances.push(this);
     }
@@ -623,6 +628,103 @@ test("lobby: opens a live connection that delivers pushed snapshots to onUpdate"
   // the socket.
   unmount();
   expect(connection!.close).toHaveBeenCalledTimes(1);
+});
+
+test("game: a chat message after the sync badges Talk until it is opened", () => {
+  const snapshot = makeGameSnapshot({
+    game: { phase: { id: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 } },
+  });
+  renderWithI18n(<GameScreen initial={snapshot} />);
+  const connection = MockLiveGameConnection.instances[0];
+  expect(connection).toBeDefined();
+
+  const chat = (id: number): GameEvent => ({
+    id: id as EventId,
+    kind: "chat.message",
+    scope: "public",
+    createdAt: id,
+    payload: { channel: "public", text: "hello" },
+  });
+
+  // The mount-time sync frame backfills history; backlog is not "new".
+  reactAct(() =>
+    connection!.handlers.onEvent?.({
+      id: 1 as EventId,
+      kind: "phase.started",
+      scope: "public",
+      createdAt: 1,
+      payload: { phaseId: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 },
+    }),
+  );
+  // A message arriving after the sync is unseen until the tab is opened.
+  reactAct(() => connection!.handlers.onEvent?.(chat(2)));
+
+  const badge = (name: string) =>
+    screen.getByRole("button", { name }).querySelector(".tabbar__badge");
+  expect(badge("Talk")).not.toBeNull();
+  expect(badge("Village")).toBeNull();
+  expect(badge("Me")).toBeNull();
+
+  fireEvent.click(screen.getByRole("button", { name: "Talk" }));
+  expect(badge("Talk")).toBeNull();
+});
+
+test("game: the Act tab badges while the viewer has no registered vote", () => {
+  const snapshot = makeGameSnapshot({
+    game: { phase: { id: 7 as PhaseId, type: "voting", startedAt: 1000, endsAt: 10_000 } },
+  });
+  const first = renderWithI18n(<GameScreen initial={snapshot} />);
+  expect(
+    screen.getByRole("button", { name: "Act" }).querySelector(".tabbar__badge"),
+  ).not.toBeNull();
+  first.unmount();
+
+  // Once a vote is registered in the snapshot the call-to-action is gone.
+  renderWithI18n(
+    <GameScreen
+      initial={makeGameSnapshot({
+        game: { phase: { id: 7 as PhaseId, type: "voting", startedAt: 1000, endsAt: 10_000 } },
+        me: {
+          userId: "wren" as UserId,
+          status: "alive",
+          role: "villager",
+          currentIntent: { vote: { type: "player", targetId: "mattias" as UserId } },
+        },
+      })}
+    />,
+  );
+  expect(screen.getByRole("button", { name: "Act" }).querySelector(".tabbar__badge")).toBeNull();
+});
+
+test("game: the first event batch is the mount sync and never badges", () => {
+  const snapshot = makeGameSnapshot({
+    game: { phase: { id: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 } },
+  });
+  renderWithI18n(<GameScreen initial={snapshot} />);
+  const connection = MockLiveGameConnection.instances[0];
+  expect(connection).toBeDefined();
+
+  const chat = (id: number): GameEvent => ({
+    id: id as EventId,
+    kind: "chat.message",
+    scope: "public",
+    createdAt: id,
+    payload: { channel: "public", text: "hello" },
+  });
+
+  // The first batch is the mount-time sync: it backfills history, so it must
+  // not badge anything even though these are chat messages.
+  reactAct(() => {
+    connection!.handlers.onEvent?.(chat(1));
+    connection!.handlers.onEvent?.(chat(2));
+  });
+  expect(screen.getByRole("button", { name: "Talk" }).querySelector(".tabbar__badge")).toBeNull();
+
+  // A later message is unseen until the Talk tab is opened.
+  reactAct(() => connection!.handlers.onEvent?.(chat(3)));
+  expect(
+    screen.getByRole("button", { name: "Talk" }).querySelector(".tabbar__badge"),
+  ).not.toBeNull();
 });
 
 test("action controls render from availableActions; none offered renders none even for a seer", () => {
