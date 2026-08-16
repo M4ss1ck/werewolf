@@ -30,7 +30,7 @@ export function GlobalChatScreen({
         <p className="flex-1 px-[18px] text-sm text-fog">{t("ui.globalChatEmpty")}</p>
       ) : (
         <Virtuoso
-          className="flex-1"
+          className="global-chat-scrollbar flex-1"
           data={state.messages}
           firstItemIndex={state.firstItemIndex}
           followOutput={(isAtBottom) => (isAtBottom ? "smooth" : false)}
