@@ -1,5 +1,13 @@
 import type { GameState, PlayerState, StoredPhaseState } from "@werewolf/game-engine";
-import type { EventId, FactionId, GameEvent, GameId, RoleId, UserId } from "@werewolf/protocol";
+import type {
+  EventId,
+  FactionId,
+  GameEvent,
+  GameId,
+  PlayerController,
+  RoleId,
+  UserId,
+} from "@werewolf/protocol";
 import type { EventRow, GameRow, PlayerRow } from "./schema.ts";
 
 function json<T>(value: string): T {
@@ -18,6 +26,7 @@ export function mapPlayer(row: PlayerRow): PlayerState {
     phaseState: json<StoredPhaseState>(row.phaseStateJson),
   } as PlayerState;
   if (row.wolfSinceEventId !== null) result.wolfSinceEventId = row.wolfSinceEventId as EventId;
+  if (row.controllerJson !== null) result.controller = json<PlayerController>(row.controllerJson);
   return result;
 }
 

@@ -20,6 +20,7 @@ function viewerPlayer(player: PlayerState, finished: boolean): ViewerPlayer {
     displayName: player.displayName ?? player.id,
     status: player.status,
     ...((player.status === "dead" || finished) && player.role ? { revealedRole: player.role } : {}),
+    ...(player.controller?.type === "bot" ? { isBot: true } : {}),
   };
 }
 

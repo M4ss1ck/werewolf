@@ -53,6 +53,9 @@ export const gamePlayers = sqliteTable(
     roleStateJson: text("role_state_json").notNull().default("{}"),
     phaseStateJson: text("phase_state_json").notNull().default("{}"),
     wolfSinceEventId: integer("wolf_since_event_id"),
+    // Null on a human seat. A bot seat stores its serialized PlayerController;
+    // provider credentials live in the environment and never land here.
+    controllerJson: text("controller_json"),
   },
   (table) => [
     primaryKey({ columns: [table.gameId, table.userId] }),

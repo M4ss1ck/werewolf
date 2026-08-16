@@ -8,6 +8,7 @@ import type {
   GamePhase,
   GameStatus,
   PhaseId,
+  PlayerController,
   RoleId,
   UserId,
   VictoryReason,
@@ -38,6 +39,9 @@ export interface PlayerState {
   roleState: unknown;
   phaseState: StoredPhaseState;
   wolfSinceEventId?: EventId;
+  /** Absent on a human seat. A bot seat carries the config its controller
+   * decides with; the engine itself never reads it. */
+  controller?: PlayerController;
 }
 
 export interface VictoryResult {

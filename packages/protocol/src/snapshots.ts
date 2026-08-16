@@ -46,6 +46,9 @@ export interface ViewerPlayer {
   status: GamePlayerStatus;
   /** Present only for dead players, whose current role is public. */
   revealedRole?: RoleId;
+  /** Whether the seat is driven by a bot. Which provider and model drive it
+   * is server-side detail and deliberately absent. */
+  isBot?: boolean;
 }
 
 /** The viewer's own pending intent for the current phase, as stored on the
@@ -105,6 +108,7 @@ export const ViewerPlayerSchema = z.object({
   displayName: z.string(),
   status: GamePlayerStatusSchema,
   revealedRole: RoleIdSchema.optional(),
+  isBot: z.boolean().optional(),
 });
 
 export const ViewerIntentSchema = z.object({

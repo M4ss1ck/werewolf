@@ -1,5 +1,5 @@
 import type { DomainTransition, PlayerPatch } from "@werewolf/game-engine";
-import type { EventId, GameId, UserId } from "@werewolf/protocol";
+import type { EventId, GameId, PlayerController, UserId } from "@werewolf/protocol";
 import { and, asc, eq, gt, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import type { Db } from "./client.ts";
 import { mapEvent, mapGame } from "./mapper.ts";
@@ -27,6 +27,7 @@ export type AddPlayerInput = {
   originalRole?: string | null;
   role?: string | null;
   faction?: string | null;
+  controller?: PlayerController;
 };
 export type CommitResult =
   | { ok: true; events: ReturnType<typeof mapEvent>[]; version: number }
@@ -166,6 +167,7 @@ export class GameRepository {
       originalRole: input.originalRole,
       role: input.role,
       faction: input.faction,
+      controllerJson: input.controller ? JSON.stringify(input.controller) : null,
     });
   }
   async removePlayer(gameId: GameId, userId: UserId) {

@@ -11,6 +11,7 @@ export * from "./composer/compose.ts";
 export * from "./composer/constraints.ts";
 export * from "./projection/available-actions.ts";
 export * from "./projection/events.ts";
+export * from "./projection/legal-commands.ts";
 export * from "./projection/permissions.ts";
 export * from "./projection/snapshot.ts";
 export * from "./resolution/night.ts";

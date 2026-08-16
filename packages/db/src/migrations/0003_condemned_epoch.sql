@@ -1,0 +1,1 @@
+ALTER TABLE `game_players` ADD `controller_json` text;
