@@ -12,7 +12,7 @@ import { useTranslation } from "react-i18next";
 
 import { Avatar } from "../components.tsx";
 
-type Send = (command: Omit<GameplayCommand, "commandId">) => void;
+type Send = (command: Omit<GameplayCommand, "commandId">) => Promise<void>;
 
 type VotePick = { type: "player"; targetId: UserId } | { type: "abstain" };
 
@@ -161,14 +161,17 @@ function VotingBranch({
             className="btn btn--primary w-full"
             disabled={unchanged}
             onClick={() => {
+              // The error already renders above; the catch only prevents an unhandled rejection.
               if (shown.type === "abstain") {
-                send({ type: "vote.abstain", phaseId: phase.id, payload: {} });
+                void send({ type: "vote.abstain", phaseId: phase.id, payload: {} }).catch(
+                  () => undefined,
+                );
               } else {
-                send({
+                void send({
                   type: "vote.set",
                   phaseId: phase.id,
                   payload: { targetId: shown.targetId },
-                });
+                }).catch(() => undefined);
               }
             }}
             type="button"
@@ -235,11 +238,11 @@ function NightBranch({
       return {
         label: t(`actions.${activeAction.id}.label`),
         send: () =>
-          send({
+          void send({
             type: "night.action.set",
             phaseId: phase.id,
             payload: { action: activeAction.id },
-          } as Omit<GameplayCommand, "commandId">),
+          } as Omit<GameplayCommand, "commandId">).catch(() => undefined),
       };
     }
     const targetId = activeEntry.targetId;
@@ -247,11 +250,11 @@ function NightBranch({
     return {
       label: names.get(targetId) ?? targetId,
       send: () =>
-        send({
+        void send({
           type: "night.action.set",
           phaseId: phase.id,
           payload: { action: activeAction.id, targetId },
-        } as Omit<GameplayCommand, "commandId">),
+        } as Omit<GameplayCommand, "commandId">).catch(() => undefined),
     };
   })();
   if (actions.length === 0) {

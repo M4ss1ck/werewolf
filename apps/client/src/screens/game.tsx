@@ -1,11 +1,17 @@
-import type { EventId, GameEvent, GameplayCommand, ViewerGameSnapshot } from "@werewolf/protocol";
+import type {
+  EventId,
+  GameEvent,
+  GameplayCommand,
+  PhaseId,
+  ViewerGameSnapshot,
+} from "@werewolf/protocol";
 import { IdCard, MessageCircle, Moon, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client.ts";
 import { LiveGameConnection, type LiveStatus } from "../api/live.ts";
-import { Chip, PhaseHeader, TabBar } from "../components.tsx";
+import { Chip, ErrorMessage, PhaseHeader, TabBar } from "../components.tsx";
 import { Act } from "./act.tsx";
 import { INTEL_KINDS, Me } from "./me.tsx";
 import { Talk } from "./talk.tsx";
@@ -37,6 +43,10 @@ export function GameScreen({
   const [events, setEvents] = useState<GameEvent[]>([]);
   const [status, setStatus] = useState<LiveStatus>("connected");
   const [tab, setTab] = useState<TabId>("village");
+  const [commandError, setCommandError] = useState<{
+    phaseId: PhaseId | undefined;
+    error: unknown;
+  }>();
   // The newest event id each event tab has been shown. Null until the first
   // batch arrives, because that batch is the mount-time sync and backfill is
   // not "new" activity.
@@ -92,9 +102,18 @@ export function GameScreen({
         if (permission === "granted") show();
       });
   }, [snapshot.game.phase?.id, snapshot.game.phase?.type, t]);
-  const send = (command: Omit<GameplayCommand, "commandId">) => {
-    void api.postCommand(snapshot.game.id, command).catch(() => undefined);
-  };
+  const send = (command: Omit<GameplayCommand, "commandId">) =>
+    api
+      .postCommand(snapshot.game.id, command)
+      .then(() => setCommandError(undefined))
+      .catch((caught: unknown) => {
+        setCommandError({ phaseId: snapshot.game.phase?.id, error: caught });
+        throw caught;
+      });
+  // A stale command failure (e.g. PHASE_CLOSED from a deadline race) is
+  // meaningless once the phase has moved on; only show it for its own phase.
+  const shownCommandError =
+    commandError?.phaseId === snapshot.game.phase?.id ? commandError?.error : undefined;
   // The Act tab is a call to action, not an event badge: alive and not yet
   // registered as having acted this phase, with an action on offer at night.
   const me = snapshot.me;
@@ -136,6 +155,7 @@ export function GameScreen({
             <Chip tone="running">{t("ui.reconnecting")}</Chip>
           </p>
         )}
+        <ErrorMessage error={shownCommandError} />
         <PhaseHeader snapshot={snapshot} />
         {tab === "village" && <VillageTab events={events} snapshot={snapshot} />}
         {tab === "talk" && <Talk events={events} send={send} snapshot={snapshot} />}

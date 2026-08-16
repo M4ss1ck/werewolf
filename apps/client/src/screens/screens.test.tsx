@@ -334,7 +334,8 @@ test("profile: cancels the username edit", async () => {
 });
 
 test("voting sends vote.set on lock", () => {
-  const send = vi.fn();
+  // Send must return a promise: the lock handler swallows rejections on it.
+  const send = vi.fn(() => Promise.resolve());
   const snapshot = makeGameSnapshot({
     game: { phase: { id: 7 as PhaseId, type: "voting", startedAt: 1000, endsAt: 10_000 } },
     voteTallies: [{ targetId: "odile" as UserId, count: 1 }],
@@ -727,6 +728,22 @@ test("game: the first event batch is the mount sync and never badges", () => {
   ).not.toBeNull();
 });
 
+test("game: a rejected command renders the error and keeps the typed text", async () => {
+  vi.spyOn(api, "postCommand").mockRejectedValue({ code: "PHASE_CLOSED" });
+  const snapshot = makeGameSnapshot({
+    game: { phase: { id: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 } },
+  });
+  renderWithI18n(<GameScreen initial={snapshot} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Talk" }));
+  const input = screen.getByLabelText(/Message/);
+  fireEvent.change(input, { target: { value: "the deadline raced" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+  expect(await screen.findByText("That phase has already ended.")).toBeInTheDocument();
+  expect(input).toHaveValue("the deadline raced");
+});
+
 test("action controls render from availableActions; none offered renders none even for a seer", () => {
   // The viewer's own role is seer, but the server offered no actions: nothing
   // renders. The client renders the server's action model, never its own
@@ -734,7 +751,7 @@ test("action controls render from availableActions; none offered renders none ev
   const noActions = renderWithI18n(
     <Act
       events={[]}
-      send={() => undefined}
+      send={() => Promise.resolve()}
       snapshot={makeGameSnapshot({
         game: {
           phase: { id: 2 as PhaseId, type: "night", startedAt: 1000, endsAt: 10_000 },
@@ -752,7 +769,7 @@ test("action controls render from availableActions; none offered renders none ev
   renderWithI18n(
     <Act
       events={[]}
-      send={() => undefined}
+      send={() => Promise.resolve()}
       snapshot={makeGameSnapshot({
         game: {
           phase: { id: 2 as PhaseId, type: "night", startedAt: 1000, endsAt: 10_000 },
@@ -776,7 +793,7 @@ test("the wolf chat tab appears only when the snapshot lists that channel", () =
   const withWolfChat = renderWithI18n(
     <Talk
       events={[]}
-      send={() => undefined}
+      send={() => Promise.resolve()}
       snapshot={makeGameSnapshot({
         game: {
           phase: { id: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 },
@@ -792,7 +809,7 @@ test("the wolf chat tab appears only when the snapshot lists that channel", () =
   renderWithI18n(
     <Talk
       events={[]}
-      send={() => undefined}
+      send={() => Promise.resolve()}
       snapshot={makeGameSnapshot({
         game: {
           phase: { id: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 },
@@ -809,7 +826,7 @@ test("a dead player's revealed role shows in the list; living players show none"
   renderWithI18n(
     <Act
       events={[]}
-      send={() => undefined}
+      send={() => Promise.resolve()}
       snapshot={makeGameSnapshot({
         game: {
           phase: { id: 7 as PhaseId, type: "voting", startedAt: 1000, endsAt: 10_000 },

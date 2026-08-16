@@ -9,7 +9,7 @@ import { useTranslation } from "react-i18next";
 
 import { ChatBubble, ChatComposer, Chip, DividerNote } from "../components.tsx";
 
-type Send = (command: Omit<GameplayCommand, "commandId">) => void;
+type Send = (command: Omit<GameplayCommand, "commandId">) => Promise<void>;
 
 /** Design 06 · the Talk tab: channel chips, the message list, the composer. */
 export function Talk({
@@ -100,7 +100,7 @@ export function Talk({
         onSend={(text) => {
           const phase = snapshot.game.phase;
           if (phase === null) return;
-          send({ type: "chat.send", phaseId: phase.id, payload: { channel, text } });
+          return send({ type: "chat.send", phaseId: phase.id, payload: { channel, text } });
         }}
         placeholder={t("ui.messagePlaceholder")}
         sendLabel={t("ui.sendMessage")}
