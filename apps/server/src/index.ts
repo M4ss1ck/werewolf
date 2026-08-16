@@ -37,7 +37,7 @@ const chatHub = new GlobalChatHub(chatRepository);
 // path never awaits, and phases end on the scheduler's clock, so a slow or
 // dead provider costs a bot its turn and nothing else.
 const botConfig = loadBotConfig();
-const botRoster = loadBotRoster(botConfig.BOT_ROSTER_PATH);
+const botRoster = loadBotRoster(botConfig.BOT_ROSTER_PATH, consoleBotLogger);
 const botCatalog = new ModelCatalog({
   baseUrl: botConfig.BOT_AI_BASE_URL,
   apiKey: botConfig.BOT_AI_API_KEY,

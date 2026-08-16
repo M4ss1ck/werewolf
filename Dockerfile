@@ -30,6 +30,8 @@ ENV PORT=3000
 
 COPY --from=deps /app/node_modules node_modules
 COPY package.json bun.lock tsconfig.base.json ./
+# The bot roster is resolved relative to the repo root, so it must ship too.
+COPY bots.json ./
 COPY apps/client/package.json apps/client/
 COPY packages packages
 COPY apps/server apps/server

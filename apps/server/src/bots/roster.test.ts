@@ -2,8 +2,16 @@
 // startup rather than quietly seating a bot that can never think.
 
 import { describe, expect, test } from "bun:test";
+import { isAbsolute } from "node:path";
 import { ModelCatalog } from "./model-catalog.ts";
-import { describeRoster, parseBotRoster, RANDOM_BOT, toSeatConfig } from "./roster.ts";
+import {
+  describeRoster,
+  loadBotRoster,
+  parseBotRoster,
+  RANDOM_BOT,
+  resolveRosterPath,
+  toSeatConfig,
+} from "./roster.ts";
 
 const entry = (overrides: Record<string, unknown> = {}) => ({
   id: "mira",
@@ -60,6 +68,35 @@ describe("roster parsing", () => {
       timeoutMs: 15_000,
       personality: "terse",
     });
+  });
+});
+
+describe("roster path resolution", () => {
+  // The dev server runs with cwd apps/server and the production image with cwd
+  // /app, so a cwd-relative roster silently missed in one of them and the
+  // lobby showed only the built-in bot.
+  test("anchors a relative path to the repository root, not the working directory", () => {
+    const resolved = resolveRosterPath("./bots.json");
+    expect(isAbsolute(resolved)).toBe(true);
+    expect(resolved.endsWith("/bots.json")).toBe(true);
+    expect(resolved).not.toContain("/apps/server/");
+  });
+
+  test("leaves an absolute path alone", () => {
+    expect(resolveRosterPath("/etc/werewolf/bots.json")).toBe("/etc/werewolf/bots.json");
+  });
+
+  test("the shipped roster loads and offers more than the built-in bot", () => {
+    const roster = loadBotRoster("./bots.json");
+    expect(roster.length).toBeGreaterThan(1);
+    expect(roster.map((entry) => entry.id)).toContain("random");
+  });
+
+  test("a missing roster is reported rather than passed off as a roster of one", () => {
+    const events: string[] = [];
+    const roster = loadBotRoster("./no-such-roster.json", (event) => events.push(event));
+    expect(roster).toEqual([RANDOM_BOT]);
+    expect(events).toContain("roster_missing");
   });
 });
 

@@ -47,9 +47,9 @@ await catalog.probe();
 
 // Seat from the roster, skipping entries whose model this deployment cannot
 // reach, and topping up with the free random bot when the roster runs short.
-const roster = loadBotRoster(config.BOT_ROSTER_PATH).filter(
-  (entry) => entry.model === null || (catalog.configured && catalog.has(entry.model)),
-);
+const roster = loadBotRoster(config.BOT_ROSTER_PATH, (event, fields) =>
+  console.log(event, fields),
+).filter((entry) => entry.model === null || (catalog.configured && catalog.has(entry.model)));
 const seats = Array.from({ length: players }, (_, index) => {
   const entry = roster[index % Math.max(1, roster.length)] ?? RANDOM_BOT;
   const chosen = flag("random") ? RANDOM_BOT : entry;

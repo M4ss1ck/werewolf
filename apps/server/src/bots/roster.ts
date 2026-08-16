@@ -7,8 +7,11 @@
 // temperature and personality, without any of it being a global default.
 
 import { readFileSync } from "node:fs";
+import { isAbsolute, resolve } from "node:path";
 import type { BotConfig, BotRosterEntry } from "@werewolf/protocol";
 import { z } from "zod";
+import type { BotLogger } from "./log.ts";
+import { silentBotLogger } from "./log.ts";
 
 export const BotRosterDefinitionSchema = z.object({
   id: z.string().min(1).max(40),
@@ -52,23 +55,43 @@ export function parseBotRoster(source: unknown): BotRosterDefinition[] {
   return [RANDOM_BOT, ...parsed.data];
 }
 
-/** Reads the roster file. A missing file is not an error — it just means the
- * deployment offers only the built-in random bot — but a malformed one is,
- * and it fails at startup rather than at the first lobby. */
-export function loadBotRoster(path: string): BotRosterDefinition[] {
+// The repository root, from this module's own location rather than the working
+// directory. `bun run dev:server` runs with cwd apps/server while the
+// production image runs with cwd /app, so a cwd-relative roster path resolves
+// to two different places and silently misses in one of them.
+const REPO_ROOT = new URL("../../../../", import.meta.url).pathname;
+
+/** Where a configured roster path actually points. Absolute paths are used as
+ * given; a relative one is anchored to the repository root. */
+export function resolveRosterPath(path: string): string {
+  return isAbsolute(path) ? path : resolve(REPO_ROOT, path);
+}
+
+/** Reads the roster file. A missing file is not fatal — the deployment then
+ * offers only the built-in random bot — but it is always reported, because a
+ * roster that quietly failed to load looks exactly like a roster of one. A
+ * malformed file is fatal, and fails at startup rather than at the first lobby. */
+export function loadBotRoster(
+  path: string,
+  log: BotLogger = silentBotLogger,
+): BotRosterDefinition[] {
+  const resolved = resolveRosterPath(path);
   let text: string;
   try {
-    text = readFileSync(path, "utf8");
+    text = readFileSync(resolved, "utf8");
   } catch {
+    log("roster_missing", { path, resolved });
     return [RANDOM_BOT];
   }
   let source: unknown;
   try {
     source = JSON.parse(text);
   } catch (error) {
-    throw new Error(`Bot roster at ${path} is not valid JSON: ${String(error)}`);
+    throw new Error(`Bot roster at ${resolved} is not valid JSON: ${String(error)}`);
   }
-  return parseBotRoster(source);
+  const roster = parseBotRoster(source);
+  log("roster_loaded", { resolved, count: roster.length });
+  return roster;
 }
 
 /** Narrow view of the model catalog, so the roster does not depend on how
