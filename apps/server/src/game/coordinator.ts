@@ -9,14 +9,17 @@ import {
   resolveScheduledGame,
 } from "@werewolf/game-engine";
 import type {
+  BotConfig,
   GameId,
   GamePhase,
   GameplayCommand,
   GameStatus,
   GameVisibility,
+  PlayerController,
   PublicGameSummary,
   UserId,
 } from "@werewolf/protocol";
+import { pickBotName } from "../bots/names.ts";
 import { type GameLock, gameLocks } from "./locks.ts";
 
 export class CoordinatorError extends Error {
@@ -68,6 +71,10 @@ export class GameCoordinator {
     visibility: string;
     settings: unknown;
     scheduledAt?: number | undefined;
+    /** Lets the host seat itself be a bot, so a fully unattended match is a
+     * real all-bot game rather than one idle human. Only the bot match script
+     * and its tests pass this; the HTTP route never does. */
+    ownerController?: PlayerController | undefined;
   }) {
     const id = crypto.randomUUID() as GameId;
     // A start time in the past is not a schedule: fall through to a plain lobby
@@ -90,6 +97,7 @@ export class GameCoordinator {
       userId: input.ownerUserId,
       displayName: input.displayName,
       joinedAt: this.now(),
+      ...(input.ownerController ? { controller: input.ownerController } : {}),
     });
     // Creation is a state change like any other: tell the hooks so the scheduler
     // can arm this game's timer. No events yet, and no subscribers either.
@@ -126,6 +134,43 @@ export class GameCoordinator {
           joinedAt: this.now(),
         });
       return this.snapshot(gameId, userId);
+    });
+  }
+  /** Seat one or more bots. A bot seat is an ordinary lobby player carrying a
+   * controller, so joining, kicking, role assignment and elimination all work
+   * on it unchanged; only who decides for it differs. Bot user ids are
+   * namespaced so they can never collide with a Better Auth user id. */
+  async addBots(
+    gameId: GameId,
+    owner: UserId,
+    input: { displayName?: string | undefined; count?: number | undefined; config: BotConfig },
+  ) {
+    return this.lock.run(gameId, async () => {
+      const game = await this.repository.getGame(gameId);
+      if (!game) throw new CoordinatorError("GAME_NOT_FOUND");
+      if (game.ownerUserId !== owner) throw new CoordinatorError("NOT_GAME_OWNER");
+      if (game.status !== "lobby" && game.status !== "scheduled")
+        throw new CoordinatorError("GAME_ALREADY_STARTED");
+      const players = await this.repository.getPlayers(gameId);
+      const taken = new Set(players.map((player) => player.displayName));
+      const count = input.count ?? 1;
+      for (let index = 0; index < count; index += 1) {
+        const displayName =
+          input.displayName === undefined
+            ? pickBotName(taken)
+            : count === 1
+              ? input.displayName
+              : `${input.displayName} ${index + 1}`;
+        await this.repository.addPlayer({
+          gameId,
+          userId: `bot:${crypto.randomUUID()}` as UserId,
+          displayName,
+          joinedAt: this.now(),
+          controller: { type: "bot", config: input.config },
+        });
+        taken.add(displayName);
+      }
+      return this.snapshot(gameId, owner);
     });
   }
   async leaveLobby(gameId: GameId, userId: UserId) {

@@ -3,6 +3,11 @@ import { websocket } from "hono/bun";
 import { createApp } from "./app.ts";
 import { createAuth, resolveAuthSession } from "./auth/auth.ts";
 import { createAuthTables } from "./auth/schema.ts";
+import { FallbackBotAgent, LlmBotAgent } from "./bots/agent.ts";
+import { loadBotConfig } from "./bots/config.ts";
+import { consoleBotLogger } from "./bots/log.ts";
+import { BotManager } from "./bots/manager.ts";
+import { OpenAiCompatibleProvider } from "./bots/provider-openai.ts";
 import { loadEnv } from "./env.ts";
 import { GameCoordinator } from "./game/coordinator.ts";
 import { PhaseScheduler } from "./game/scheduler.ts";
@@ -26,12 +31,34 @@ coordinator.onCommitted((gameId) => void scheduler.watch(gameId));
 const hub = new GameHub(coordinator);
 const chatRepository = new GlobalChatRepository(db);
 const chatHub = new GlobalChatHub(chatRepository);
+// Bot seats work with no provider configured: they fall back to picking a
+// random legal action, which is enough to exercise the engine end to end.
+const botConfig = loadBotConfig();
+const botAgent = botConfig.BOT_AI_API_KEY
+  ? new LlmBotAgent(
+      new OpenAiCompatibleProvider({
+        baseUrl: botConfig.BOT_AI_BASE_URL,
+        apiKey: botConfig.BOT_AI_API_KEY,
+        name: botConfig.BOT_AI_PROVIDER,
+      }),
+      botConfig,
+      consoleBotLogger,
+    )
+  : new FallbackBotAgent();
+if (!botConfig.BOT_AI_API_KEY)
+  console.log("BOT_AI_API_KEY is not set: bot seats will play random legal actions");
+const bots = new BotManager(coordinator, {
+  agent: botAgent,
+  config: botConfig,
+  logger: consoleBotLogger,
+});
 const app = createApp({
   db,
   repository,
   coordinator,
   gameHub: hub,
   globalChat: { repository: chatRepository, hub: chatHub },
+  bots: { config: botConfig },
   auth,
   sessionResolver: (request) => resolveAuthSession(auth, request),
 });
@@ -56,6 +83,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
       scheduler.stop();
       hub.stop();
       chatHub.stop();
+      bots.stop();
       client.close();
       process.exit(0);
     });

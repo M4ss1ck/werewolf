@@ -109,6 +109,47 @@ steps are idempotent, and the server also runs them on every boot
 database — `bun run db:migrate` is only needed when you want to migrate
 without starting the server.
 
+## Bots
+
+Any lobby seat can be driven by an LLM instead of a person. A bot is an
+ordinary player row carrying a `controller`, and it submits its moves through
+`coordinator.executeCommand` — the same call the HTTP command route makes for a
+human — so validation, the per-game lock, the version fence and command
+idempotency all apply to it unchanged. Bots are **not** WebSocket clients and
+have no privileged path into the engine.
+
+What the model sees is `projectSnapshot(state, botId)`, the same viewer
+projection a human in that seat would receive, plus that viewer's visible
+events. The omniscient `GameState` never reaches a prompt.
+
+**Adding bots.** The host presses *Add bot* in the lobby, or calls the endpoint
+directly:
+
+```bash
+curl -X POST /api/games/<id>/bots -d '{"count": 4}'
+```
+
+Host only, lobby or scheduled games only. Every field is optional
+(`displayName`, `count`, `config`), so an empty body seats one usable bot.
+
+**A whole match with no humans**, against a throwaway database:
+
+```bash
+bun run bots:match                 # 6 bots
+bun run bots:match -- --players 8 --chat
+```
+
+With no `BOT_AI_API_KEY` this costs nothing: bots pick a random legal action
+via the seeded RNG. That is the deliberate fallback for every failure — no key,
+provider timeout, network error, malformed JSON, schema mismatch, or an action
+the model was never offered. It is not a strategy engine and must not become
+one; the model is the brain.
+
+Configuration is environment-only and documented in `.env.example`
+(`BOT_AI_BASE_URL`, `BOT_AI_API_KEY`, `BOT_AI_MODEL`, and the delay, turn-budget
+and history limits). Any OpenAI-compatible endpoint works. Credentials are
+never written to a game row, never projected to a viewer and never logged.
+
 ## Package boundaries
 
 `scripts/check-boundaries.ts` enforces these mechanically, not by convention:
