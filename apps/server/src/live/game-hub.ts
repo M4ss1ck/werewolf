@@ -76,7 +76,6 @@ export class GameHub {
       events,
       cursor: latest,
     });
-    this.sendProgress(subscriber, state);
   }
 
   private async broadcast(gameId: GameId, events: unknown[]) {
@@ -86,25 +85,24 @@ export class GameHub {
     if (!state) return;
     for (const subscriber of subscribers) {
       if (!subscriber.subscribed) continue;
-      for (const event of events as GameEvent[]) {
-        if (event.id > subscriber.cursor && canViewEvent(event, subscriber.userId, state))
-          this.send(subscriber, { type: "event", event });
-      }
-      subscriber.cursor = Math.max(
-        subscriber.cursor,
-        ...(events as GameEvent[]).map((event) => event.id),
+      const committed = events as GameEvent[];
+      const visible = committed.filter(
+        (event) => event.id > subscriber.cursor && canViewEvent(event, subscriber.userId, state),
       );
-      this.sendProgress(subscriber, state);
+      // The cursor is a log position, not a delivery receipt: advance past ALL
+      // committed event ids, including ones this viewer cannot see. Guard the
+      // empty case explicitly, since Math.max(...[]) is -Infinity.
+      if (committed.length > 0)
+        subscriber.cursor = Math.max(subscriber.cursor, ...committed.map((event) => event.id));
+      // One sync frame per commit, even when nothing is visible: the fresh
+      // snapshot is what keeps the client's phaseId from going stale.
+      this.send(subscriber, {
+        type: "sync",
+        snapshot: projectSnapshot(state, subscriber.userId, subscriber.cursor, Date.now()),
+        events: visible,
+        cursor: subscriber.cursor as GameEvent["id"],
+      });
     }
-  }
-
-  private sendProgress(subscriber: Subscriber, state: Parameters<typeof projectSnapshot>[0]) {
-    const snapshot = projectSnapshot(state, subscriber.userId, subscriber.cursor, Date.now());
-    this.send(subscriber, {
-      type: "ephemeral",
-      kind: "phase.progress",
-      payload: snapshot.progress ?? { acted: 0, eligible: 0 },
-    });
   }
 
   private send(subscriber: Subscriber, frame: ServerFrame) {

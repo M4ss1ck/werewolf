@@ -83,20 +83,24 @@ test("a villager subscriber never receives a wolf chat event, while a wolf does"
     payload: { channel: "wolves", text: "kill the seer" },
   });
 
-  const wolfEventFrame = wolfSocket.frames.find(
-    (frame) => frame.type === "event" && frame.event.kind === "chat.message",
-  );
-  expect(wolfEventFrame).toBeDefined();
-  if (wolfEventFrame?.type === "event") {
-    expect(wolfEventFrame.event.payload).toMatchObject({
-      channel: "wolves",
-      text: "kill the seer",
-    });
-  }
+  // The wolf learns of the message in a pushed sync frame — the hub's only
+  // frame kind after a commit — not a dedicated event frame.
+  const wolfChat = wolfSocket.frames
+    .filter((frame) => frame.type === "sync")
+    .flatMap((frame) => frame.events)
+    .find((event) => event.kind === "chat.message");
+  expect(wolfChat).toBeDefined();
+  if (!wolfChat) return;
+  expect(wolfChat.payload).toMatchObject({ channel: "wolves", text: "kill the seer" });
 
-  // The villager received nothing at all: no event frame exists to discard,
-  // and the message text never crossed the wire for them.
-  expect(villagerSocket.frames.filter((frame) => frame.type === "event")).toHaveLength(0);
+  // The villager may receive sync frames (every commit pushes one), but none
+  // of their events may carry the wolves-channel message, and the text never
+  // crosses the wire for them.
+  const villagerChat = villagerSocket.frames
+    .filter((frame) => frame.type === "sync")
+    .flatMap((frame) => frame.events)
+    .find((event) => event.kind === "chat.message");
+  expect(villagerChat).toBeUndefined();
   expect(JSON.stringify(villagerSocket.frames)).not.toContain("kill the seer");
   hub.stop();
 });
@@ -144,10 +148,45 @@ test("a spectator receives public events only", async () => {
     type: "chat.send",
     payload: { channel: "wolves", text: "secret plan" },
   });
-  const pushed = socket.frames.filter((frame) => frame.type === "event");
-  expect(pushed.length).toBeGreaterThan(0);
-  for (const frame of pushed) expect(frame.type === "event" && frame.event.scope).toBe("public");
+  // Every pushed frame is a sync frame, and every event in them is public.
+  const pushed = socket.frames.filter((frame) => frame.type === "sync");
+  expect(pushed.length).toBeGreaterThan(1);
+  for (const frame of pushed) {
+    for (const event of frame.events) expect(event.scope).toBe("public");
+  }
   expect(JSON.stringify(socket.frames)).not.toContain("secret plan");
+  hub.stop();
+});
+
+test("a subscriber receives a fresh sync frame when the phase changes", async () => {
+  const { app, coordinator, repo, clock } = await setup();
+  const gameId = await startGameWithPlayers(app, USERS[0]!, [
+    USERS[1]!,
+    USERS[2]!,
+    USERS[3]!,
+    USERS[4]!,
+  ]);
+  const before = (await repo.loadGameState(gameId))!;
+
+  const hub = new GameHub(coordinator);
+  const socket = fakeSocket();
+  await subscribe(hub.connect(gameId, USERS[0]! as UserId, socket), 0);
+
+  // Drive the phase change the way the scheduler does (see scheduler.test.ts):
+  // let the discussion deadline pass, then resolve the expired phase.
+  clock.now += 3_600_000;
+  await coordinator.resolvePhase(gameId);
+
+  const after = (await repo.loadGameState(gameId))!;
+  expect(after.phase!.id as number).toBeGreaterThan(before.phase!.id as number);
+
+  const syncs = socket.frames.filter((frame) => frame.type === "sync");
+  const latest = syncs.at(-1);
+  expect(latest?.type).toBe("sync");
+  if (latest?.type !== "sync") return;
+  expect(latest.snapshot.game.phase?.id).toBe(after.phase!.id);
+  const kinds = latest.events.map((event) => event.kind);
+  expect(kinds).toContain("phase.started");
   hub.stop();
 });
 
