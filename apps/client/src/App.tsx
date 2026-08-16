@@ -180,7 +180,7 @@ function Shell() {
   return (
     <div className="app-shell">
       <div aria-hidden="true" className="app-shell__atmosphere" />
-      <main className="relative mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6">
+      <main className="relative mx-auto flex h-dvh w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6">
         <BackToGames />
         {snapshot ? (
           route.type === "replay" ? (
