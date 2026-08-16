@@ -67,6 +67,13 @@ function VotingBranch({
   const [picked, setPicked] = useState<{ phaseId: PhaseId; vote: VotePick } | null>(null);
   const pickedForPhase = picked !== null && picked.phaseId === phase.id ? picked.vote : null;
   const shown = pickedForPhase ?? me?.currentIntent?.vote ?? null;
+  const registered = me?.currentIntent?.vote ?? null;
+  const unchanged =
+    shown !== null &&
+    registered !== null &&
+    shown.type === registered.type &&
+    (shown.type === "abstain" ||
+      (registered.type === "player" && shown.targetId === registered.targetId));
   const rows = snapshot.players.filter(
     (player) => player.status === "alive" || player.status === "dead",
   );
@@ -152,6 +159,7 @@ function VotingBranch({
         <div className="sticky bottom-0 -mx-[18px] border-t border-paper/10 bg-bar px-[18px] py-3">
           <button
             className="btn btn--primary w-full"
+            disabled={unchanged}
             onClick={() => {
               if (shown.type === "abstain") {
                 send({ type: "vote.abstain", phaseId: phase.id, payload: {} });
@@ -165,9 +173,11 @@ function VotingBranch({
             }}
             type="button"
           >
-            {shown.type === "abstain"
-              ? t("ui.vote.lockAbstain")
-              : t("ui.vote.lockVote", { player: names.get(shown.targetId) ?? shown.targetId })}
+            {unchanged
+              ? t("ui.vote.voteLocked")
+              : shown.type === "abstain"
+                ? t("ui.vote.lockAbstain")
+                : t("ui.vote.lockVote", { player: names.get(shown.targetId) ?? shown.targetId })}
           </button>
         </div>
       )}

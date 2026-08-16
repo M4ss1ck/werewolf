@@ -323,6 +323,61 @@ test("voting sends vote.set on lock", () => {
   });
 });
 
+test("the lock button reports a Locked state once the shown vote is registered", () => {
+  const send = vi.fn();
+  const snapshot = makeGameSnapshot({
+    game: { phase: { id: 7 as PhaseId, type: "voting", startedAt: 1000, endsAt: 10_000 } },
+    me: {
+      userId: "wren" as UserId,
+      status: "alive",
+      role: "villager",
+      currentIntent: { vote: { type: "player", targetId: "mattias" as UserId } },
+    },
+    voteTallies: [{ targetId: "mattias" as UserId, count: 1 }],
+    progress: { acted: 1, eligible: 4 },
+  });
+  renderWithI18n(<Act events={[]} send={send} snapshot={snapshot} />);
+
+  // The server-registered vote is shown, so locking it would be a no-op.
+  const locked = screen.getByRole("button", { name: "Vote locked" });
+  expect(locked).toBeDisabled();
+});
+
+test("a different local pick than the registered vote keeps the lock enabled", () => {
+  const snapshot = makeGameSnapshot({
+    game: { phase: { id: 7 as PhaseId, type: "voting", startedAt: 1000, endsAt: 10_000 } },
+    me: {
+      userId: "wren" as UserId,
+      status: "alive",
+      role: "villager",
+      currentIntent: { vote: { type: "player", targetId: "mattias" as UserId } },
+    },
+    voteTallies: [{ targetId: "mattias" as UserId, count: 1 }],
+    progress: { acted: 1, eligible: 4 },
+  });
+  renderWithI18n(<Act events={[]} send={vi.fn()} snapshot={snapshot} />);
+
+  expect(screen.getByRole("button", { name: "Vote locked" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: /Kestrel/ }));
+  expect(screen.getByRole("button", { name: /Lock vote/ })).toBeEnabled();
+});
+
+test("an already-registered abstention locks the button too", () => {
+  const snapshot = makeGameSnapshot({
+    game: { phase: { id: 7 as PhaseId, type: "voting", startedAt: 1000, endsAt: 10_000 } },
+    me: {
+      userId: "wren" as UserId,
+      status: "alive",
+      role: "villager",
+      currentIntent: { vote: { type: "abstain" } },
+    },
+    progress: { acted: 1, eligible: 4 },
+  });
+  renderWithI18n(<Act events={[]} send={vi.fn()} snapshot={snapshot} />);
+
+  expect(screen.getByRole("button", { name: "Vote locked" })).toBeDisabled();
+});
+
 test("a disabled night target renders disabled rather than missing", () => {
   const snapshot = makeGameSnapshot({
     game: { phase: { id: 2 as PhaseId, type: "night", startedAt: 1000, endsAt: 10_000 } },
