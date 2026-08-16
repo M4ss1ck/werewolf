@@ -1,5 +1,6 @@
-// Who drives a seat. Human seats carry no controller at all; a bot seat carries
-// a serializable config naming the provider and model that decide for it.
+// Who drives a seat. Human seats carry no controller; a bot seat carries the
+// settings of the roster entry it was seated from, resolved at seating time so
+// the match is reproducible even if the roster file changes later.
 //
 // Secrets never appear here. The base URL and API key come from the server
 // environment and are never stored on a game row, never projected to a viewer
@@ -8,9 +9,14 @@
 import { z } from "zod";
 
 export const BotConfigSchema = z.object({
+  /** The roster entry this seat came from. */
+  botId: z.string().min(1),
   provider: z.string().min(1),
-  model: z.string().min(1),
-  temperature: z.number().min(0).max(2).optional(),
+  /** Null means this bot has no model: it plays random legal actions. */
+  model: z.string().min(1).nullable(),
+  temperature: z.number().min(0).max(2),
+  maxOutputTokens: z.number().int().positive(),
+  timeoutMs: z.number().int().positive(),
   /** One short line of flavour, injected verbatim into the prompt. */
   personality: z.string().max(200).optional(),
 });
@@ -22,12 +28,30 @@ export const PlayerControllerSchema = z.discriminatedUnion("type", [
 ]);
 export type PlayerController = z.infer<typeof PlayerControllerSchema>;
 
-/** Body of `POST /api/games/:id/bots`. Every field is optional: the server
- * fills the name from its pool and the config from its environment, so the
- * host can add a usable bot with an empty body. */
+/** Why a roster entry cannot be seated right now. Stable wire values; the
+ * client renders them in the viewer's language. */
+export const BOT_UNAVAILABLE_REASONS = [
+  "PROVIDER_NOT_CONFIGURED",
+  "MODEL_NOT_AVAILABLE",
+  "ALREADY_SEATED",
+] as const;
+export type BotUnavailableReason = (typeof BOT_UNAVAILABLE_REASONS)[number];
+export const BotUnavailableReasonSchema = z.enum(BOT_UNAVAILABLE_REASONS);
+
+/** One selectable bot, as the lobby sees it. Carries no credentials and no
+ * endpoint — only the identity and which model would be thinking for it. */
+export const BotRosterEntrySchema = z.object({
+  id: z.string().min(1),
+  displayName: z.string().min(1),
+  model: z.string().nullable(),
+  personality: z.string().optional(),
+  available: z.boolean(),
+  reason: BotUnavailableReasonSchema.optional(),
+});
+export type BotRosterEntry = z.infer<typeof BotRosterEntrySchema>;
+
+/** Body of `POST /api/games/:id/bots`: seat this roster entry. */
 export const AddBotRequestSchema = z.object({
-  displayName: z.string().min(1).max(24).optional(),
-  count: z.number().int().min(1).max(12).optional(),
-  config: BotConfigSchema.partial().optional(),
+  botId: z.string().min(1),
 });
 export type AddBotRequest = z.infer<typeof AddBotRequestSchema>;

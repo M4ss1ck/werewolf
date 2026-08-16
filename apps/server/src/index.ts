@@ -3,11 +3,13 @@ import { websocket } from "hono/bun";
 import { createApp } from "./app.ts";
 import { createAuth, resolveAuthSession } from "./auth/auth.ts";
 import { createAuthTables } from "./auth/schema.ts";
-import { FallbackBotAgent, LlmBotAgent } from "./bots/agent.ts";
+import { LlmBotAgent } from "./bots/agent.ts";
 import { loadBotConfig } from "./bots/config.ts";
 import { consoleBotLogger } from "./bots/log.ts";
 import { BotManager } from "./bots/manager.ts";
+import { ModelCatalog } from "./bots/model-catalog.ts";
 import { OpenAiCompatibleProvider } from "./bots/provider-openai.ts";
+import { loadBotRoster } from "./bots/roster.ts";
 import { loadEnv } from "./env.ts";
 import { GameCoordinator } from "./game/coordinator.ts";
 import { PhaseScheduler } from "./game/scheduler.ts";
@@ -31,34 +33,42 @@ coordinator.onCommitted((gameId) => void scheduler.watch(gameId));
 const hub = new GameHub(coordinator);
 const chatRepository = new GlobalChatRepository(db);
 const chatHub = new GlobalChatHub(chatRepository);
-// Bot seats work with no provider configured: they fall back to picking a
-// random legal action, which is enough to exercise the engine end to end.
+// Bots are in-process: model calls are plain async fetches that the commit
+// path never awaits, and phases end on the scheduler's clock, so a slow or
+// dead provider costs a bot its turn and nothing else.
 const botConfig = loadBotConfig();
-const botAgent = botConfig.BOT_AI_API_KEY
-  ? new LlmBotAgent(
-      new OpenAiCompatibleProvider({
-        baseUrl: botConfig.BOT_AI_BASE_URL,
-        apiKey: botConfig.BOT_AI_API_KEY,
-        name: botConfig.BOT_AI_PROVIDER,
-      }),
-      botConfig,
-      consoleBotLogger,
-    )
-  : new FallbackBotAgent();
-if (!botConfig.BOT_AI_API_KEY)
-  console.log("BOT_AI_API_KEY is not set: bot seats will play random legal actions");
+const botRoster = loadBotRoster(botConfig.BOT_ROSTER_PATH);
+const botCatalog = new ModelCatalog({
+  baseUrl: botConfig.BOT_AI_BASE_URL,
+  apiKey: botConfig.BOT_AI_API_KEY,
+  logger: consoleBotLogger,
+});
+await botCatalog.probe();
 const bots = new BotManager(coordinator, {
-  agent: botAgent,
+  agent: new LlmBotAgent(
+    new OpenAiCompatibleProvider({
+      baseUrl: botConfig.BOT_AI_BASE_URL,
+      apiKey: botConfig.BOT_AI_API_KEY ?? "",
+      name: botConfig.BOT_AI_PROVIDER,
+    }),
+    botConfig,
+    consoleBotLogger,
+  ),
   config: botConfig,
   logger: consoleBotLogger,
 });
+console.log(
+  `bots: ${botRoster.length} in roster, provider ${botConfig.BOT_AI_PROVIDER}` +
+    (botCatalog.configured ? "" : " (no API key: only the random bot is selectable)"),
+);
+
 const app = createApp({
   db,
   repository,
   coordinator,
   gameHub: hub,
   globalChat: { repository: chatRepository, hub: chatHub },
-  bots: { config: botConfig },
+  bots: { roster: botRoster, catalog: botCatalog, config: botConfig },
   auth,
   sessionResolver: (request) => resolveAuthSession(auth, request),
 });

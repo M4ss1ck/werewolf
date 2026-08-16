@@ -53,6 +53,9 @@ export class LlmBotAgent implements BotAgent {
 
   async decide(input: BotDecisionInput): Promise<BotDecision> {
     const model = input.config.model;
+    // A roster entry with no model is not a degraded LLM bot, it is a bot that
+    // plays randomly by design. Never spend a call on it.
+    if (model === null) return this.fallback.decide(input);
     const startedAt = Date.now();
     const userPrompt = buildUserPrompt(input);
     if (this.config.BOT_LOG_PROMPTS)
@@ -64,9 +67,11 @@ export class LlmBotAgent implements BotAgent {
         model,
         systemPrompt: BOT_SYSTEM_PROMPT,
         userPrompt,
-        temperature: input.config.temperature ?? this.config.BOT_AI_TEMPERATURE,
-        maxOutputTokens: this.config.BOT_AI_MAX_OUTPUT_TOKENS,
-        timeoutMs: this.config.BOT_AI_TIMEOUT_MS,
+        // Sampling and ceilings are the seat's own, frozen from the roster
+        // entry when it was seated.
+        temperature: input.config.temperature,
+        maxOutputTokens: input.config.maxOutputTokens,
+        timeoutMs: input.config.timeoutMs,
         schema: BOT_DECISION_JSON_SCHEMA as unknown as {
           name: string;
           schema: Record<string, unknown>;

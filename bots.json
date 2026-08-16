@@ -1,0 +1,74 @@
+[
+  {
+    "id": "mira",
+    "displayName": "Mira",
+    "model": "deepseek-v4-flash",
+    "temperature": 0.9,
+    "maxOutputTokens": 180,
+    "timeoutMs": 15000,
+    "personality": "Blunt and impatient. Accuses early and commits to a read."
+  },
+  {
+    "id": "tobias",
+    "displayName": "Tobias",
+    "model": "deepseek-v4-flash",
+    "temperature": 0.5,
+    "maxOutputTokens": 180,
+    "timeoutMs": 15000,
+    "personality": "Cautious. Asks questions, avoids naming anyone until pressed."
+  },
+  {
+    "id": "elke",
+    "displayName": "Elke",
+    "model": "glm-5",
+    "temperature": 0.8,
+    "maxOutputTokens": 180,
+    "timeoutMs": 15000,
+    "personality": "Keeps a tally out loud and points out who has said nothing."
+  },
+  {
+    "id": "rowan",
+    "displayName": "Rowan",
+    "model": "minimax-m2.7",
+    "temperature": 1,
+    "maxOutputTokens": 180,
+    "timeoutMs": 15000,
+    "personality": "Jokes constantly. Hard to tell when Rowan is serious."
+  },
+  {
+    "id": "ines",
+    "displayName": "Ines",
+    "model": "qwen3.7-plus",
+    "temperature": 0.6,
+    "maxOutputTokens": 180,
+    "timeoutMs": 15000,
+    "personality": "Defends whoever is being piled on, on principle."
+  },
+  {
+    "id": "caspar",
+    "displayName": "Caspar",
+    "model": "kimi-k2.7-code",
+    "temperature": 0.7,
+    "maxOutputTokens": 180,
+    "timeoutMs": 15000,
+    "personality": "Quiet, then makes one long confident case near the deadline."
+  },
+  {
+    "id": "nadia",
+    "displayName": "Nadia",
+    "model": "deepseek-v4-pro",
+    "temperature": 0.7,
+    "maxOutputTokens": 220,
+    "timeoutMs": 20000,
+    "personality": "Reads voting patterns and says what they imply."
+  },
+  {
+    "id": "bram",
+    "displayName": "Bram",
+    "model": "glm-5.2",
+    "temperature": 0.85,
+    "maxOutputTokens": 180,
+    "timeoutMs": 15000,
+    "personality": "Contrarian. Distrusts whoever sounds most certain."
+  }
+]

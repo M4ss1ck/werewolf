@@ -1,5 +1,5 @@
-import { MIN_PLAYERS, type ViewerGameSnapshot } from "@werewolf/protocol";
-import { useState } from "react";
+import { type BotRosterEntry, MIN_PLAYERS, type ViewerGameSnapshot } from "@werewolf/protocol";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client.ts";
@@ -16,6 +16,7 @@ export function LobbyScreen({
 }) {
   const { t } = useTranslation();
   const [error, setError] = useState<unknown>();
+  const [bots, setBots] = useState<BotRosterEntry[]>([]);
   const isOwner = snapshot.game.ownerUserId === snapshot.me?.userId;
   const ready = snapshot.players.length >= MIN_PLAYERS;
   const emptySeats = Math.max(0, MIN_PLAYERS - snapshot.players.length);
@@ -30,6 +31,24 @@ export function LobbyScreen({
       setError(caught);
     }
   };
+  // Only the host may list bots, and a failed load just means no roster: the
+  // lobby still works, it simply offers nobody to add.
+  const loadBots = useCallback(() => {
+    if (!isOwner) return;
+    void api
+      .listBots(snapshot.game.id)
+      .then(setBots)
+      .catch(() => setBots([]));
+  }, [isOwner, snapshot.game.id]);
+  useEffect(loadBots, [loadBots]);
+  // Seating changes availability, so re-read the roster rather than guessing
+  // at it from the snapshot.
+  const addBot = (botId: string) =>
+    act(async () => {
+      const next = await api.addBot(snapshot.game.id, botId);
+      loadBots();
+      return next;
+    });
   // The owner's cancel feeds the snapshot back so the shell lands on the
   // cancelled screen; a guest just leaves and heads home to the list.
   const leave = async () => {
@@ -115,20 +134,34 @@ export function LobbyScreen({
               </li>
             ))}
           </ul>
-          {isOwner && (
-            <button
-              className="flex items-center gap-[14px] rounded-[14px] border border-dashed border-paper/20 px-3.5 py-3 text-[17px] text-fog transition-colors hover:border-paper/40 hover:text-paper"
-              onClick={() => void act(() => api.addBots(snapshot.game.id))}
-              type="button"
-            >
-              <span
-                aria-hidden="true"
-                className="flex h-[42px] w-[42px] items-center justify-center rounded-full border border-dashed border-paper/20"
-              >
-                +
-              </span>
-              {t("ui.lobby.addBot")}
-            </button>
+          {isOwner && bots.length > 0 && (
+            <div className="flex flex-col gap-2.5">
+              <p className="eyebrow">{t("ui.lobby.addBot")}</p>
+              {bots.map((bot) => (
+                <button
+                  className="flex items-center gap-[14px] rounded-[14px] border border-dashed border-paper/20 px-3.5 py-3 text-left text-[17px] text-fog transition-colors enabled:hover:border-paper/40 enabled:hover:text-paper disabled:opacity-40"
+                  disabled={!bot.available}
+                  key={bot.id}
+                  onClick={() => void addBot(bot.id)}
+                  type="button"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="flex h-[42px] w-[42px] items-center justify-center rounded-full border border-dashed border-paper/20"
+                  >
+                    +
+                  </span>
+                  <span className="flex-1">
+                    {bot.displayName}
+                    <span className="block text-[13px] text-fog-dim">
+                      {bot.reason
+                        ? t(`ui.lobby.botReason.${bot.reason}`)
+                        : (bot.model ?? t("ui.lobby.botRandom"))}
+                    </span>
+                  </span>
+                </button>
+              ))}
+            </div>
           )}
         </section>
       </div>

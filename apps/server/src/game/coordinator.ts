@@ -136,40 +136,44 @@ export class GameCoordinator {
       return this.snapshot(gameId, userId);
     });
   }
-  /** Seat one or more bots. A bot seat is an ordinary lobby player carrying a
-   * controller, so joining, kicking, role assignment and elimination all work
-   * on it unchanged; only who decides for it differs. Bot user ids are
-   * namespaced so they can never collide with a Better Auth user id. */
-  async addBots(
-    gameId: GameId,
-    owner: UserId,
-    input: { displayName?: string | undefined; count?: number | undefined; config: BotConfig },
-  ) {
+  /** Which roster entries already hold a seat in this game. The lobby uses it
+   * to grey out a bot that is already at the table. */
+  async seatedBotIds(gameId: GameId): Promise<Set<string>> {
+    const players = await this.repository.getPlayers(gameId);
+    const seated = new Set<string>();
+    for (const player of players) {
+      if (player.controllerJson === null) continue;
+      const controller = JSON.parse(player.controllerJson) as PlayerController;
+      if (controller.type === "bot") seated.add(controller.config.botId);
+    }
+    return seated;
+  }
+
+  /** Seat one bot from the roster. A bot seat is an ordinary lobby player
+   * carrying a controller, so joining, kicking, role assignment and
+   * elimination all work on it unchanged; only who decides for it differs. Bot
+   * user ids are namespaced so they can never collide with an auth user id. */
+  async addBot(gameId: GameId, owner: UserId, input: { displayName: string; config: BotConfig }) {
     return this.lock.run(gameId, async () => {
       const game = await this.repository.getGame(gameId);
       if (!game) throw new CoordinatorError("GAME_NOT_FOUND");
       if (game.ownerUserId !== owner) throw new CoordinatorError("NOT_GAME_OWNER");
       if (game.status !== "lobby" && game.status !== "scheduled")
         throw new CoordinatorError("GAME_ALREADY_STARTED");
+      // Re-checked here rather than trusted from the listing: this runs under
+      // the per-game lock, so two hosts clicking at once cannot seat the same
+      // bot twice.
+      const seated = await this.seatedBotIds(gameId);
+      if (seated.has(input.config.botId)) throw new CoordinatorError("ACTION_NOT_AVAILABLE");
       const players = await this.repository.getPlayers(gameId);
       const taken = new Set(players.map((player) => player.displayName));
-      const count = input.count ?? 1;
-      for (let index = 0; index < count; index += 1) {
-        const displayName =
-          input.displayName === undefined
-            ? pickBotName(taken)
-            : count === 1
-              ? input.displayName
-              : `${input.displayName} ${index + 1}`;
-        await this.repository.addPlayer({
-          gameId,
-          userId: `bot:${crypto.randomUUID()}` as UserId,
-          displayName,
-          joinedAt: this.now(),
-          controller: { type: "bot", config: input.config },
-        });
-        taken.add(displayName);
-      }
+      await this.repository.addPlayer({
+        gameId,
+        userId: `bot:${crypto.randomUUID()}` as UserId,
+        displayName: taken.has(input.displayName) ? pickBotName(taken) : input.displayName,
+        joinedAt: this.now(),
+        controller: { type: "bot", config: input.config },
+      });
       return this.snapshot(gameId, owner);
     });
   }

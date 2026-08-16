@@ -257,7 +257,7 @@ export class BotManager {
       playerId,
       phaseId,
       phase: input.phase,
-      model: input.config.model,
+      model: input.config.model ?? "random",
       provider: input.config.provider,
       latencyMs: this.now() - startedAt,
       action: action?.type ?? "none",

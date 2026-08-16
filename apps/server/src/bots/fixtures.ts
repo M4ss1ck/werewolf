@@ -24,17 +24,19 @@ import type {
   BotModelResponse,
 } from "./types.ts";
 
-export const BOT_CONFIG: BotConfig = { provider: "fake", model: "fake-1", temperature: 0 };
+export const BOT_CONFIG: BotConfig = {
+  botId: "fake",
+  provider: "fake",
+  model: "fake-1",
+  temperature: 0,
+  maxOutputTokens: 180,
+  timeoutMs: 1_000,
+};
 
 /** Bot config with the human-like pause switched off, which is what automated
  * testing mode means here. */
 export function testBotConfig(overrides: Record<string, string> = {}): BotRuntimeConfig {
-  return loadBotConfig({
-    BOT_MIN_DELAY_MS: "0",
-    BOT_MAX_DELAY_MS: "0",
-    BOT_AI_MODEL: "fake-1",
-    ...overrides,
-  });
+  return loadBotConfig({ BOT_MIN_DELAY_MS: "0", BOT_MAX_DELAY_MS: "0", ...overrides });
 }
 
 /** Records every input it is handed, then answers with a scripted decision.
@@ -173,10 +175,14 @@ export async function setupBots(
           nightDurationMs: 60_000,
           spectatingEnabled: true,
         },
-        ownerController: { type: "bot", config: BOT_CONFIG },
+        ownerController: { type: "bot", config: { ...BOT_CONFIG, botId: "fake-host" } },
       });
       const gameId = game!.id;
-      await coordinator.addBots(gameId, host, { count, config: BOT_CONFIG });
+      for (let seat = 0; seat < count; seat += 1)
+        await coordinator.addBot(gameId, host, {
+          displayName: `Bot ${seat + 1}`,
+          config: { ...BOT_CONFIG, botId: `fake-${seat}` },
+        });
       await coordinator.startGame(gameId, host);
       await bots.whenIdle();
       return gameId;

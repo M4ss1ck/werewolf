@@ -69,6 +69,18 @@ function agentWith(replies: (string | Error)[]) {
   return { provider, agent: new LlmBotAgent(provider, testBotConfig()) };
 }
 
+describe("a seat with no model", () => {
+  test("never reaches the provider", async () => {
+    const { provider, agent } = agentWith([JSON.stringify({ actionId: 1 })]);
+    const decision = await agent.decide(
+      input({ config: { ...BOT_CONFIG, botId: "random", model: null } }),
+    );
+    expect(provider.requests).toEqual([]);
+    expectLegalPick(decision.actionId);
+    expect(decision.say).toBeNull();
+  });
+});
+
 describe("fallback bot agent", () => {
   test("picks a legal action, deterministically per decision window", async () => {
     const fallback = new FallbackBotAgent();
@@ -173,7 +185,10 @@ describe("llm bot agent", () => {
     await agent.decide(input());
     const request = provider.requests[0]!;
     expect(request.model).toBe("fake-1");
-    expect(request.maxOutputTokens).toBeLessThanOrEqual(200);
+    // Sampling and ceilings come from the seat, not from a global default.
+    expect(request.temperature).toBe(BOT_CONFIG.temperature);
+    expect(request.maxOutputTokens).toBe(BOT_CONFIG.maxOutputTokens);
+    expect(request.timeoutMs).toBe(BOT_CONFIG.timeoutMs);
     expect(request.schema.name).toBe("werewolf_bot_decision");
     // The prompt carries the bot's own seat, never the rest of the table.
     expect(request.userPrompt).toContain("Mira");

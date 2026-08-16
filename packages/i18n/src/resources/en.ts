@@ -162,6 +162,12 @@ export const en = {
       youHost: "You · host",
       botTag: "Bot",
       addBot: "Add bot",
+      botRandom: "Plays at random",
+      botReason: {
+        PROVIDER_NOT_CONFIGURED: "No AI provider configured",
+        MODEL_NOT_AVAILABLE: "Model unavailable",
+        ALREADY_SEATED: "Already in the village",
+      },
       startNeeds: {
         count_one: "Start · needs {{count}}",
         count_other: "Start · needs {{count}}",

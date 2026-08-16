@@ -1,4 +1,5 @@
 import type {
+  BotRosterEntry,
   ChatMessage,
   GameEvent,
   GameId,
@@ -66,7 +67,9 @@ export const api = {
   kick: (id: GameId | string, userId: UserId | string) =>
     request<ViewerGameSnapshot>(`/api/games/${id}/players/${userId}`, { method: "DELETE" }),
   start: (id: GameId | string) => request<ViewerGameSnapshot>(`/api/games/${id}/start`, json({})),
-  addBots: (id: GameId | string) => request<ViewerGameSnapshot>(`/api/games/${id}/bots`, json({})),
+  listBots: (id: GameId | string) => request<BotRosterEntry[]>(`/api/games/${id}/bots`),
+  addBot: (id: GameId | string, botId: string) =>
+    request<ViewerGameSnapshot>(`/api/games/${id}/bots`, json({ botId })),
   cancel: (id: GameId | string) => request<ViewerGameSnapshot>(`/api/games/${id}/cancel`, json({})),
   patchGame: (id: GameId | string, input: { name?: string; visibility?: "public" | "private" }) =>
     request<ViewerGameSnapshot>(`/api/games/${id}`, {

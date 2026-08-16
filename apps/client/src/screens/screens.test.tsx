@@ -1,5 +1,12 @@
 import { readFile } from "node:fs/promises";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  act as reactAct,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { en } from "@werewolf/i18n";
 import type {
   ActionId,
@@ -356,6 +363,9 @@ test("the chat composer is disabled when the viewer is dead", () => {
 });
 
 test("lobby owner controls appear for exactly the owner", () => {
+  // The owner view loads the bot roster on mount; this test is about the
+  // ownership controls, so keep it out of the network.
+  vi.spyOn(api, "listBots").mockResolvedValue([]);
   const players: ViewerGameSnapshot["players"] = [
     { userId: "owner" as UserId, displayName: "Owner", status: "lobby" },
     { userId: "bob" as UserId, displayName: "Bob", status: "lobby" },
@@ -405,6 +415,47 @@ test("lobby owner controls appear for exactly the owner", () => {
   expect(screen.getByRole("button", { name: "Remove Bob" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Remove Anna" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Leave" })).not.toBeInTheDocument();
+});
+
+test("lobby: the host picks a bot from the roster, and unavailable ones are disabled", async () => {
+  vi.spyOn(api, "listBots").mockResolvedValue([
+    { id: "random", displayName: "Dummy", model: null, available: true },
+    { id: "mira", displayName: "Mira", model: "deepseek-v4-flash", available: true },
+    {
+      id: "bram",
+      displayName: "Bram",
+      model: "glm-5",
+      available: false,
+      reason: "MODEL_NOT_AVAILABLE",
+    },
+  ]);
+  const addBot = vi
+    .spyOn(api, "addBot")
+    .mockResolvedValue(makeGameSnapshot({ game: { status: "lobby", phase: null } }));
+  renderWithI18n(
+    <LobbyScreen
+      onUpdate={() => undefined}
+      snapshot={makeGameSnapshot({
+        game: { ownerUserId: "owner" as UserId, status: "lobby", phase: null },
+        me: { userId: "owner" as UserId, status: "lobby" },
+      })}
+    />,
+  );
+
+  const mira = await screen.findByRole("button", { name: /Mira/ });
+  // A bot with no model says so rather than showing a blank line.
+  expect(await screen.findByText("Plays at random")).toBeInTheDocument();
+  // An unreachable model is offered but not clickable, with the reason shown.
+  const bram = screen.getByRole("button", { name: /Bram/ });
+  expect(bram).toBeDisabled();
+  expect(within(bram).getByText("Model unavailable")).toBeInTheDocument();
+
+  // Seating re-reads the roster, so let both round trips settle inside act.
+  await reactAct(async () => {
+    fireEvent.click(mira);
+  });
+  await waitFor(() => expect(addBot).toHaveBeenCalledWith(expect.anything(), "mira"));
+  expect(api.listBots).toHaveBeenCalledTimes(2);
 });
 
 test("lobby: leaving takes the player back to the games list", async () => {

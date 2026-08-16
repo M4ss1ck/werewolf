@@ -122,33 +122,56 @@ What the model sees is `projectSnapshot(state, botId)`, the same viewer
 projection a human in that seat would receive, plus that viewer's visible
 events. The omniscient `GameState` never reaches a prompt.
 
-**Adding bots.** The host presses *Add bot* in the lobby, or calls the endpoint
-directly:
+### The roster
 
-```bash
-curl -X POST /api/games/<id>/bots -d '{"count": 4}'
+Selectable bots are defined in `bots.json`, each with its own model and
+settings, so one deployment can mix a cheap fast model across most seats with a
+slower one on a couple:
+
+```json
+{ "id": "mira", "displayName": "Mira", "model": "deepseek-v4-flash",
+  "temperature": 0.9, "maxOutputTokens": 180, "timeoutMs": 15000,
+  "personality": "Blunt and impatient. Accuses early." }
 ```
 
-Host only, lobby or scheduled games only. Every field is optional
-(`displayName`, `count`, `config`), so an empty body seats one usable bot.
+Settings are frozen onto the seat when the bot is added, so editing the roster
+cannot change a match already in progress. A built-in `random` entry ("Dummy")
+is always present and needs no provider.
 
-**A whole match with no humans**, against a throwaway database:
+The host sees the roster in the lobby with per-entry availability
+(`GET /api/games/:id/bots`) and seats one with
+`POST /api/games/:id/bots {"botId": "mira"}`. An entry is unavailable when it
+is `ALREADY_SEATED`, when the provider is not configured
+(`PROVIDER_NOT_CONFIGURED`), or when the provider's `/models` listing does not
+include its model (`MODEL_NOT_AVAILABLE`). The server rechecks this when
+seating; the listing is advice to the client, not the rule.
+
+### Running
 
 ```bash
-bun run bots:match                 # 6 bots
+bun run bots:match                        # 6 bots, unattended, no humans
 bun run bots:match -- --players 8 --chat
+bun run bots:match -- --random            # force every seat to the free bot
 ```
 
-With no `BOT_AI_API_KEY` this costs nothing: bots pick a random legal action
-via the seeded RNG. That is the deliberate fallback for every failure — no key,
-provider timeout, network error, malformed JSON, schema mismatch, or an action
-the model was never offered. It is not a strategy engine and must not become
-one; the model is the brain.
+With no `BOT_AI_API_KEY` this costs nothing: only the random bot is selectable
+and it picks a legal action via the seeded RNG. That is also the fallback for
+every failure — provider timeout, network error, malformed JSON, schema
+mismatch, or an action the model was never offered. It is not a strategy engine
+and must not become one; the model is the brain.
 
-Configuration is environment-only and documented in `.env.example`
-(`BOT_AI_BASE_URL`, `BOT_AI_API_KEY`, `BOT_AI_MODEL`, and the delay, turn-budget
-and history limits). Any OpenAI-compatible endpoint works. Credentials are
-never written to a game row, never projected to a viewer and never logged.
+### Scale and failure
+
+Bots run in this process, and they cannot hold up a game:
+
+- Phases end on the scheduler's clock, never on completion, so a dead provider
+  costs a bot its turn and nothing else.
+- The commit path never awaits a model call; decisions are fire-and-forget.
+- Each call is bounded by that seat's `timeoutMs`, and answers arriving after
+  the phase moved on are discarded before reaching the command path.
+
+Provider configuration is environment-only and documented in `.env.example`.
+Credentials are never written to a game row, projected to a viewer, or logged.
 
 ## Package boundaries
 

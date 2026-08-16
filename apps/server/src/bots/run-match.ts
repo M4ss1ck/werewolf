@@ -7,6 +7,7 @@
  *   bun run bots:match                  # 6 bots, no provider, free
  *   bun run bots:match -- --players 8   # bigger village
  *   bun run bots:match -- --chat        # print what the bots said
+ *   bun run bots:match -- --random      # force every seat to the free random bot
  *
  * With BOT_AI_API_KEY set the bots think with the configured model; without it
  * they pick random legal actions, which is enough to drive the engine.
@@ -19,10 +20,12 @@ import { applyMigrations, createDb, GameRepository } from "@werewolf/db";
 import type { GameEvent, GameId, UserId } from "@werewolf/protocol";
 import { GameCoordinator } from "../game/coordinator.ts";
 import { GameLock } from "../game/locks.ts";
-import { FallbackBotAgent, LlmBotAgent } from "./agent.ts";
-import { loadBotConfig, resolveSeatConfig } from "./config.ts";
+import { LlmBotAgent } from "./agent.ts";
+import { loadBotConfig } from "./config.ts";
 import { BotManager } from "./manager.ts";
+import { ModelCatalog } from "./model-catalog.ts";
 import { OpenAiCompatibleProvider } from "./provider-openai.ts";
+import { loadBotRoster, RANDOM_BOT, toSeatConfig } from "./roster.ts";
 
 const args = process.argv.slice(2);
 const flag = (name: string) => args.includes(`--${name}`);
@@ -36,7 +39,26 @@ const showChat = flag("chat");
 // The phase clock is driven directly here, so durations only need to be
 // non-zero; the match does not run in real time.
 const config = loadBotConfig({ ...process.env, BOT_MIN_DELAY_MS: "0", BOT_MAX_DELAY_MS: "0" });
-const seatConfig = resolveSeatConfig(config);
+const catalog = new ModelCatalog({
+  baseUrl: config.BOT_AI_BASE_URL,
+  apiKey: config.BOT_AI_API_KEY,
+});
+await catalog.probe();
+
+// Seat from the roster, skipping entries whose model this deployment cannot
+// reach, and topping up with the free random bot when the roster runs short.
+const roster = loadBotRoster(config.BOT_ROSTER_PATH).filter(
+  (entry) => entry.model === null || (catalog.configured && catalog.has(entry.model)),
+);
+const seats = Array.from({ length: players }, (_, index) => {
+  const entry = roster[index % Math.max(1, roster.length)] ?? RANDOM_BOT;
+  const chosen = flag("random") ? RANDOM_BOT : entry;
+  return {
+    displayName:
+      roster.length > players ? chosen.displayName : `${chosen.displayName} ${index + 1}`,
+    config: { ...toSeatConfig(chosen, config.BOT_AI_PROVIDER), botId: `${chosen.id}-${index}` },
+  };
+});
 
 const dir = mkdtempSync(join(tmpdir(), "werewolf-bot-match-"));
 const { client, db } = createDb(`file:${join(dir, "match.db")}`);
@@ -45,32 +67,31 @@ await applyMigrations(db);
 const repository = new GameRepository(db);
 const clock = { now: Date.now() };
 const coordinator = new GameCoordinator(repository, new GameLock(), () => clock.now);
-const agent = config.BOT_AI_API_KEY
-  ? new LlmBotAgent(
-      new OpenAiCompatibleProvider({
-        baseUrl: config.BOT_AI_BASE_URL,
-        apiKey: config.BOT_AI_API_KEY,
-        name: config.BOT_AI_PROVIDER,
-      }),
-      config,
-    )
-  : new FallbackBotAgent();
 const bots = new BotManager(coordinator, {
-  agent,
+  agent: new LlmBotAgent(
+    new OpenAiCompatibleProvider({
+      baseUrl: config.BOT_AI_BASE_URL,
+      apiKey: config.BOT_AI_API_KEY ?? "",
+      name: config.BOT_AI_PROVIDER,
+    }),
+    config,
+  ),
   config,
   now: () => clock.now,
   sleep: () => Promise.resolve(),
 });
 
 console.log(
-  `${players} bots, ${config.BOT_AI_API_KEY ? `model ${seatConfig.model}` : "no provider (random legal actions)"}`,
+  `${players} bots via ${config.BOT_AI_PROVIDER}: ${seats
+    .map((seat) => `${seat.displayName}(${seat.config.model ?? "random"})`)
+    .join(", ")}`,
 );
 
 // The host seat is itself a bot, so nobody has to sit and watch.
 const host = "bot:host" as UserId;
 const created = await coordinator.createGame({
   ownerUserId: host,
-  displayName: "Hostess",
+  displayName: seats[0]!.displayName,
   name: "Bot village",
   visibility: "private",
   settings: {
@@ -79,10 +100,10 @@ const created = await coordinator.createGame({
     nightDurationMs: 60_000,
     spectatingEnabled: false,
   },
-  ownerController: { type: "bot", config: seatConfig },
+  ownerController: { type: "bot", config: seats[0]!.config },
 });
 const gameId = created!.id as GameId;
-await coordinator.addBots(gameId, host, { count: players - 1, config: seatConfig });
+for (const seat of seats.slice(1)) await coordinator.addBot(gameId, host, seat);
 await coordinator.startGame(gameId, host);
 await bots.whenIdle();
 

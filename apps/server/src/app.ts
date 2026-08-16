@@ -7,10 +7,10 @@ import {
   sessionMiddleware,
   type ViewerContext,
 } from "./auth/auth.ts";
-import type { BotRuntimeConfig } from "./bots/config.ts";
 import { GameCoordinator } from "./game/coordinator.ts";
 import type { GameHub } from "./live/game-hub.ts";
 import type { GlobalChatHub } from "./live/global-chat-hub.ts";
+import type { BotRoutesOptions } from "./routes/bots.ts";
 import { botRoutes } from "./routes/bots.ts";
 import { chatRoutes } from "./routes/chat.ts";
 import { commandRoutes } from "./routes/commands.ts";
@@ -36,7 +36,7 @@ export type AppOptions = {
   gameHub?: GameHub;
   globalChat?: { repository: GlobalChatRepository; hub: GlobalChatHub; now?: () => number };
   /** Present when this deployment seats bots; absent leaves the route off. */
-  bots?: { config: BotRuntimeConfig };
+  bots?: BotRoutesOptions;
 };
 
 export function createApp(options: AppOptions = {}) {
@@ -57,7 +57,7 @@ export function createApp(options: AppOptions = {}) {
     app.route("/api", eventRoutes(coordinator));
     app.route("/api", replayRoutes(coordinator));
     app.route("/api", preferenceRoutes());
-    if (options.bots) app.route("/api", botRoutes(coordinator, options.bots.config));
+    if (options.bots) app.route("/api", botRoutes(coordinator, options.bots));
     if (options.db) {
       // The stats route reads the repository; tests may hand in only a
       // coordinator, so fall back to a fresh repository over the same db.

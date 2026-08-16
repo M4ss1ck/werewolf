@@ -160,6 +160,12 @@ export const es: TranslationResource = {
       youHost: "Tú · anfitrión",
       botTag: "Bot",
       addBot: "Añadir bot",
+      botRandom: "Juega al azar",
+      botReason: {
+        PROVIDER_NOT_CONFIGURED: "Sin proveedor de IA configurado",
+        MODEL_NOT_AVAILABLE: "Modelo no disponible",
+        ALREADY_SEATED: "Ya está en la aldea",
+      },
       startNeeds: {
         count_one: "Comenzar · falta {{count}}",
         count_other: "Comenzar · faltan {{count}}",
