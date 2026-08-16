@@ -7,7 +7,9 @@ FROM oven/bun:1.3-alpine
 WORKDIR /app
 
 # git is occasionally needed by dependency installs; curl is used by healthchecks.
-RUN apk add --no-cache git curl
+# nodejs runs the Vite dev server: Bun's node:http client never emits `upgrade`,
+# so Vite's WebSocket proxy cannot forward /api/*/live under Bun.
+RUN apk add --no-cache git curl nodejs
 
 # Dependencies are installed into the image so a bind mount of the source does
 # not drag node_modules across the host boundary. docker-compose.dev.yml mounts

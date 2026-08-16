@@ -21,6 +21,10 @@ export default defineConfig({
       ignored: ["**/src-tauri/**"],
       ...(process.env.VITE_POLL ? { usePolling: true, interval: 300 } : {}),
     },
+    // `ws: true` forwards the /api/*/live sockets. This is why the `dev` script
+    // runs Vite under node rather than bun: Bun's node:http client reports a
+    // 101 as an ordinary response instead of emitting `upgrade`, so Vite's
+    // proxy never pipes the socket and then crashes on `socket.destroySoon()`.
     proxy: {
       "/api": { target: SERVER_ORIGIN, changeOrigin: true, ws: true },
     },
