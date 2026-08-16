@@ -1,6 +1,6 @@
 import type { DomainTransition, PlayerPatch } from "@werewolf/game-engine";
 import type { EventId, GameId, PlayerController, UserId } from "@werewolf/protocol";
-import { and, asc, eq, gt, inArray, isNotNull, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import type { Db } from "./client.ts";
 import { mapEvent, mapGame } from "./mapper.ts";
 import { gameEvents, gamePlayers, games } from "./schema.ts";
@@ -190,6 +190,18 @@ export class GameRepository {
       .update(gamePlayers)
       .set({ phaseStateJson: JSON.stringify(phaseState) })
       .where(and(eq(gamePlayers.gameId, gameId), eq(gamePlayers.userId, userId)));
+  }
+  /** The tail of a game's log, newest last. Bots build every prompt from a
+   * bounded slice of history, so reading the whole log per decision is the one
+   * cost that grows with match length. */
+  async getRecentEvents(gameId: GameId, limit: number) {
+    const rows = await this.db
+      .select()
+      .from(gameEvents)
+      .where(eq(gameEvents.gameId, gameId))
+      .orderBy(desc(gameEvents.id))
+      .limit(limit);
+    return rows.reverse().map(mapEvent);
   }
   async getVisibleEvents(gameId: GameId, afterId = 0) {
     const rows = await this.db

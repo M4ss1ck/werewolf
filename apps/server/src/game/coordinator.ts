@@ -296,6 +296,9 @@ export class GameCoordinator {
   async getVisibleEvents(gameId: GameId, afterId = 0) {
     return this.repository.getVisibleEvents(gameId, afterId);
   }
+  async getRecentEvents(gameId: GameId, limit: number) {
+    return this.repository.getRecentEvents(gameId, limit);
+  }
 
   private async transitionUnlocked(gameId: GameId, resolve: (state: GameState) => DomainResult) {
     const state = await this.repository.loadGameState(gameId);

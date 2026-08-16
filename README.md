@@ -169,6 +169,10 @@ Bots run in this process, and they cannot hold up a game:
 - The commit path never awaits a model call; decisions are fire-and-forget.
 - Each call is bounded by that seat's `timeoutMs`, and answers arriving after
   the phase moved on are discarded before reaching the command path.
+- `BOT_MAX_CONCURRENT_CALLS` caps calls in flight process-wide, so a room full
+  of games queues instead of collecting rate limits.
+- Prompts read only the tail of the event log, so cost per decision does not
+  grow with match length.
 
 Provider configuration is environment-only and documented in `.env.example`.
 Credentials are never written to a game row, projected to a viewer, or logged.

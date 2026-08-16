@@ -19,6 +19,12 @@ const botEnvSchema = z.object({
   /** Where the roster of selectable bots is defined. */
   BOT_ROSTER_PATH: z.string().min(1).default("./bots.json"),
 
+  /** Ceiling on model calls in flight across the whole process. Bots are
+   * asynchronous and a phase never waits for them, so queueing here costs a
+   * bot its turn at worst, and protects the provider from a room full of
+   * simultaneous games. */
+  BOT_MAX_CONCURRENT_CALLS: z.coerce.number().int().positive().max(64).default(4),
+
   /** Artificial pause before a bot publishes, so it does not answer instantly.
    * Set both to 0 in automated tests to run matches as fast as possible. */
   BOT_MIN_DELAY_MS: z.coerce.number().int().nonnegative().default(1_500),

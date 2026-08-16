@@ -173,6 +173,28 @@ describe("bot command path", () => {
     expect(messages.length).toBe(1);
   });
 
+  test("model calls are capped, so a full room cannot stampede the provider", async () => {
+    let inFlight = 0;
+    let peak = 0;
+    const agent: BotAgent = {
+      decide: async () => {
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        inFlight -= 1;
+        return { actionId: null, say: null, channel: null };
+      },
+    };
+    const harness = await setupBots({
+      agent,
+      config: testBotConfig({ BOT_MAX_CONCURRENT_CALLS: "2" }),
+    });
+    // Eight seats all want to decide the moment the phase opens.
+    await harness.startBotGame(7);
+    expect(peak).toBeLessThanOrEqual(2);
+    expect(peak).toBeGreaterThan(0);
+  });
+
   test("an agent that always throws leaves the match playable", async () => {
     const broken: BotAgent = { decide: () => Promise.reject(new Error("provider down")) };
     const harness = await setupBots({ agent: broken });

@@ -49,12 +49,35 @@ export interface BotManagerOptions {
   logger?: BotLogger;
 }
 
+/** Caps model calls in flight across the whole process. A room full of
+ * simultaneous games would otherwise open one connection per bot per phase and
+ * collect rate limits, which degrade every bot to random play at once. Waiting
+ * here is safe: a phase never waits for a bot, so the worst case is that a
+ * queued bot misses its turn. */
+class CallPool {
+  private active = 0;
+  private waiting: (() => void)[] = [];
+  constructor(private readonly limit: number) {}
+
+  async run<T>(work: () => Promise<T>): Promise<T> {
+    if (this.active >= this.limit) await new Promise<void>((resolve) => this.waiting.push(resolve));
+    this.active += 1;
+    try {
+      return await work();
+    } finally {
+      this.active -= 1;
+      this.waiting.shift()?.();
+    }
+  }
+}
+
 export class BotManager {
   private readonly games = new Map<GameId, PhaseRecord>();
   private readonly unsubscribe: () => boolean;
   private readonly now: () => number;
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly log: BotLogger;
+  private readonly pool: CallPool;
   private pending = 0;
   private waiters: (() => void)[] = [];
 
@@ -65,6 +88,7 @@ export class BotManager {
     this.now = options.now ?? Date.now;
     this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
     this.log = options.logger ?? silentBotLogger;
+    this.pool = new CallPool(options.config.BOT_MAX_CONCURRENT_CALLS);
     this.unsubscribe = coordinator.onCommitted((gameId, events) => {
       // Counted synchronously, so a caller awaiting quiescence cannot observe
       // the gap between one bot's command committing and the reaction to it.
@@ -172,7 +196,7 @@ export class BotManager {
       // provider's own latency counts towards looking human instead of adding
       // to it. Neither blocks the game loop: the phase ends on its clock.
       const [decision] = await Promise.all([
-        this.options.agent.decide(input),
+        this.pool.run(() => this.options.agent.decide(input)),
         this.pause(decisionId),
       ]);
       await this.submit(gameId, playerId, phaseId, decisionId, decision, input, startedAt);
@@ -193,10 +217,13 @@ export class BotManager {
     // client would receive, plus that viewer's visible events. There is no
     // path from here to the omniscient state.
     const playerView = projectSnapshot(state, playerId, 0, now);
-    const stored = (await this.coordinator.getVisibleEvents(state.id, 0)) as GameEvent[];
-    const visibleEvents = filterVisibleEvents(stored, playerId, state).slice(
-      -this.options.config.BOT_HISTORY_LIMIT,
-    );
+    // Only the tail of the log, never all of it: this runs once per bot per
+    // turn, so reading the whole match would be the cost that grows with match
+    // length. Over-fetch, because the visibility filter drops rows addressed to
+    // other seats, then keep the last N that survive.
+    const limit = this.options.config.BOT_HISTORY_LIMIT;
+    const stored = (await this.coordinator.getRecentEvents(state.id, limit * 3)) as GameEvent[];
+    const visibleEvents = filterVisibleEvents(stored, playerId, state).slice(-limit);
     return {
       decisionId,
       gameId: state.id,
