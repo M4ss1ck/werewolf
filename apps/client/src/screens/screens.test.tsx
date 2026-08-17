@@ -193,7 +193,11 @@ test("browser: renders games, filters by status, shows the avatar stack overflow
 
   renderWithI18n(<GamesScreen username="Wren" />);
 
+  // The browser opens on Lobby, so a running game only appears once All is picked.
   expect(await screen.findByText("Lobby Game")).toBeInTheDocument();
+  expect(screen.queryByText("Running Game")).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "All" }));
   expect(screen.getByText("Running Game")).toBeInTheDocument();
   expect(screen.getByText("Finished Game")).toBeInTheDocument();
   // 5 players in the lobby stack: three avatars plus the overflow marker.
