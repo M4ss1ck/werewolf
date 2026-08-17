@@ -18,7 +18,7 @@ function scriptedProvider(count: number) {
 
 describe("a full bot match", () => {
   test("runs to a win condition without a human ever acting", async () => {
-    const config = testBotConfig({ BOT_DISCUSSION_TURNS: "1" });
+    const config = testBotConfig({ BOT_CHAT_TURNS: "1" });
     const harness = await setupBots({
       agent: new LlmBotAgent(scriptedProvider(400), config),
       config,

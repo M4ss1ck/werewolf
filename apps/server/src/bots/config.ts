@@ -30,9 +30,10 @@ const botEnvSchema = z.object({
   BOT_MIN_DELAY_MS: z.coerce.number().int().nonnegative().default(1_500),
   BOT_MAX_DELAY_MS: z.coerce.number().int().nonnegative().default(6_000),
 
-  /** How many times one bot may speak in a single discussion phase. This is
-   * the hard cap on model calls: bots x turns per discussion. */
-  BOT_DISCUSSION_TURNS: z.coerce.number().int().min(1).max(6).default(2),
+  /** How many turns one bot may take in a single discussion or voting phase,
+   * counting the unconditional first one. This is the hard cap on model calls:
+   * bots x turns per phase. */
+  BOT_CHAT_TURNS: z.coerce.number().int().min(1).max(6).default(2),
 
   /** How many recent visible events go into a prompt. Bounded on purpose: the
    * match log must not grow into every request. */

@@ -88,7 +88,7 @@ describe("bot command path", () => {
     );
     const harness = await setupBots({
       agent,
-      config: testBotConfig({ BOT_DISCUSSION_TURNS: "2" }),
+      config: testBotConfig({ BOT_CHAT_TURNS: "2" }),
     });
     const gameId = await harness.startBotGame(5);
 
@@ -98,6 +98,32 @@ describe("bot command path", () => {
     expect(perPlayer.size).toBe(6);
     for (const count of perPlayer.values()) expect(count).toBeLessThanOrEqual(2);
     // And everyone actually got to speak, rather than the cap silencing them.
+    const events = await harness.coordinator.getVisibleEvents(gameId, 0);
+    expect(events.filter((event) => event.kind === "chat.message").length).toBeGreaterThan(0);
+  });
+
+  test("a bot answers a chat message during voting, under the same cap", async () => {
+    const agent = new RecordingBotAgent((input) =>
+      input.phase === "voting"
+        ? { actionId: null, say: "I have my suspicions.", channel: "public" }
+        : { actionId: null, say: null, channel: null },
+    );
+    const harness = await setupBots({
+      agent,
+      config: testBotConfig({ BOT_CHAT_TURNS: "2" }),
+    });
+    const gameId = await harness.startBotGame(5);
+    await harness.advancePhase(gameId); // discussion -> voting
+
+    const perPlayer = new Map<UserId, number>();
+    for (const input of agent.inputs.filter((entry) => entry.phase === "voting"))
+      perPlayer.set(input.playerId, (perPlayer.get(input.playerId) ?? 0) + 1);
+    // A reply is earned for what somebody said during voting too, not just
+    // during discussion: at least one seat got a second voting decision.
+    expect([...perPlayer.values()].some((count) => count > 1)).toBe(true);
+    // ...but the same per-phase cap still terminates the cascade.
+    for (const count of perPlayer.values()) expect(count).toBeLessThanOrEqual(2);
+    // And the replies were actual messages, not just extra model calls.
     const events = await harness.coordinator.getVisibleEvents(gameId, 0);
     expect(events.filter((event) => event.kind === "chat.message").length).toBeGreaterThan(0);
   });
@@ -151,7 +177,7 @@ describe("bot command path", () => {
     }));
     const harness = await setupBots({
       agent,
-      config: testBotConfig({ BOT_DISCUSSION_TURNS: "1" }),
+      config: testBotConfig({ BOT_CHAT_TURNS: "1" }),
     });
     const gameId = await harness.startBotGame(5);
 

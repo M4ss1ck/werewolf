@@ -137,7 +137,7 @@ export class BotManager {
       if (record.inFlight.has(player.id)) continue;
       const used = record.turns.get(player.id) ?? 0;
       // First turn of the phase is unconditional; a further turn only happens
-      // in discussion, and only because somebody else said something.
+      // in discussion or voting, and only because somebody else said something.
       if (used > 0 && !this.reactsToChat(state, player.id, used, events)) continue;
       const mustAct = getLegalCommands(state, player.id, now).length > 0;
       const maySpeak = getSpeakableChannels(state, player.id, now).length > 0;
@@ -157,16 +157,17 @@ export class BotManager {
     return record;
   }
 
-  /** A bot answers back when another player spoke where it could hear, up to
-   * its per-phase turn budget. The budget is the hard cap on model calls. */
+  /** A bot answers back in a discussion or voting phase when another player
+   * spoke where it could hear, up to its per-phase turn budget. The budget is
+   * the hard cap on model calls. */
   private reactsToChat(
     state: GameState,
     playerId: UserId,
     used: number,
     events: GameEvent[],
   ): boolean {
-    if (state.phase?.type !== "discussion") return false;
-    if (used >= this.options.config.BOT_DISCUSSION_TURNS) return false;
+    if (state.phase?.type !== "discussion" && state.phase?.type !== "voting") return false;
+    if (used >= this.options.config.BOT_CHAT_TURNS) return false;
     return events.some(
       (event) =>
         event.kind === "chat.message" &&
