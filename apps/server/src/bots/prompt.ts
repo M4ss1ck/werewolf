@@ -22,30 +22,6 @@ export const BOT_SYSTEM_PROMPT = [
   "Reply with JSON only, matching the requested schema.",
 ].join(" ");
 
-export const BOT_DECISION_JSON_SCHEMA = {
-  name: "werewolf_bot_decision",
-  schema: {
-    type: "object",
-    additionalProperties: false,
-    required: ["actionId", "say", "channel"],
-    properties: {
-      actionId: {
-        type: ["integer", "null"],
-        description: "Id of the chosen legal action, or null to take no action.",
-      },
-      say: {
-        type: ["string", "null"],
-        description: "What to say out loud this turn, or null to stay silent.",
-      },
-      channel: {
-        type: ["string", "null"],
-        enum: ["public", "wolves", null],
-        description: "Channel for `say`. Must be one of the channels you may speak on.",
-      },
-    },
-  },
-} as const;
-
 function nameOf(input: BotDecisionInput, userId: UserId): string {
   return input.playerView.players.find((p) => p.userId === userId)?.displayName ?? userId;
 }

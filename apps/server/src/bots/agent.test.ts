@@ -189,7 +189,6 @@ describe("llm bot agent", () => {
     expect(request.temperature).toBe(BOT_CONFIG.temperature);
     expect(request.maxOutputTokens).toBe(BOT_CONFIG.maxOutputTokens);
     expect(request.timeoutMs).toBe(BOT_CONFIG.timeoutMs);
-    expect(request.schema.name).toBe("werewolf_bot_decision");
     // The prompt carries the bot's own seat, never the rest of the table.
     expect(request.userPrompt).toContain("Mira");
     expect(request.userPrompt).toContain("villager");
@@ -204,7 +203,6 @@ describe("openai-compatible provider", () => {
     temperature: 0,
     maxOutputTokens: 10,
     timeoutMs: 1_000,
-    schema: { name: "n", schema: {} },
   };
 
   test("returns the first choice's content", async () => {
@@ -218,6 +216,27 @@ describe("openai-compatible provider", () => {
       },
     });
     expect(await provider.generateDecision(request)).toEqual({ text: "{}" });
+  });
+
+  test("sends no response_format, only the plain chat-completions fields", async () => {
+    let body: Record<string, unknown> | undefined;
+    const provider = new OpenAiCompatibleProvider({
+      baseUrl: "https://example.test/v1",
+      apiKey: "secret",
+      fetch: async (_url, init) => {
+        body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        return new Response(JSON.stringify({ choices: [{ message: { content: "{}" } }] }));
+      },
+    });
+    await provider.generateDecision(request);
+    expect("response_format" in (body ?? {})).toBe(false);
+    expect(body?.model).toBe("m");
+    expect(body?.temperature).toBe(0);
+    expect(body?.max_tokens).toBe(10);
+    expect(body?.messages).toEqual([
+      { role: "system", content: "s" },
+      { role: "user", content: "u" },
+    ]);
   });
 
   test("categorises a non-2xx response without echoing its body", async () => {

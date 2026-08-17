@@ -12,7 +12,7 @@
 import { createRng } from "@werewolf/game-engine";
 import { type BotRuntimeConfig, loadBotConfig } from "./config.ts";
 import { type BotLogger, silentBotLogger } from "./log.ts";
-import { BOT_DECISION_JSON_SCHEMA, BOT_SYSTEM_PROMPT, buildUserPrompt } from "./prompt.ts";
+import { BOT_SYSTEM_PROMPT, buildUserPrompt } from "./prompt.ts";
 import {
   type BotAgent,
   type BotDecision,
@@ -72,10 +72,6 @@ export class LlmBotAgent implements BotAgent {
         temperature: input.config.temperature,
         maxOutputTokens: input.config.maxOutputTokens,
         timeoutMs: input.config.timeoutMs,
-        schema: BOT_DECISION_JSON_SCHEMA as unknown as {
-          name: string;
-          schema: Record<string, unknown>;
-        },
       });
       text = response.text;
     } catch (error) {

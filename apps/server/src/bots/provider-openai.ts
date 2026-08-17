@@ -3,10 +3,10 @@
 // server all speak this, so changing model means changing environment, not
 // code.
 //
-// Structured output is requested natively via `response_format`. Providers
-// that ignore the field still return JSON because the prompt demands it, and
-// the caller validates the text either way — the schema request is an
-// optimisation, never the guarantee.
+// The JSON shape is demanded by the prompt and validated by the caller:
+// providers on this API differ on whether they accept a json_schema
+// `response_format` at all, and a rejection costs the whole turn, so the
+// request body carries no structured-output field.
 
 import {
   type BotModelProvider,
@@ -52,10 +52,6 @@ export class OpenAiCompatibleProvider implements BotModelProvider {
           model: request.model,
           temperature: request.temperature,
           max_tokens: request.maxOutputTokens,
-          response_format: {
-            type: "json_schema",
-            json_schema: { ...request.schema, strict: true },
-          },
           messages: [
             { role: "system", content: request.systemPrompt },
             { role: "user", content: request.userPrompt },

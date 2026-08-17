@@ -87,8 +87,6 @@ export interface BotModelRequest {
   temperature: number;
   maxOutputTokens: number;
   timeoutMs: number;
-  /** JSON schema the provider should constrain its output to. */
-  schema: { name: string; schema: Record<string, unknown> };
 }
 
 export interface BotModelResponse {
