@@ -228,7 +228,7 @@ export class GameRepository {
       const inserted: ReturnType<typeof mapEvent>[] = [];
       for (const draft of transition.events) {
         const commandId = (draft as unknown as { commandId?: string }).commandId;
-        await tx
+        const [insertedRow] = await tx
           .insert(gameEvents)
           .values({
             gameId,
@@ -240,30 +240,24 @@ export class GameRepository {
             payloadJson: JSON.stringify(draft.payload),
             createdAt,
           })
-          .onConflictDoNothing();
+          .onConflictDoNothing()
+          .returning();
+        // The id must come from the insert itself: every event in one
+        // transition shares a single createdAt, so a read-back keyed on kind
+        // and createdAt would hand several same-kind events the first row's id.
+        // Only the (game_id, command_id) idempotent retry skips the insert, so
+        // that is the one path that falls back to reading the existing row.
         const row =
-          commandId === undefined
+          insertedRow ??
+          (commandId !== undefined
             ? (
-                await tx
-                  .select()
-                  .from(gameEvents)
-                  .where(
-                    and(
-                      eq(gameEvents.gameId, gameId),
-                      eq(gameEvents.kind, draft.kind),
-                      eq(gameEvents.createdAt, createdAt),
-                    ),
-                  )
-                  .orderBy(asc(gameEvents.id))
-                  .limit(1)
-              )[0]
-            : (
                 await tx
                   .select()
                   .from(gameEvents)
                   .where(and(eq(gameEvents.gameId, gameId), eq(gameEvents.commandId, commandId)))
                   .limit(1)
-              )[0];
+              )[0]
+            : undefined);
         if (row) inserted.push(mapEvent(row));
         if (draft.kind === "wolves.member_joined" && row)
           await tx

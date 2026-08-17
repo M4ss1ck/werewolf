@@ -608,4 +608,112 @@ describe("GameRepository", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]!.wolfSinceEventId).toBe(joined!.id);
   });
+
+  test("commitTransition returns one mapped event per draft when two share a kind and createdAt", async () => {
+    const { db, repo } = await setup();
+    await createGame(repo);
+
+    const result = await repo.commitTransition(GAME_ID, 0, {
+      gamePatch: { status: "running" },
+      playerPatches: [],
+      events: [
+        draft("night.resolved", "public", { deaths: [USER_IDS[1]!, USER_IDS[2]!] }),
+        draft("player.eliminated", "public", {
+          playerId: USER_IDS[1]!,
+          role: "werewolf",
+          cause: "night",
+        }),
+        draft("player.eliminated", "public", {
+          playerId: USER_IDS[2]!,
+          role: "villager",
+          cause: "night",
+        }),
+      ],
+      ephemeral: [],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("transition should not be stale");
+
+    // One mapped event per draft, in draft order.
+    expect(result.events.map((event) => event.kind)).toEqual([
+      "night.resolved",
+      "player.eliminated",
+      "player.eliminated",
+    ]);
+    // All ids are distinct and ascending in insert order.
+    const ids = result.events.map((event) => event.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toEqual([...ids].sort((a, b) => a - b));
+    // Payloads line up with the drafts: the second elimination names the second player.
+    expect(result.events[1]!.payload).toEqual({
+      playerId: USER_IDS[1]!,
+      role: "werewolf",
+      cause: "night",
+    });
+    expect(result.events[2]!.payload).toEqual({
+      playerId: USER_IDS[2]!,
+      role: "villager",
+      cause: "night",
+    });
+    // The returned ids are the stored rows' ids in id order.
+    const stored = await db
+      .select()
+      .from(gameEvents)
+      .where(eq(gameEvents.gameId, GAME_ID))
+      .orderBy(asc(gameEvents.id));
+    expect(stored.map((row) => row.id)).toEqual(ids);
+  });
+
+  test("wolves.member_joined with two converts sets each wolf_since_event_id to its own event's id", async () => {
+    const { db, repo } = await setup();
+    await createGame(repo);
+    const first = USER_IDS[0]!;
+    const second = USER_IDS[1]!;
+    await repo.addPlayer({
+      gameId: GAME_ID,
+      userId: first,
+      displayName: "Cursed 1",
+      joinedAt: 1_000,
+    });
+    await repo.addPlayer({
+      gameId: GAME_ID,
+      userId: second,
+      displayName: "Cursed 2",
+      joinedAt: 1_001,
+    });
+
+    const result = await repo.commitTransition(GAME_ID, 0, {
+      gamePatch: { status: "running" },
+      playerPatches: [],
+      events: [
+        draft("wolves.member_joined", "faction", { playerId: first }, { scopeId: "wolves" }),
+        draft("wolves.member_joined", "faction", { playerId: second }, { scopeId: "wolves" }),
+      ],
+      ephemeral: [],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("transition should not be stale");
+
+    const joined = result.events.filter((event) => event.kind === "wolves.member_joined");
+    expect(joined).toHaveLength(2);
+    expect(joined[0]!.payload).toEqual({ playerId: first });
+    expect(joined[1]!.payload).toEqual({ playerId: second });
+    expect(joined[1]!.id).not.toBe(joined[0]!.id);
+
+    const firstRow = (
+      await db
+        .select()
+        .from(gamePlayers)
+        .where(and(eq(gamePlayers.gameId, GAME_ID), eq(gamePlayers.userId, first)))
+    )[0]!;
+    const secondRow = (
+      await db
+        .select()
+        .from(gamePlayers)
+        .where(and(eq(gamePlayers.gameId, GAME_ID), eq(gamePlayers.userId, second)))
+    )[0]!;
+    const ownEventId = new Map(joined.map((event) => [event.payload.playerId, event.id]));
+    expect(firstRow.wolfSinceEventId).toBe(ownEventId.get(first)!);
+    expect(secondRow.wolfSinceEventId).toBe(ownEventId.get(second)!);
+  });
 });
