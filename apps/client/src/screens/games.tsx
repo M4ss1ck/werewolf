@@ -82,7 +82,7 @@ export function GamesScreen({ username }: { username: string }) {
   const { t } = useTranslation();
   const [games, setGames] = useState<PublicGameSummary[]>([]);
   const [error, setError] = useState<unknown>();
-  const [filter, setFilter] = useState<Filter>("all");
+  const [filter, setFilter] = useState<Filter>("lobby");
   useEffect(() => {
     void api.listGames().then(setGames).catch(setError);
   }, []);
