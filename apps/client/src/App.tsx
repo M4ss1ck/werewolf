@@ -184,7 +184,7 @@ function Shell() {
       </div>
       {snapshot ? (
         route.type === "replay" ? (
-          <GameOverScreen snapshot={snapshot} />
+          <GameOverScreen replay snapshot={snapshot} />
         ) : snapshot.game.status === "cancelled" ? (
           <CancelledScreen snapshot={snapshot} />
         ) : snapshot.game.status === "lobby" || snapshot.game.status === "scheduled" ? (

@@ -9,9 +9,12 @@ import { navigate } from "../routes.tsx";
 export function GameOverScreen({
   snapshot,
   events,
+  replay = false,
 }: {
   snapshot: ViewerGameSnapshot;
   events?: GameEvent[];
+  /** True on the replay route, where "watch replay" would lead back here. */
+  replay?: boolean;
 }) {
   const { t } = useTranslation();
   const [loadedEvents, setLoadedEvents] = useState<GameEvent[]>(events ?? []);
@@ -106,13 +109,15 @@ export function GameOverScreen({
         </ul>
       </section>
       <div className="mt-auto flex gap-2.5">
-        <button
-          className="btn btn--ghost min-h-14 flex-1"
-          onClick={() => navigate(`/games/${snapshot.game.id}/replay`)}
-          type="button"
-        >
-          {t("ui.over.watchReplay")}
-        </button>
+        {!replay && (
+          <button
+            className="btn btn--ghost min-h-14 flex-1"
+            onClick={() => navigate(`/games/${snapshot.game.id}/replay`)}
+            type="button"
+          >
+            {t("ui.over.watchReplay")}
+          </button>
+        )}
         <button
           className="btn btn--primary min-h-14 flex-1"
           onClick={() => navigate("/create")}
