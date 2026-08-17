@@ -23,10 +23,7 @@ export function UsernameScreen({ onSaved }: { onSaved: () => void }) {
   };
   return (
     <div className="screen">
-      <form
-        className="mx-auto flex w-full max-w-[30rem] flex-col gap-6 px-6 py-8"
-        onSubmit={(event) => void save(event)}
-      >
+      <form className="flex w-full flex-col gap-6 px-6 py-8" onSubmit={(event) => void save(event)}>
         <div>
           <h1 className="text-[30px] font-semibold tracking-[-0.03em]">{t("ui.chooseUsername")}</h1>
           <p className="mt-2.5 text-[15px] leading-relaxed text-fog">

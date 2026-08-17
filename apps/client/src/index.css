@@ -96,6 +96,10 @@
   --color-sage: #7fa292;
   --color-sage-light: #9fbcad;
 
+  /* The one content width. Every route renders in a column of exactly this
+   * size, so navigating never resizes the content. */
+  --container-app: 480px;
+
   --font-sans: "Space Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-display: "Space Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "Space Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
@@ -110,6 +114,15 @@ html {
 body {
   @apply bg-night font-sans text-paper antialiased;
   min-height: 100dvh;
+}
+
+/* Once there is room beside the app column, the field around it falls away to
+ * ink so the column reads as a panel under the moon rather than a stranded
+ * phone. Below this the column fills the screen and this never shows. */
+@media (min-width: 40rem) {
+  body {
+    background-color: var(--color-ink);
+  }
 }
 
 ::selection {
@@ -141,26 +154,7 @@ body {
   transition-duration: 0.01ms !important;
 }
 
-/* --- App shell (old screens.tsx) ------------------------------------------ */
-
 @layer components {
-.app-shell {
-  position: relative;
-  isolation: isolate;
-  min-height: 100dvh;
-  background-color: var(--color-night);
-}
-
-/* A fixed, quiet night sky: moon glow on one side, faint fog on the other. */
-.app-shell__atmosphere {
-  position: fixed;
-  inset: 0;
-  z-index: -10;
-  pointer-events: none;
-  background-image:
-    radial-gradient(46rem 24rem at 85% -10%, rgba(213, 165, 74, 0.16), transparent 65%),
-    radial-gradient(40rem 22rem at -10% 108%, rgba(170, 178, 189, 0.07), transparent 60%);
-}
 
 /* --- Old surfaces/controls kept for screens.tsx ---------------------------- */
 
@@ -382,15 +376,44 @@ body {
 
 /* --- Screen shell --------------------------------------------------------- */
 
+/* The app column, identical on every route. These are mobile-first designs, so
+ * a wider viewport gets more night around the column, never a wider column. */
 .screen {
+  position: relative;
+  isolation: isolate;
   display: flex;
   height: 100dvh;
   flex-direction: column;
   box-sizing: border-box;
+  margin-inline: auto;
+  width: 100%;
+  max-width: var(--container-app);
   background-color: var(--color-night);
   padding:
     env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
     env(safe-area-inset-left);
+}
+
+/* A quiet night sky: moon glow on one side, faint fog on the other. It belongs
+ * to the column, not the viewport, so it lights the app on every screen size
+ * instead of only the margins a wide window happens to leave. */
+.screen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -10;
+  pointer-events: none;
+  background-image:
+    radial-gradient(46rem 24rem at 85% -10%, rgba(213, 165, 74, 0.16), transparent 65%),
+    radial-gradient(40rem 22rem at -10% 108%, rgba(170, 178, 189, 0.07), transparent 60%);
+}
+
+/* The column takes an edge only once the field behind it is visible. */
+@media (min-width: 40rem) {
+  .screen {
+    border-inline: 1px solid rgba(233, 229, 218, 0.09);
+    box-shadow: 0 0 6rem rgba(7, 16, 15, 0.9);
+  }
 }
 
 .screen__scroll {

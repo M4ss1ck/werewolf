@@ -161,7 +161,7 @@ function Shell() {
         />
       );
     return (
-      <div className="screen mx-auto w-full max-w-[480px]">
+      <div className="screen">
         {screen}
         <TabBar
           current={route.type}
@@ -178,26 +178,25 @@ function Shell() {
   }
 
   return (
-    <div className="app-shell">
-      <div aria-hidden="true" className="app-shell__atmosphere" />
-      <main className="relative mx-auto flex h-dvh w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6">
+    <main className="screen">
+      <div className="flex px-[18px] pt-2">
         <BackToGames />
-        {snapshot ? (
-          route.type === "replay" ? (
-            <GameOverScreen snapshot={snapshot} />
-          ) : snapshot.game.status === "cancelled" ? (
-            <CancelledScreen snapshot={snapshot} />
-          ) : snapshot.game.status === "lobby" || snapshot.game.status === "scheduled" ? (
-            <LobbyScreen onUpdate={setSnapshot} snapshot={snapshot} />
-          ) : snapshot.game.status === "finished" ? (
-            <GameOverScreen snapshot={snapshot} />
-          ) : (
-            <GameScreen initial={snapshot} />
-          )
+      </div>
+      {snapshot ? (
+        route.type === "replay" ? (
+          <GameOverScreen snapshot={snapshot} />
+        ) : snapshot.game.status === "cancelled" ? (
+          <CancelledScreen snapshot={snapshot} />
+        ) : snapshot.game.status === "lobby" || snapshot.game.status === "scheduled" ? (
+          <LobbyScreen onUpdate={setSnapshot} snapshot={snapshot} />
+        ) : snapshot.game.status === "finished" ? (
+          <GameOverScreen snapshot={snapshot} />
         ) : (
-          <p className="text-fog">{"…"}</p>
-        )}
-      </main>
-    </div>
+          <GameScreen initial={snapshot} />
+        )
+      ) : (
+        <p className="px-[18px] text-fog">{"…"}</p>
+      )}
+    </main>
   );
 }

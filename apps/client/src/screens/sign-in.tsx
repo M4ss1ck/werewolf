@@ -10,7 +10,7 @@ export function SignInScreen() {
   const { t, i18n } = useTranslation();
   return (
     <div className="screen">
-      <div className="mx-auto flex w-full max-w-[30rem] flex-1 flex-col justify-between px-6 pb-8 pt-12">
+      <div className="flex w-full flex-1 flex-col justify-between px-6 pb-8 pt-12">
         <div className="flex flex-col gap-7 pt-10">
           <span
             aria-hidden="true"
