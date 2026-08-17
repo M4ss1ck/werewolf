@@ -149,7 +149,8 @@ export function GameScreen({
   };
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="screen__scroll global-chat-scrollbar flex flex-col gap-5 px-[18px] pb-5 pt-6">
+      {/* The phase header stays put; only the open tab scrolls under it. */}
+      <div className="flex flex-col gap-5 px-[18px] pb-5 pt-6">
         {status === "reconnecting" && (
           <p className="flex justify-center">
             <Chip tone="running">{t("ui.reconnecting")}</Chip>
@@ -157,6 +158,11 @@ export function GameScreen({
         )}
         <ErrorMessage error={shownCommandError} />
         <PhaseHeader snapshot={snapshot} />
+      </div>
+      {/* Each tab owns its own scrolling so it can hold a footer — the vote
+       * lock, the composer — against the tab bar. This wrapper keeps the tab
+       * bar down there even on a phase where the Act tab renders nothing. */}
+      <div className="flex min-h-0 flex-1 flex-col">
         {tab === "village" && <VillageTab events={events} snapshot={snapshot} />}
         {tab === "talk" && <Talk events={events} send={send} snapshot={snapshot} />}
         {tab === "act" && <Act events={events} send={send} snapshot={snapshot} />}

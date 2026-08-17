@@ -51,7 +51,7 @@ export function VillageTab({
   const timeline = events.filter(isTimelineEvent);
   const names = new Map(snapshot.players.map((player) => [player.userId, player.displayName]));
   return (
-    <div className="flex flex-col gap-6">
+    <div className="screen__scroll flex flex-col gap-6 px-[18px] pb-5">
       <section className="flex flex-col gap-3">
         <p className="eyebrow">{t("ui.intel.villageAlive.count", { count: alive })}</p>
         <div className="grid grid-cols-5 gap-x-2 gap-y-3">

@@ -78,85 +78,87 @@ function VotingBranch({
     (player) => player.status === "alive" || player.status === "dead",
   );
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-2xl font-semibold tracking-[-0.025em] text-paper">
-          {t("ui.vote.title")}
-        </h2>
-        <span
-          aria-label={t("ui.votingProgress")}
-          className="font-mono text-[13px] text-fog"
-          role="status"
-        >
-          {t("ui.vote.progress", { acted: progress.acted, eligible: progress.eligible })}
-        </span>
-      </div>
-      <ul className="flex flex-col gap-2.5">
-        {rows.map((player) => {
-          const isMe = player.userId === me?.userId;
-          if (player.status === "alive" && isMe) return null;
-          const dead = player.status === "dead";
-          const count = tallies.get(player.userId) ?? 0;
-          const selected = shown?.type === "player" && shown.targetId === player.userId;
-          const width =
-            progress.eligible > 0 ? Math.min(100, (count / progress.eligible) * 100) : 0;
-          return (
-            <li key={player.userId}>
-              <button
-                aria-pressed={selected}
-                className={`row relative w-full overflow-hidden text-left disabled:cursor-not-allowed ${
-                  dead ? "row--dead" : ""
-                }`}
-                disabled={!alive || dead || isMe}
-                onClick={() =>
-                  setPicked({
-                    phaseId: phase.id,
-                    vote: { type: "player", targetId: player.userId },
-                  })
-                }
-                style={selected ? { borderColor: "var(--color-blood)" } : undefined}
-                type="button"
-              >
-                <span
-                  aria-hidden="true"
-                  className="vote-row__fill"
-                  style={{ width: `${width}%` }}
-                />
-                <span className="relative flex-none">
-                  <Avatar dead={dead} name={player.displayName} />
-                </span>
-                <span className="relative row__name text-[17px] font-medium">
-                  {player.displayName}
-                  {dead && player.revealedRole !== undefined && (
-                    <span className="text-fog"> · {t(`roles.${player.revealedRole}.name`)}</span>
-                  )}
-                </span>
-                <span
-                  className={`relative font-mono text-[16px] ${
-                    selected ? "text-blood-light" : count > 0 ? "text-fog" : "text-fog-dim"
-                  }`}
-                >
-                  {count}
-                </span>
-              </button>
-            </li>
-          );
-        })}
-        <li>
-          <button
-            aria-pressed={shown?.type === "abstain"}
-            className="row relative w-full text-left disabled:cursor-not-allowed"
-            disabled={!alive}
-            onClick={() => setPicked({ phaseId: phase.id, vote: { type: "abstain" } })}
-            style={shown?.type === "abstain" ? { borderColor: "var(--color-blood)" } : undefined}
-            type="button"
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="screen__scroll flex flex-col gap-4 px-[18px] pb-5">
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="text-2xl font-semibold tracking-[-0.025em] text-paper">
+            {t("ui.vote.title")}
+          </h2>
+          <span
+            aria-label={t("ui.votingProgress")}
+            className="font-mono text-[13px] text-fog"
+            role="status"
           >
-            <span className="relative row__name text-[17px] font-medium">{t("ui.abstain")}</span>
-          </button>
-        </li>
-      </ul>
+            {t("ui.vote.progress", { acted: progress.acted, eligible: progress.eligible })}
+          </span>
+        </div>
+        <ul className="flex flex-col gap-2.5">
+          {rows.map((player) => {
+            const isMe = player.userId === me?.userId;
+            if (player.status === "alive" && isMe) return null;
+            const dead = player.status === "dead";
+            const count = tallies.get(player.userId) ?? 0;
+            const selected = shown?.type === "player" && shown.targetId === player.userId;
+            const width =
+              progress.eligible > 0 ? Math.min(100, (count / progress.eligible) * 100) : 0;
+            return (
+              <li key={player.userId}>
+                <button
+                  aria-pressed={selected}
+                  className={`row relative w-full overflow-hidden text-left disabled:cursor-not-allowed ${
+                    dead ? "row--dead" : ""
+                  }`}
+                  disabled={!alive || dead || isMe}
+                  onClick={() =>
+                    setPicked({
+                      phaseId: phase.id,
+                      vote: { type: "player", targetId: player.userId },
+                    })
+                  }
+                  style={selected ? { borderColor: "var(--color-blood)" } : undefined}
+                  type="button"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="vote-row__fill"
+                    style={{ width: `${width}%` }}
+                  />
+                  <span className="relative flex-none">
+                    <Avatar dead={dead} name={player.displayName} />
+                  </span>
+                  <span className="relative row__name text-[17px] font-medium">
+                    {player.displayName}
+                    {dead && player.revealedRole !== undefined && (
+                      <span className="text-fog"> · {t(`roles.${player.revealedRole}.name`)}</span>
+                    )}
+                  </span>
+                  <span
+                    className={`relative font-mono text-[16px] ${
+                      selected ? "text-blood-light" : count > 0 ? "text-fog" : "text-fog-dim"
+                    }`}
+                  >
+                    {count}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+          <li>
+            <button
+              aria-pressed={shown?.type === "abstain"}
+              className="row relative w-full text-left disabled:cursor-not-allowed"
+              disabled={!alive}
+              onClick={() => setPicked({ phaseId: phase.id, vote: { type: "abstain" } })}
+              style={shown?.type === "abstain" ? { borderColor: "var(--color-blood)" } : undefined}
+              type="button"
+            >
+              <span className="relative row__name text-[17px] font-medium">{t("ui.abstain")}</span>
+            </button>
+          </li>
+        </ul>
+      </div>
       {alive && shown !== null && (
-        <div className="sticky bottom-0 -mx-[18px] border-t border-paper/10 bg-bar px-[18px] py-3">
+        <div className="border-t border-paper/10 bg-bar px-[18px] py-3">
           <button
             className="btn btn--primary w-full"
             disabled={unchanged}
@@ -259,7 +261,7 @@ function NightBranch({
   })();
   if (actions.length === 0) {
     return (
-      <div className="flex flex-col gap-4">
+      <div className="screen__scroll flex flex-col gap-4 px-[18px] pb-5">
         {role !== undefined && (
           <p className="eyebrow">{t("ui.night.yourMove", { role: t(`roles.${role}.name`) })}</p>
         )}
@@ -268,70 +270,72 @@ function NightBranch({
     );
   }
   return (
-    <div className="flex flex-col gap-5">
-      {role !== undefined && (
-        <p className="eyebrow">{t("ui.night.yourMove", { role: t(`roles.${role}.name`) })}</p>
-      )}
-      {actions.map((action) => (
-        <section className="flex flex-col gap-3" key={action.id}>
-          <h2 className="text-[28px] font-semibold leading-tight tracking-[-0.03em] text-paper">
-            {t(`actions.${action.id}.prompt`)}
-          </h2>
-          {action.type === "choice" ? (
-            <ul className="flex flex-col gap-2.5">
-              <li>
-                <button
-                  aria-pressed={selectedChoice(pickedForPhase, action)}
-                  className={`row relative w-full text-left ${
-                    selectedChoice(pickedForPhase, action) ? "row--selected" : ""
-                  }`}
-                  onClick={() =>
-                    setPick(action.id, selectedChoice(pickedForPhase, action) ? null : {})
-                  }
-                  type="button"
-                >
-                  <span className="relative row__name text-[17px] font-medium">
-                    {t(`actions.${action.id}.label`)}
-                  </span>
-                  <CheckMark on={selectedChoice(pickedForPhase, action)} />
-                </button>
-              </li>
-            </ul>
-          ) : (
-            <ul className="flex flex-col gap-2.5">
-              {action.targets.map((target) => {
-                const selected = pickedForPhase?.actions[action.id]?.targetId === target.userId;
-                const name = names.get(target.userId) ?? target.userId;
-                return (
-                  <li key={target.userId}>
-                    <button
-                      aria-pressed={selected}
-                      className={`row relative w-full text-left disabled:cursor-not-allowed disabled:opacity-40 ${
-                        selected ? "row--selected" : ""
-                      }`}
-                      disabled={!target.enabled}
-                      onClick={() => setPick(action.id, { targetId: target.userId })}
-                      type="button"
-                    >
-                      <span className="relative flex-none">
-                        <Avatar name={name} />
-                      </span>
-                      <span className="relative row__name text-[17px] font-medium">{name}</span>
-                      <CheckMark on={selected} />
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
-      ))}
-      <div className="flex items-center gap-2.5 rounded-[14px] border border-paper/10 bg-surface px-3.5 py-3 text-sm text-fog">
-        <span aria-hidden="true" className="h-2 w-2 flex-none rounded-full bg-sage" />
-        {t("ui.night.villageSleeps")}
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="screen__scroll flex flex-col gap-5 px-[18px] pb-5">
+        {role !== undefined && (
+          <p className="eyebrow">{t("ui.night.yourMove", { role: t(`roles.${role}.name`) })}</p>
+        )}
+        {actions.map((action) => (
+          <section className="flex flex-col gap-3" key={action.id}>
+            <h2 className="text-[28px] font-semibold leading-tight tracking-[-0.03em] text-paper">
+              {t(`actions.${action.id}.prompt`)}
+            </h2>
+            {action.type === "choice" ? (
+              <ul className="flex flex-col gap-2.5">
+                <li>
+                  <button
+                    aria-pressed={selectedChoice(pickedForPhase, action)}
+                    className={`row relative w-full text-left ${
+                      selectedChoice(pickedForPhase, action) ? "row--selected" : ""
+                    }`}
+                    onClick={() =>
+                      setPick(action.id, selectedChoice(pickedForPhase, action) ? null : {})
+                    }
+                    type="button"
+                  >
+                    <span className="relative row__name text-[17px] font-medium">
+                      {t(`actions.${action.id}.label`)}
+                    </span>
+                    <CheckMark on={selectedChoice(pickedForPhase, action)} />
+                  </button>
+                </li>
+              </ul>
+            ) : (
+              <ul className="flex flex-col gap-2.5">
+                {action.targets.map((target) => {
+                  const selected = pickedForPhase?.actions[action.id]?.targetId === target.userId;
+                  const name = names.get(target.userId) ?? target.userId;
+                  return (
+                    <li key={target.userId}>
+                      <button
+                        aria-pressed={selected}
+                        className={`row relative w-full text-left disabled:cursor-not-allowed disabled:opacity-40 ${
+                          selected ? "row--selected" : ""
+                        }`}
+                        disabled={!target.enabled}
+                        onClick={() => setPick(action.id, { targetId: target.userId })}
+                        type="button"
+                      >
+                        <span className="relative flex-none">
+                          <Avatar name={name} />
+                        </span>
+                        <span className="relative row__name text-[17px] font-medium">{name}</span>
+                        <CheckMark on={selected} />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+        ))}
+        <div className="flex items-center gap-2.5 rounded-[14px] border border-paper/10 bg-surface px-3.5 py-3 text-sm text-fog">
+          <span aria-hidden="true" className="h-2 w-2 flex-none rounded-full bg-sage" />
+          {t("ui.night.villageSleeps")}
+        </div>
       </div>
       {confirm !== null && (
-        <div className="sticky bottom-0 -mx-[18px] border-t border-paper/10 bg-bar px-[18px] py-3">
+        <div className="border-t border-paper/10 bg-bar px-[18px] py-3">
           <button className="btn btn--pale w-full" onClick={confirm.send} type="button">
             {t("ui.night.confirm", { player: confirm.label })}
           </button>

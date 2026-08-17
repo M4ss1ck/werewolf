@@ -40,60 +40,62 @@ export function Talk({
       (event.kind === "chat.message" && event.payload.channel === channel),
   );
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex gap-1.5">
-        <button
-          aria-pressed={channel === "public"}
-          className="rounded-full p-0.5"
-          onClick={() => setChannel("public")}
-          type="button"
-        >
-          <Chip tone={channel === "public" ? "active" : "neutral"}>{t("ui.publicChat")}</Chip>
-        </button>
-        {snapshot.availableChannels.includes("wolves") && (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="screen__scroll global-chat-scrollbar flex flex-col gap-4 px-[18px] pb-5">
+        <div className="flex gap-1.5">
           <button
-            aria-pressed={channel === "wolves"}
+            aria-pressed={channel === "public"}
             className="rounded-full p-0.5"
-            onClick={() => setChannel("wolves")}
+            onClick={() => setChannel("public")}
             type="button"
           >
-            <Chip tone={channel === "wolves" ? "active" : "running"}>
-              <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-blood" />
-              {t("ui.wolfChat")}
-            </Chip>
+            <Chip tone={channel === "public" ? "active" : "neutral"}>{t("ui.publicChat")}</Chip>
           </button>
-        )}
-      </div>
-      <ul className="flex flex-col gap-4">
-        {rows.length === 0 ? (
-          <li className="text-sm text-fog">{t("ui.chatEmpty")}</li>
-        ) : (
-          rows.map((event) => {
-            if (event.kind === "player.eliminated") {
+          {snapshot.availableChannels.includes("wolves") && (
+            <button
+              aria-pressed={channel === "wolves"}
+              className="rounded-full p-0.5"
+              onClick={() => setChannel("wolves")}
+              type="button"
+            >
+              <Chip tone={channel === "wolves" ? "active" : "running"}>
+                <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-blood" />
+                {t("ui.wolfChat")}
+              </Chip>
+            </button>
+          )}
+        </div>
+        <ul className="flex flex-col gap-4">
+          {rows.length === 0 ? (
+            <li className="text-sm text-fog">{t("ui.chatEmpty")}</li>
+          ) : (
+            rows.map((event) => {
+              if (event.kind === "player.eliminated") {
+                return (
+                  <li key={event.id}>
+                    <DividerNote>
+                      {t("events.public.player.eliminated", {
+                        player: names.get(event.payload.playerId) ?? event.payload.playerId,
+                        role: t(`roles.${event.payload.role}.name`),
+                      })}
+                    </DividerNote>
+                  </li>
+                );
+              }
+              const mine = event.actorUserId === myId;
+              const authorId = event.actorUserId;
+              const author = authorId !== undefined ? (names.get(authorId) ?? authorId) : "";
               return (
                 <li key={event.id}>
-                  <DividerNote>
-                    {t("events.public.player.eliminated", {
-                      player: names.get(event.payload.playerId) ?? event.payload.playerId,
-                      role: t(`roles.${event.payload.role}.name`),
-                    })}
-                  </DividerNote>
+                  <ChatBubble author={author} mine={mine} text={event.payload.text} />
                 </li>
               );
-            }
-            const mine = event.actorUserId === myId;
-            const authorId = event.actorUserId;
-            const author = authorId !== undefined ? (names.get(authorId) ?? authorId) : "";
-            return (
-              <li key={event.id}>
-                <ChatBubble author={author} mine={mine} text={event.payload.text} />
-              </li>
-            );
-          })
-        )}
-      </ul>
+            })
+          )}
+        </ul>
+      </div>
       <ChatComposer
-        className="sticky bottom-0 -mx-[18px] flex items-center gap-2.5 border-t border-paper/10 bg-bar px-[14px] py-2.5"
+        className="flex items-center gap-2.5 border-t border-paper/10 bg-bar px-[14px] py-2.5"
         disabled={readOnly}
         inputId="talk-message"
         label={t("ui.messageLabel")}

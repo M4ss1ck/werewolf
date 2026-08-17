@@ -43,7 +43,7 @@ export function Me({
     }
   };
   return (
-    <div className="flex flex-col gap-[22px]">
+    <div className="screen__scroll flex flex-col gap-[22px] px-[18px] pb-5">
       {role !== undefined && (
         <section className="card border-sage/30 bg-gradient-to-b from-sage/15 to-sage/[0.02]">
           <p className="eyebrow text-sage-light">{t("ui.yourRole")}</p>
