@@ -1,5 +1,12 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { ChatMessage, EventId, GameId, UserId, ViewerGameSnapshot } from "@werewolf/protocol";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type {
+  ChatMessage,
+  EventId,
+  GameId,
+  PhaseId,
+  UserId,
+  ViewerGameSnapshot,
+} from "@werewolf/protocol";
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
@@ -153,6 +160,107 @@ test("renders the cancelled screen for a cancelled game", async () => {
   // The blank-page regression: a cancelled game must never reach the in-game
   // tab bar (PhaseHeader renders nothing without a phase, VillageTab keeps
   // only alive/dead players, so the whole screen rendered empty).
+  expect(screen.queryByRole("button", { name: "Village" })).not.toBeInTheDocument();
+});
+
+test("a game that finishes while it is open swaps to the game-over screen", async () => {
+  window.history.replaceState({}, "", "/games/g1");
+  const running: ViewerGameSnapshot = {
+    game: {
+      id: "g1" as GameId,
+      name: "Game One",
+      ownerUserId: "owner" as UserId,
+      status: "running",
+      day: 2,
+      phase: { id: 7 as PhaseId, type: "voting", startedAt: 1000, endsAt: 10_000 },
+      settings: {
+        visibility: "public",
+        spectatingEnabled: true,
+        durations: { discussion: 120, voting: 60, night: 60 },
+      },
+    },
+    players: [
+      { userId: "wren" as UserId, displayName: "Wren", status: "alive" },
+      { userId: "odile" as UserId, displayName: "Odile", status: "alive" },
+      { userId: "mattias" as UserId, displayName: "Mattias", status: "alive" },
+      { userId: "kestrel" as UserId, displayName: "Kestrel", status: "alive" },
+      { userId: "anna" as UserId, displayName: "Anna", status: "alive" },
+    ],
+    me: { userId: "wren" as UserId, status: "alive", role: "villager" },
+    availableActions: [],
+    availableChannels: ["public"],
+    progress: { acted: 0, eligible: 4 },
+    cursor: 0 as EventId,
+    serverNow: 5000,
+  };
+  const finished: ViewerGameSnapshot = {
+    game: {
+      id: "g1" as GameId,
+      name: "Game One",
+      ownerUserId: "owner" as UserId,
+      status: "finished",
+      day: 3,
+      phase: null,
+      settings: {
+        visibility: "public",
+        spectatingEnabled: true,
+        durations: { discussion: 120, voting: 60, night: 60 },
+      },
+      winner: {
+        winningFactions: ["village"],
+        winningPlayers: ["wren" as UserId],
+        reason: "wolves_eliminated",
+      },
+    },
+    players: [
+      { userId: "wren" as UserId, displayName: "Wren", status: "alive" },
+      { userId: "odile" as UserId, displayName: "Odile", status: "dead", revealedRole: "werewolf" },
+      { userId: "mattias" as UserId, displayName: "Mattias", status: "alive" },
+      { userId: "kestrel" as UserId, displayName: "Kestrel", status: "alive" },
+      { userId: "anna" as UserId, displayName: "Anna", status: "alive" },
+    ],
+    me: { userId: "wren" as UserId, status: "alive", role: "villager" },
+    availableActions: [],
+    availableChannels: ["public"],
+    progress: { acted: 4, eligible: 4 },
+    cursor: 1 as EventId,
+    serverNow: 6000,
+  };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>((input) => {
+      const url = String(input);
+      if (url === "/api/auth/get-session")
+        return Promise.resolve(
+          new Response(JSON.stringify({ user: { id: "me", username: "wren" } }), { status: 200 }),
+        );
+      if (url === "/api/games/g1")
+        return Promise.resolve(new Response(JSON.stringify(running), { status: 200 }));
+      // GameOverScreen fetches the replay for its timeline when no events prop
+      // is given; the empty list keeps this test out of event rendering.
+      if (url === "/api/games/g1/replay")
+        return Promise.resolve(
+          new Response(JSON.stringify({ snapshot: finished, events: [] }), { status: 200 }),
+        );
+      return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }));
+    }),
+  );
+  render(<App />);
+
+  await screen.findByRole("button", { name: "Village" });
+
+  const live = StubWebSocket.instances.find((socket) => socket.url.endsWith("/api/games/g1/live"));
+  expect(live).toBeDefined();
+  // The sync frame carries the finished snapshot; the socket's handler lifts
+  // it to the shell, which swaps the in-game screen for the game-over one.
+  await act(async () => {
+    live!.onopen?.();
+    live!.onmessage?.({
+      data: JSON.stringify({ type: "sync", snapshot: finished, events: [], cursor: 0 }),
+    } as MessageEvent);
+  });
+
+  expect(await screen.findByRole("heading", { name: "The pack is broken" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Village" })).not.toBeInTheDocument();
 });
 

@@ -34,9 +34,11 @@ function maxEventId(events: GameEvent[]): number {
 export function GameScreen({
   initial,
   replay = false,
+  onUpdate,
 }: {
   initial: ViewerGameSnapshot;
   replay?: boolean;
+  onUpdate: (next: ViewerGameSnapshot) => void;
 }) {
   const { t } = useTranslation();
   const [snapshot, setSnapshot] = useState(initial);
@@ -78,13 +80,22 @@ export function GameScreen({
     // event history (the lobby handoff may pass a latest-cursor snapshot); the
     // connection's own cursor, advanced by incoming frames, is what reconnects use.
     const connection = new LiveGameConnection(initial.game.id, 0 as EventId, {
-      onSnapshot: setSnapshot,
+      // The shell owns the status → screen choice, so a pushed finished game
+      // must reach it: lift the snapshot up as well as keeping it local.
+      onSnapshot: (next) => {
+        setSnapshot(next);
+        onUpdate(next);
+      },
       onEvent: (event) => setEvents((current) => [...current, event]),
       onStatus: setStatus,
     });
     connection.connect();
     return () => connection.close();
-  }, [initial, replay]);
+    // The deps are the game id and the stable setter, not the `initial`
+    // object: App re-renders this screen with a fresh snapshot on every push,
+    // and an object dep would tear down and rebuild the socket each frame,
+    // resubscribing from cursor 0 and re-delivering the whole history.
+  }, [initial.game.id, onUpdate, replay]);
   const previousPhase = useRef(initial.game.phase?.id);
   useEffect(() => {
     const phaseId = snapshot.game.phase?.id;

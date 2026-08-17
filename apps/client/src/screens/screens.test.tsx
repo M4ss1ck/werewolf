@@ -117,6 +117,11 @@ function makeGameSnapshot(
   return { ...base, ...overrides, game: { ...base.game, ...overrides.game } };
 }
 
+// A stable identity so the live effect's onUpdate dep does not churn: the
+// tests push frames into re-renders, and a fresh function per render would
+// rebuild the socket every time.
+const noopUpdate = () => undefined;
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -635,7 +640,7 @@ test("game: a chat message after the sync badges Talk until it is opened", () =>
   const snapshot = makeGameSnapshot({
     game: { phase: { id: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 } },
   });
-  renderWithI18n(<GameScreen initial={snapshot} />);
+  renderWithI18n(<GameScreen initial={snapshot} onUpdate={noopUpdate} />);
   const connection = MockLiveGameConnection.instances[0];
   expect(connection).toBeDefined();
 
@@ -674,7 +679,7 @@ test("game: the Act tab badges while the viewer has no registered vote", () => {
   const snapshot = makeGameSnapshot({
     game: { phase: { id: 7 as PhaseId, type: "voting", startedAt: 1000, endsAt: 10_000 } },
   });
-  const first = renderWithI18n(<GameScreen initial={snapshot} />);
+  const first = renderWithI18n(<GameScreen initial={snapshot} onUpdate={noopUpdate} />);
   expect(
     screen.getByRole("button", { name: "Act" }).querySelector(".tabbar__badge"),
   ).not.toBeNull();
@@ -692,6 +697,7 @@ test("game: the Act tab badges while the viewer has no registered vote", () => {
           currentIntent: { vote: { type: "player", targetId: "mattias" as UserId } },
         },
       })}
+      onUpdate={noopUpdate}
     />,
   );
   expect(screen.getByRole("button", { name: "Act" }).querySelector(".tabbar__badge")).toBeNull();
@@ -701,7 +707,7 @@ test("game: the first event batch is the mount sync and never badges", () => {
   const snapshot = makeGameSnapshot({
     game: { phase: { id: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 } },
   });
-  renderWithI18n(<GameScreen initial={snapshot} />);
+  renderWithI18n(<GameScreen initial={snapshot} onUpdate={noopUpdate} />);
   const connection = MockLiveGameConnection.instances[0];
   expect(connection).toBeDefined();
 
@@ -733,7 +739,7 @@ test("game: a rejected command renders the error and keeps the typed text", asyn
   const snapshot = makeGameSnapshot({
     game: { phase: { id: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 } },
   });
-  renderWithI18n(<GameScreen initial={snapshot} />);
+  renderWithI18n(<GameScreen initial={snapshot} onUpdate={noopUpdate} />);
 
   fireEvent.click(screen.getByRole("button", { name: "Talk" }));
   const input = screen.getByLabelText(/Message/);

@@ -192,7 +192,7 @@ function Shell() {
         ) : snapshot.game.status === "finished" ? (
           <GameOverScreen snapshot={snapshot} />
         ) : (
-          <GameScreen initial={snapshot} />
+          <GameScreen initial={snapshot} onUpdate={setSnapshot} />
         )
       ) : (
         <p className="px-[18px] text-fog">{"…"}</p>
