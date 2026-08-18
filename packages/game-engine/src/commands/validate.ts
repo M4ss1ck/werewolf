@@ -1,4 +1,5 @@
 import type { ActionId, GameplayCommand, UserId } from "@werewolf/protocol";
+import { WOLF_CHAT_ROLES } from "../roles/registry.ts";
 import type { DomainError, GameState } from "../state.ts";
 
 export interface CommandContext {
@@ -21,7 +22,8 @@ export function validateCommand(
       }
       return null;
     }
-    if (player.faction !== "wolves") return { code: "CHANNEL_NOT_AVAILABLE" };
+    if (player.role === null || !WOLF_CHAT_ROLES.has(player.role))
+      return { code: "CHANNEL_NOT_AVAILABLE" };
     if (player.status !== "alive") return { code: "CHAT_READ_ONLY" };
     return null;
   }

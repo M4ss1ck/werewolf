@@ -72,10 +72,17 @@ describe("chat commands", () => {
     ],
     ["non-wolf cannot access wolves", "discussion", "wolves", {}, "CHANNEL_NOT_AVAILABLE"],
     [
+      "wolf-faction player whose role is not a wolf-chat role is blocked from wolves",
+      "discussion",
+      "wolves",
+      { faction: "wolves", role: "seer" },
+      "CHANNEL_NOT_AVAILABLE",
+    ],
+    [
       "converted player writes to wolves",
       "discussion",
       "wolves",
-      { faction: "wolves", role: "cursed", wolfSinceEventId: "e1" },
+      { faction: "wolves", role: "werewolf", wolfSinceEventId: "e1" },
       null,
     ],
   ] as const)("%s", (_name, phase, channel, player, expected) => {

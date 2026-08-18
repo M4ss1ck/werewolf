@@ -52,3 +52,7 @@ export const roleRegistry: Readonly<Record<RoleId, RoleDefinition>> = {
 export function getRoleDefinition(role: RoleId): RoleDefinition {
   return roleRegistry[role];
 }
+
+/** Roles that may read and write the wolves chat channel. Membership is by
+ * ROLE, not faction: a future wolf-faction role may be denied the channel. */
+export const WOLF_CHAT_ROLES: ReadonlySet<RoleId> = new Set<RoleId>(["werewolf"]);

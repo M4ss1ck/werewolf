@@ -118,6 +118,7 @@ describe("viewer projection security", () => {
   test("converted wolves only see events from conversion onward", () => {
     const state = makeState();
     state.players[id("seer")]!.faction = "wolves";
+    state.players[id("seer")]!.role = "werewolf";
     state.players[id("seer")]!.wolfSinceEventId = 10 as GameEvent["id"];
     expect(canViewEvent(event(9, "faction", "chat.message", "wolves"), id("seer"), state)).toBe(
       false,

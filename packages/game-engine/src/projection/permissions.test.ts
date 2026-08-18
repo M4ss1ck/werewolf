@@ -42,6 +42,11 @@ const state = {
       faction: "wolves",
     }),
     villager: player("villager", {}),
+    wolfFactionNonWolfRole: player("wolfFactionNonWolfRole", {
+      originalRole: "seer",
+      role: "seer",
+      faction: "wolves",
+    }),
   },
 } as unknown as GameState;
 
@@ -59,6 +64,12 @@ test.each([
   ["a starting wolf reads the whole wolf history", "startingWolf", 1, true],
   ["a dead wolf still reads wolf chat", "deadWolf", 99, true],
   ["a villager never reads wolf chat", "villager", 1, false],
+  [
+    "a wolf-faction player whose role is not a wolf-chat role reads nothing",
+    "wolfFactionNonWolfRole",
+    1,
+    false,
+  ],
   ["a converted player cannot read before their conversion", "converted", 49, false],
   ["a converted player reads from their conversion onward", "converted", 50, true],
 ])("%s", (_name, viewer, eventId, expected) => {

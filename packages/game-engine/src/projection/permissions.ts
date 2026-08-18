@@ -1,4 +1,5 @@
 import type { GameEvent, UserId } from "@werewolf/protocol";
+import { WOLF_CHAT_ROLES } from "../roles/registry.ts";
 import type { GameState } from "../state.ts";
 
 export function canViewEvent(event: GameEvent, viewer: UserId, state: GameState): boolean {
@@ -7,10 +8,10 @@ export function canViewEvent(event: GameEvent, viewer: UserId, state: GameState)
   if (event.scope !== "faction" || event.scopeId !== "wolves") return false;
 
   const player = state.players[viewer];
-  if (!player || player.faction !== "wolves") return false;
+  if (!player || player.role === null || !WOLF_CHAT_ROLES.has(player.role)) return false;
 
   // A starting wolf sees the whole faction history.
-  if (player.originalRole === "werewolf") return true;
+  if (player.originalRole !== null && WOLF_CHAT_ROLES.has(player.originalRole)) return true;
 
   // Anyone else in the wolf faction got there by conversion and may only read
   // from that moment on. The marker is written when the conversion event is
