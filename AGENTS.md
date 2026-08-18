@@ -108,7 +108,9 @@ and wait — do not quietly implement something else.
   for no gain.
 - **Roles are modules with a fixed set of hooks.** A central resolver owns the
   execution order. Roles do not trigger each other recursively, and there is no
-  role scripting DSL.
+  role scripting DSL. Adding one runs in a fixed order across five workspaces and
+  carries traps that surface only at runtime — resolution order, rng scoping, wolf
+  chat, seeded fixtures: [docs/adding-a-role.md](./docs/adding-a-role.md).
 - **Phases end on the clock, not on completion.** A phase does not finish early
   because everyone acted, players may change their intent until the deadline, and
   missing a vote or action carries no penalty.

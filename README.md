@@ -25,6 +25,9 @@ scripts/
 Do not add `shared`, `common` or `utils` packages. A new package needs a real
 reusable boundary behind it.
 
+Adding a game role crosses `protocol`, `game-engine`, `i18n` and the client in a
+fixed order: [docs/adding-a-role.md](docs/adding-a-role.md).
+
 ## Getting started
 
 ```bash
