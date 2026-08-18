@@ -21,10 +21,13 @@ type FrozenNight = {
     | { playerId: UserId; type: "stay" }
     | { playerId: UserId; type: "visit"; targetId: UserId }
     | null;
+  serialKillerAction:
+    | { playerId: UserId; type: "stay" }
+    | { playerId: UserId; type: "visit"; targetId: UserId }
+    | null;
 };
 
 type NightOutcome = {
-  targetId: UserId | null;
   deaths: Map<UserId, NightDeathCause>;
   conversions: UserId[];
 };
@@ -35,10 +38,11 @@ export function resolveNight(state: GameState, context: NightResolutionContext):
   const frozen = freezeNightIntents(state);
   const seer = frozen.seerInspection;
   const targetId = resolveWolfBallot(frozen.wolfVotes);
-  const outcome = resolveNightConsequences(state, frozen, targetId, context.rng, state.day);
+  const locations = resolveNightLocations(state, frozen, targetId);
+  const outcome = resolveHouseAttacks(state, frozen, targetId, locations, context.rng, state.day);
   const playerPatches = commitNight(outcome);
   const projected = applyPatches(state, playerPatches);
-  const events = makeNightEvents(state, frozen, outcome, seer);
+  const events = makeNightEvents(state, frozen, targetId, outcome, seer);
   const winner = checkVictory(projected);
   if (winner) {
     events.push({ kind: "game.finished", scope: "public", payload: winner });
@@ -106,7 +110,20 @@ function freezeNightIntents(state: GameState): FrozenNight {
       : stay
         ? { playerId: harlot!.id, type: "stay" as const }
         : null;
-  return { wolfVotes, seerInspection, harlotAction };
+  const serialKiller = living.find((player) => player.role === "serial_killer");
+  const skVisit = serialKiller
+    ? currentAction(serialKiller, phaseId, "serial_killer.visit")
+    : undefined;
+  const skStay = serialKiller
+    ? currentAction(serialKiller, phaseId, "serial_killer.stay")
+    : undefined;
+  const serialKillerAction =
+    skVisit?.targetId && isLivingTarget(state, skVisit.targetId)
+      ? { playerId: serialKiller!.id, type: "visit" as const, targetId: skVisit.targetId }
+      : skStay
+        ? { playerId: serialKiller!.id, type: "stay" as const }
+        : null;
+  return { wolfVotes, seerInspection, harlotAction, serialKillerAction };
 }
 
 function currentAction(
@@ -129,51 +146,152 @@ function resolveWolfBallot(votes: FrozenNight["wolfVotes"]): UserId | null {
   return winners.length === 1 ? winners[0]![0] : null;
 }
 
-function resolveNightConsequences(
+/** Where every living player spends the night: a map from player id to the id
+ * of the player whose house they are in. Everyone starts at home; the wolves
+ * gather at the balloted target's house (or stay home on a tie or empty
+ * ballot), and the harlot and serial killer travel to their visit targets.
+ * The seer never travels: scrying is remote. */
+function resolveNightLocations(
   state: GameState,
   frozen: FrozenNight,
-  targetId: UserId | null,
+  wolfTargetId: UserId | null,
+): Map<UserId, UserId> {
+  const locations = new Map<UserId, UserId>();
+  for (const player of livingPlayers(state)) locations.set(player.id, player.id);
+  if (wolfTargetId !== null) {
+    for (const player of livingPlayers(state)) {
+      if (player.faction === "wolves") locations.set(player.id, wolfTargetId);
+    }
+  }
+  if (frozen.harlotAction?.type === "visit")
+    locations.set(frozen.harlotAction.playerId, frozen.harlotAction.targetId);
+  if (frozen.serialKillerAction?.type === "visit")
+    locations.set(frozen.serialKillerAction.playerId, frozen.serialKillerAction.targetId);
+  return locations;
+}
+
+function occupantsOf(
+  state: GameState,
+  locations: Map<UserId, UserId>,
+  houseId: UserId,
+): PlayerState[] {
+  return livingPlayers(state).filter((player) => locations.get(player.id) === houseId);
+}
+
+/** Resolve the night's attacks house by house. There are at most two attacks —
+ * the pack on the balloted target's house and the serial killer on its visit
+ * target — resolved in this exact order: hunter retaliation, serial-killer /
+ * wolf clash, then the kills themselves. */
+function resolveHouseAttacks(
+  state: GameState,
+  frozen: FrozenNight,
+  wolfTargetId: UserId | null,
+  locations: Map<UserId, UserId>,
   rng: SeededRng,
   day: number,
 ): NightOutcome {
   const deaths = new Map<UserId, NightDeathCause>();
   const conversions: UserId[] = [];
-  const target = targetId ? state.players[targetId] : undefined;
-  const harlotVisit = frozen.harlotAction?.type === "visit" ? frozen.harlotAction : null;
-  const harlotAway = Boolean(harlotVisit && target?.role === "harlot");
-  let hunterRepelled = false;
-  if (target && !harlotAway) {
-    if (target.role === "cursed") {
-      conversions.push(target.id);
-    } else if (target.role === "hunter") {
-      const survives = rng.derive(`night:${day}:hunter:retaliation`).float() < 0.5;
-      if (survives) {
-        hunterRepelled = true;
+
+  const attacks: { attacker: "wolves" | "serial_killer"; houseId: UserId }[] = [];
+  if (wolfTargetId !== null) attacks.push({ attacker: "wolves", houseId: wolfTargetId });
+  if (frozen.serialKillerAction?.type === "visit")
+    attacks.push({ attacker: "serial_killer", houseId: frozen.serialKillerAction.targetId });
+
+  // (a) Hunter retaliation: one independent roll per attacker. A successful
+  // roll repels the whole attack — nobody in that house dies — and costs the
+  // attacker a life.
+  const repelled = new Set<"wolves" | "serial_killer">();
+  for (const attack of attacks) {
+    const owner = state.players[attack.houseId];
+    if (!owner || owner.status !== "alive" || owner.role !== "hunter") continue;
+    const scope =
+      attack.attacker === "wolves"
+        ? `night:${day}:hunter:retaliation:wolves`
+        : `night:${day}:hunter:retaliation:serial_killer`;
+    if (rng.derive(scope).float() < 0.5) {
+      repelled.add(attack.attacker);
+      if (attack.attacker === "wolves") {
         const wolves = livingPlayers(state).filter((player) => player.faction === "wolves");
         if (wolves.length > 0) {
           const wolf = wolves[rng.derive(`night:${day}:hunter:wolf-victim`).int(wolves.length)]!;
           deaths.set(wolf.id, "hunter_retaliation");
         }
-      } else deaths.set(target.id, "wolf_attack");
-    } else deaths.set(target.id, "wolf_attack");
-  }
-  if (harlotVisit) {
-    const visited = state.players[harlotVisit.targetId];
-    const harlot = state.players[harlotVisit.playerId]!;
-    if (visited?.faction === "wolves") deaths.set(harlot.id, "harlot_exposure");
-    if (targetId === harlotVisit.targetId) {
-      if (hunterRepelled) {
-        deaths.delete(harlot.id);
-      } else if (target?.role === "hunter" && deaths.has(target.id)) {
-        deaths.set(harlot.id, "harlot_exposure");
-      } else if (target?.role === "cursed") {
-        deaths.set(harlot.id, "harlot_exposure");
-      } else if (target && !harlotAway) {
-        deaths.set(harlot.id, "harlot_exposure");
+      } else {
+        deaths.set(frozen.serialKillerAction!.playerId, "hunter_retaliation");
       }
     }
   }
-  return { targetId, deaths, conversions };
+
+  // (b) Serial killer / wolf clash: a visiting serial killer that finds a wolf
+  // in the same house fights it. The loser dies; the attacks still land.
+  if (frozen.serialKillerAction?.type === "visit") {
+    const sk = frozen.serialKillerAction.playerId;
+    const wolfOccupants = occupantsOf(state, locations, frozen.serialKillerAction.targetId).filter(
+      (player) => player.faction === "wolves",
+    );
+    if (wolfOccupants.length > 0) {
+      if (rng.derive(`night:${day}:serial-killer:clash`).float() < 0.5) {
+        const wolf =
+          wolfOccupants[
+            rng.derive(`night:${day}:serial-killer:clash-victim`).int(wolfOccupants.length)
+          ]!;
+        deaths.set(wolf.id, "serial_killer_attack");
+      } else {
+        deaths.set(sk, "wolf_attack");
+      }
+    }
+  }
+
+  // (c) Kills: each non-repelled attack hits the occupants of its house.
+  const hits = new Map<UserId, Set<"wolves" | "serial_killer">>();
+  for (const attack of attacks) {
+    if (repelled.has(attack.attacker)) continue;
+    for (const occupant of occupantsOf(state, locations, attack.houseId)) {
+      if (attack.attacker === "wolves") {
+        if (occupant.faction === "wolves") continue;
+        // A visiting serial killer is out hunting, not standing in the house;
+        // one attacked at home has no clash and dies normally here.
+        if (occupant.role === "serial_killer" && locations.get(occupant.id) !== occupant.id)
+          continue;
+      } else {
+        if (occupant.id === frozen.serialKillerAction!.playerId) continue;
+        // Wolves' fate is the clash in step (b).
+        if (occupant.faction === "wolves") continue;
+      }
+      const attackers = hits.get(occupant.id) ?? new Set<"wolves" | "serial_killer">();
+      attackers.add(attack.attacker);
+      hits.set(occupant.id, attackers);
+    }
+  }
+  for (const [victimId, attackers] of hits) {
+    if (deaths.has(victimId)) continue;
+    const victim = state.players[victimId]!;
+    if (victim.role === "cursed" && attackers.has("wolves") && !attackers.has("serial_killer")) {
+      conversions.push(victimId);
+      continue;
+    }
+    const cause: NightDeathCause = attackers.has("serial_killer")
+      ? "serial_killer_attack"
+      : "wolf_attack";
+    // A harlot who dies away from her own house was exposed to the encounter.
+    if (victim.role === "harlot" && locations.get(victimId) !== victimId)
+      deaths.set(victimId, "harlot_exposure");
+    else deaths.set(victimId, cause);
+  }
+
+  // A harlot who visits a wolf's own house while that wolf is home dies from
+  // exposure: the wolf is in, the encounter is fatal. When the pack has a
+  // target the wolf is out hunting and the house is empty, so she survives.
+  if (frozen.harlotAction?.type === "visit") {
+    const harlot = frozen.harlotAction.playerId;
+    const houseId = frozen.harlotAction.targetId;
+    const owner = state.players[houseId];
+    if (owner?.faction === "wolves" && locations.get(houseId) === houseId && !deaths.has(harlot))
+      deaths.set(harlot, "harlot_exposure");
+  }
+
+  return { deaths, conversions };
 }
 
 function livingPlayers(state: GameState): PlayerState[] {
@@ -191,6 +309,7 @@ function commitNight(outcome: NightOutcome): PlayerPatch[] {
 function makeNightEvents(
   state: GameState,
   frozen: FrozenNight,
+  targetId: UserId | null,
   outcome: NightOutcome,
   seer: FrozenNight["seerInspection"],
 ): DomainTransition["events"] {
@@ -243,11 +362,16 @@ function makeNightEvents(
     payload: {
       phaseId: state.phase!.id,
       wolfVotes: frozen.wolfVotes,
-      wolfTarget: outcome.targetId,
+      wolfTarget: targetId,
       seerInspection: seer ? { targetId: seer.targetId, role: seer.role } : null,
       harlotAction: frozen.harlotAction
         ? frozen.harlotAction.type === "visit"
           ? { type: "visit", targetId: frozen.harlotAction.targetId }
+          : { type: "stay" }
+        : null,
+      serialKillerAction: frozen.serialKillerAction
+        ? frozen.serialKillerAction.type === "visit"
+          ? { type: "visit", targetId: frozen.serialKillerAction.targetId }
           : { type: "stay" }
         : null,
       deaths: [...outcome.deaths.entries()].map(([playerId, cause]) => ({ playerId, cause })),

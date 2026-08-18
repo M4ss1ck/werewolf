@@ -12,9 +12,9 @@ export function hasRole(roles: readonly RoleId[], role: RoleId): boolean {
 export function hasValidSpecialCardinality(roles: readonly RoleId[]): boolean {
   const masons = roles.filter((role) => role === "mason").length;
   if (masons !== 0 && masons !== 2) return false;
-  return (["seer", "harlot", "princess", "hunter", "cursed"] as const).every(
-    (role) => roles.filter((candidate) => candidate === role).length <= 1,
-  );
+  return (
+    ["seer", "harlot", "princess", "hunter", "cursed", "veteran", "serial_killer"] as const
+  ).every((role) => roles.filter((candidate) => candidate === role).length <= 1);
 }
 
 export function hasAvailableRoles(roles: readonly RoleId[], playerCount: number): boolean {

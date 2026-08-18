@@ -52,5 +52,20 @@ export function getAvailableActions(state: GameState, playerId: UserId): Availab
       ...("harlot.stay" in stored ? { selected: true } : {}),
     });
   }
+  if (player.role === "serial_killer") {
+    available.push({
+      id: "serial_killer.visit",
+      type: "target",
+      targets: others.map((target) => ({ userId: target.id, enabled: target.status === "alive" })),
+      ...(stored["serial_killer.visit"]?.targetId
+        ? { selectedTargetId: stored["serial_killer.visit"]!.targetId }
+        : {}),
+    });
+    available.push({
+      id: "serial_killer.stay",
+      type: "choice",
+      ...("serial_killer.stay" in stored ? { selected: true } : {}),
+    });
+  }
   return available;
 }

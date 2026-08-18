@@ -18,7 +18,8 @@ export const en = {
     },
     werewolf: {
       name: "Werewolf",
-      description: "Attacks one villager each night; your pack wins by outnumbering the village.",
+      description:
+        "Attacks one villager each night; your pack wins only when every other player is dead.",
     },
     mason: {
       name: "Mason",
@@ -38,16 +39,29 @@ export const en = {
     },
     hunter: {
       name: "Hunter",
-      description: "When the wolves attack you, you may survive and take one of them down.",
+      description:
+        "When the wolves or the serial killer attack you, you may survive and take one of them down.",
     },
     princess: {
       name: "Princess",
       description: "If the village votes to eliminate you, you reveal yourself and survive once.",
     },
+    veteran: {
+      name: "Veteran",
+      description:
+        "You win alone — but only if the village votes to eliminate you. Any other death and you lose.",
+    },
+    serial_killer: {
+      name: "Serial Killer",
+      description:
+        "Visits one house each night and kills whoever is home. Wins by being the last one standing.",
+    },
   },
   factions: {
     village: "Village",
     wolves: "Wolves",
+    veteran: "The Veteran",
+    serial_killer: "The Serial Killer",
   },
   phases: {
     discussion: "Discussion",
@@ -78,11 +92,21 @@ export const en = {
     },
     "harlot.visit": {
       label: "Visit",
-      prompt: "Choose a player to visit tonight. Visiting a werewolf is deadly.",
+      prompt:
+        "Choose a player to visit tonight. Walking into the house the killers attack is deadly.",
     },
     "harlot.stay": {
       label: "Stay home",
       prompt: "Stay home and take no risks tonight.",
+    },
+    "serial_killer.visit": {
+      label: "Visit",
+      prompt:
+        "Choose a house to visit tonight. Everyone standing in it dies — and a werewolf you run into is a coin toss.",
+    },
+    "serial_killer.stay": {
+      label: "Stay home",
+      prompt: "Kill no one tonight and stay out of the wolves' way.",
     },
   },
   errors: {
@@ -279,10 +303,16 @@ export const en = {
     over: {
       villageWins: "the village wins",
       packWins: "the pack wins",
+      veteranWins: "the veteran wins",
+      serialKillerWins: "the serial killer wins",
       villageWinsTitle: "The pack is broken",
       wolvesWinTitle: "The village falls",
+      veteranWinsTitle: "Exactly as planned",
+      serialKillerWinsTitle: "The last one standing",
       reasonWolvesEliminated: "All the wolves were eliminated.",
-      reasonWolvesOutnumber: "The wolves outnumbered the village.",
+      reasonVillageEliminated: "The wolves killed everyone else.",
+      reasonVeteranLynched: "The village lynched the veteran. Everyone else loses.",
+      reasonSerialKillerSurvives: "The serial killer outlived everyone.",
       rolesRevealed: "Roles revealed",
       replay: "Replay",
       watchReplay: "Watch replay",

@@ -16,7 +16,8 @@ export const es: TranslationResource = {
     },
     werewolf: {
       name: "Hombre Lobo",
-      description: "Ataca a un aldeano cada noche; tu manada gana superando en número a la aldea.",
+      description:
+        "Ataca a un aldeano cada noche; tu manada gana solo cuando todos los demás jugadores están muertos.",
     },
     mason: {
       name: "Masón",
@@ -36,16 +37,29 @@ export const es: TranslationResource = {
     },
     hunter: {
       name: "Cazador",
-      description: "Cuando los lobos te atacan, puedes sobrevivir y llevarte a uno contigo.",
+      description:
+        "Cuando los lobos o el asesino en serie te atacan, puedes sobrevivir y llevarte a uno contigo.",
     },
     princess: {
       name: "Princesa",
       description: "Si la aldea vota para eliminarte, te revelas y sobrevives una vez.",
     },
+    veteran: {
+      name: "Veterano",
+      description:
+        "Ganas en solitario, pero solo si la aldea vota para eliminarte. Cualquier otra muerte y pierdes.",
+    },
+    serial_killer: {
+      name: "Asesino en Serie",
+      description:
+        "Visita una casa cada noche y mata a quien esté dentro. Gana siendo el último en pie.",
+    },
   },
   factions: {
     village: "La aldea",
     wolves: "Los lobos",
+    veteran: "El Veterano",
+    serial_killer: "El Asesino en Serie",
   },
   phases: {
     discussion: "Discusión",
@@ -76,11 +90,21 @@ export const es: TranslationResource = {
     },
     "harlot.visit": {
       label: "Visitar",
-      prompt: "Elige a un jugador al que visitar esta noche. Visitar a un hombre lobo es mortal.",
+      prompt:
+        "Elige a un jugador al que visitar esta noche. Entrar en la casa a la que atacan los asesinos es mortal.",
     },
     "harlot.stay": {
       label: "Quedarse en casa",
       prompt: "Quédate en casa y no corras riesgos esta noche.",
+    },
+    "serial_killer.visit": {
+      label: "Visitar",
+      prompt:
+        "Elige una casa a la que visitar esta noche. Todos los que estén dentro morirán, y si te cruzas con un hombre lobo, es cara o cruz.",
+    },
+    "serial_killer.stay": {
+      label: "Quedarse en casa",
+      prompt: "No mates a nadie esta noche y mantente fuera del camino de los lobos.",
     },
   },
   errors: {
@@ -279,10 +303,16 @@ export const es: TranslationResource = {
     over: {
       villageWins: "la aldea gana",
       packWins: "la manada gana",
+      veteranWins: "gana el veterano",
+      serialKillerWins: "gana el asesino en serie",
       villageWinsTitle: "La manada está rota",
       wolvesWinTitle: "La aldea cae",
+      veteranWinsTitle: "Exactamente según lo planeado",
+      serialKillerWinsTitle: "El último en pie",
       reasonWolvesEliminated: "Todos los lobos fueron eliminados.",
-      reasonWolvesOutnumber: "Los lobos superaron en número a la aldea.",
+      reasonVillageEliminated: "Los lobos mataron a todos los demás.",
+      reasonVeteranLynched: "La aldea ahorcó al veterano. Todos los demás pierden.",
+      reasonSerialKillerSurvives: "El asesino en serie sobrevivió a todos.",
       rolesRevealed: "Roles revelados",
       replay: "Repetición",
       watchReplay: "Ver repetición",

@@ -1,6 +1,12 @@
 import type { UserId, VoteChoice } from "@werewolf/protocol";
 import { getRoleDefinition } from "../roles/registry.ts";
-import type { DomainResult, DomainTransition, GameState, PlayerState } from "../state.ts";
+import type {
+  DomainResult,
+  DomainTransition,
+  GameState,
+  PlayerState,
+  VictoryResult,
+} from "../state.ts";
 import { checkVictory } from "./victory.ts";
 
 export function resolveDayVote(state: GameState): DomainResult {
@@ -44,6 +50,29 @@ export function resolveDayVote(state: GameState): DomainResult {
   if (eliminatedId) {
     selected = state.players[eliminatedId];
     if (selected && selected.status === "alive") {
+      if (selected.role === "veteran") {
+        playerPatches.push({ playerId: selected.id, changes: { status: "dead" } });
+        events.push({
+          kind: "player.eliminated",
+          scope: "public",
+          payload: { playerId: selected.id, role: selected.role, cause: "day_vote" },
+        });
+        const winner: VictoryResult = {
+          winningFactions: ["veteran"],
+          winningPlayers: [selected.id],
+          reason: "veteran_lynched",
+        };
+        events.push({ kind: "game.finished", scope: "public", payload: winner });
+        return {
+          ok: true,
+          transition: {
+            gamePatch: { status: "finished", winner },
+            playerPatches,
+            events,
+            ephemeral: [],
+          },
+        };
+      }
       const princessState =
         selected.role === "princess" && isPrincessState(selected.roleState)
           ? selected.roleState

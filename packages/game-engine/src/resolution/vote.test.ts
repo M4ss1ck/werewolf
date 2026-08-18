@@ -194,6 +194,34 @@ describe("day vote resolution", () => {
       transition.events.some((event) => event.kind === "game.finished" && event.scope === "public"),
     ).toBe(true);
   });
+
+  test("lynching the veteran ends the game with the veteran winning", () => {
+    let game = state([
+      "veteran",
+      "villager",
+      "villager",
+      "werewolf",
+      "villager",
+    ] as PlayerState["role"][]);
+    for (const voter of ["p1", "p2", "p3"]) game = vote(game, voter, "p0", voter);
+    const transition = expectTransition(resolveDayVote(game));
+    expect(
+      transition.playerPatches.some(
+        (patch) => patch.playerId === "p0" && patch.changes.status === "dead",
+      ),
+    ).toBe(true);
+    expect(transition.gamePatch).toMatchObject({
+      status: "finished",
+      winner: {
+        winningFactions: ["veteran"],
+        winningPlayers: ["p0"],
+        reason: "veteran_lynched",
+      },
+    });
+    expect(
+      transition.events.some((event) => event.kind === "game.finished" && event.scope === "public"),
+    ).toBe(true);
+  });
 });
 
 test("stale and late commands are rejected", () => {

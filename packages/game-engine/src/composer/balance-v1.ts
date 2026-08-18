@@ -24,6 +24,11 @@ export function getStartingWolfCount(players: number): number {
   return Math.max(1, Math.floor((players + 1) / 4));
 }
 
+export function wolfCountForComposition(playerCount: number, specials: readonly RoleId[]): number {
+  if (playerCount === 5 && specials.includes("serial_killer")) return 0;
+  return getStartingWolfCount(playerCount);
+}
+
 export function minimumVanillaVillagers(playerCount: number): number {
   return Math.max(2, Math.ceil(playerCount * 0.25));
 }
@@ -39,4 +44,6 @@ export const availableSpecialRoles: readonly RoleId[] = [
   "hunter",
   "cursed",
   "mason",
+  "veteran",
+  "serial_killer",
 ];

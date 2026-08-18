@@ -23,7 +23,31 @@ export function GameOverScreen({
     void api.getReplay(snapshot.game.id).then((result) => setLoadedEvents(result.events));
   }, [events, snapshot.game.id]);
   const winner = snapshot.game.winner;
-  const wolvesWon = winner?.winningFactions.includes("wolves") ?? false;
+  const winnerFaction = winner?.winningFactions[0];
+  const winTitleKey =
+    winnerFaction === "wolves"
+      ? "ui.over.wolvesWinTitle"
+      : winnerFaction === "village"
+        ? "ui.over.villageWinsTitle"
+        : winnerFaction === "veteran"
+          ? "ui.over.veteranWinsTitle"
+          : "ui.over.serialKillerWinsTitle";
+  const factionWinKey =
+    winnerFaction === "wolves"
+      ? "ui.over.packWins"
+      : winnerFaction === "village"
+        ? "ui.over.villageWins"
+        : winnerFaction === "veteran"
+          ? "ui.over.veteranWins"
+          : "ui.over.serialKillerWins";
+  const reasonKey =
+    winner?.reason === "wolves_eliminated"
+      ? "ui.over.reasonWolvesEliminated"
+      : winner?.reason === "village_eliminated"
+        ? "ui.over.reasonVillageEliminated"
+        : winner?.reason === "veteran_lynched"
+          ? "ui.over.reasonVeteranLynched"
+          : "ui.over.reasonSerialKillerSurvives";
   const publicEvents = loadedEvents.filter((event) => event.scope === "public");
   const names = new Map(snapshot.players.map((player) => [player.userId, player.displayName]));
   const line = (event: GameEvent) => {
@@ -41,7 +65,7 @@ export function GameOverScreen({
         return t("events.public.night.resolved.count", { count: event.payload.deaths.length });
       case "game.finished":
         return t("events.public.game.finished", {
-          faction: wolvesWon ? t("ui.over.packWins") : t("ui.over.villageWins"),
+          faction: t(factionWinKey),
         });
       default:
         return null;
@@ -54,14 +78,8 @@ export function GameOverScreen({
       <section className="flex flex-col items-center gap-3.5 text-center">
         <span className="h-14 w-14 rounded-full bg-blood shadow-[0_0_60px_rgba(179,58,54,.5)]" />
         <div>
-          <p className="eyebrow text-blood-light">
-            {t(
-              `ui.over.${winner?.reason === "wolves_outnumber" ? "reasonWolvesOutnumber" : "reasonWolvesEliminated"}`,
-            )}
-          </p>
-          <h1 className="mt-2 text-[36px] font-semibold tracking-[-0.035em]">
-            {t(wolvesWon ? "ui.over.wolvesWinTitle" : "ui.over.villageWinsTitle")}
-          </h1>
+          <p className="eyebrow text-blood-light">{t(reasonKey)}</p>
+          <h1 className="mt-2 text-[36px] font-semibold tracking-[-0.035em]">{t(winTitleKey)}</h1>
         </div>
         <p className="max-w-[280px] text-sm text-fog">
           {t("ui.over.summary", {

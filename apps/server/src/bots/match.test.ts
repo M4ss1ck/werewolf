@@ -34,7 +34,12 @@ describe("a full bot match", () => {
     const final = await harness.state(gameId);
     expect(final.status).toBe("finished");
     expect(final.winner).not.toBeNull();
-    expect(["wolves_eliminated", "wolves_outnumber"]).toContain(final.winner!.reason);
+    expect([
+      "wolves_eliminated",
+      "village_eliminated",
+      "veteran_lynched",
+      "serial_killer_survives",
+    ]).toContain(final.winner!.reason);
     expect(final.winner!.winningFactions.length).toBeGreaterThan(0);
 
     // The match was played, not merely timed out: bots voted and talked.

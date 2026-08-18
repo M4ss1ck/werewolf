@@ -236,7 +236,7 @@ test("every new screen surface renders a non-empty string in both locales", () =
     "ui.over.villageWinsTitle",
     "ui.over.wolvesWinTitle",
     "ui.over.reasonWolvesEliminated",
-    "ui.over.reasonWolvesOutnumber",
+    "ui.over.reasonVillageEliminated",
     "ui.over.rolesRevealed",
     "ui.over.replay",
     "ui.over.watchReplay",

@@ -28,6 +28,7 @@ import { i18n } from "../i18n/i18n.ts";
 import { Act } from "./act.tsx";
 import { CreateGameScreen } from "./create-game.tsx";
 import { GameScreen } from "./game.tsx";
+import { GameOverScreen } from "./game-over.tsx";
 import { GamesScreen } from "./games.tsx";
 import { LobbyScreen } from "./lobby.tsx";
 import { ProfileScreen } from "./profile.tsx";
@@ -938,4 +939,45 @@ test("every plural key is called with its .count suffix", async () => {
         offences.push(`${path}: t("${key}") should be "${key}.count"`);
     }
   expect(offences).toEqual([]);
+});
+
+test("game over: a veteran win and a serial killer win each render their own title", () => {
+  const veteran = renderWithI18n(
+    <GameOverScreen
+      events={[]}
+      snapshot={makeGameSnapshot({
+        game: {
+          status: "finished",
+          winner: {
+            winningFactions: ["veteran"],
+            winningPlayers: ["wren" as UserId],
+            reason: "veteran_lynched",
+          },
+        },
+      })}
+    />,
+  );
+  expect(screen.getByRole("heading", { name: "Exactly as planned" })).toBeInTheDocument();
+  expect(
+    screen.getByText("The village lynched the veteran. Everyone else loses."),
+  ).toBeInTheDocument();
+  veteran.unmount();
+
+  renderWithI18n(
+    <GameOverScreen
+      events={[]}
+      snapshot={makeGameSnapshot({
+        game: {
+          status: "finished",
+          winner: {
+            winningFactions: ["serial_killer"],
+            winningPlayers: ["odile" as UserId],
+            reason: "serial_killer_survives",
+          },
+        },
+      })}
+    />,
+  );
+  expect(screen.getByRole("heading", { name: "The last one standing" })).toBeInTheDocument();
+  expect(screen.getByText("The serial killer outlived everyone.")).toBeInTheDocument();
 });

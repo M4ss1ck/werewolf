@@ -14,11 +14,13 @@ export const ROLE_IDS = [
   "harlot",
   "hunter",
   "princess",
+  "veteran",
+  "serial_killer",
 ] as const;
 export type RoleId = (typeof ROLE_IDS)[number];
 export const RoleIdSchema = z.enum(ROLE_IDS);
 
-export const FACTION_IDS = ["village", "wolves"] as const;
+export const FACTION_IDS = ["village", "wolves", "veteran", "serial_killer"] as const;
 export type FactionId = (typeof FACTION_IDS)[number];
 export const FactionIdSchema = z.enum(FACTION_IDS);
 
@@ -34,7 +36,14 @@ export const GAME_PLAYER_STATUSES = ["lobby", "alive", "dead", "spectator"] as c
 export type GamePlayerStatus = (typeof GAME_PLAYER_STATUSES)[number];
 export const GamePlayerStatusSchema = z.enum(GAME_PLAYER_STATUSES);
 
-export const ACTION_IDS = ["wolf.attack", "seer.inspect", "harlot.visit", "harlot.stay"] as const;
+export const ACTION_IDS = [
+  "wolf.attack",
+  "seer.inspect",
+  "harlot.visit",
+  "harlot.stay",
+  "serial_killer.visit",
+  "serial_killer.stay",
+] as const;
 export type ActionId = (typeof ACTION_IDS)[number];
 export const ActionIdSchema = z.enum(ACTION_IDS);
 

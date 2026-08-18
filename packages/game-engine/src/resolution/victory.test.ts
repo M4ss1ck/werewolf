@@ -12,7 +12,14 @@ function player(
     status: "alive",
     originalRole: role,
     role,
-    faction: role === "werewolf" || role === "cursed" ? "wolves" : "village",
+    faction:
+      role === "werewolf" || role === "cursed"
+        ? "wolves"
+        : role === "serial_killer"
+          ? "serial_killer"
+          : role === "veteran"
+            ? "veteran"
+            : "village",
     roleState: {},
     phaseState: { phaseId: 1 as never },
     ...overrides,
@@ -47,13 +54,52 @@ describe("victory checks", () => {
     });
   });
 
-  test("wolves equal to villagers means the wolves win", () => {
-    const state = game([player("p0", "werewolf"), player("p1", "villager")]);
+  test("a lone serial killer wins", () => {
+    const state = game([player("p0", "serial_killer")]);
+    expect(checkVictory(state)).toEqual({
+      winningFactions: ["serial_killer"],
+      winningPlayers: ["p0" as PlayerState["id"]],
+      reason: "serial_killer_survives",
+    });
+  });
+
+  test("a lone serial killer wins with dead faction members included", () => {
+    const state = game([
+      player("p0", "serial_killer", { status: "dead" }),
+      player("p1", "serial_killer"),
+    ]);
+    expect(checkVictory(state)).toEqual({
+      winningFactions: ["serial_killer"],
+      winningPlayers: ["p0" as PlayerState["id"], "p1" as PlayerState["id"]],
+      reason: "serial_killer_survives",
+    });
+  });
+
+  test("wolves win when every living player is a wolf", () => {
+    const state = game([
+      player("p0", "werewolf"),
+      player("p1", "werewolf"),
+      player("p2", "villager", { status: "dead" }),
+    ]);
     expect(checkVictory(state)).toEqual({
       winningFactions: ["wolves"],
-      winningPlayers: ["p0" as PlayerState["id"]],
-      reason: "wolves_outnumber",
+      winningPlayers: ["p0" as PlayerState["id"], "p1" as PlayerState["id"]],
+      reason: "village_eliminated",
     });
+  });
+
+  test("wolves and a serial killer alive together is not a win for anybody", () => {
+    const state = game([player("p0", "werewolf"), player("p1", "serial_killer")]);
+    expect(checkVictory(state)).toBeNull();
+  });
+
+  test("two wolves against one villager is not a win", () => {
+    const state = game([
+      player("p0", "werewolf"),
+      player("p1", "werewolf"),
+      player("p2", "villager"),
+    ]);
+    expect(checkVictory(state)).toBeNull();
   });
 
   test("wolves fewer than villagers means the game continues", () => {
@@ -69,12 +115,12 @@ describe("victory checks", () => {
     const state = game([
       player("p0", "cursed", { status: "dead" }),
       player("p1", "werewolf"),
-      player("p2", "villager"),
+      player("p2", "villager", { status: "dead" }),
     ]);
     expect(checkVictory(state)).toEqual({
       winningFactions: ["wolves"],
       winningPlayers: ["p0" as PlayerState["id"], "p1" as PlayerState["id"]],
-      reason: "wolves_outnumber",
+      reason: "village_eliminated",
     });
   });
 });

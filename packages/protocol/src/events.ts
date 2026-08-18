@@ -48,9 +48,17 @@ export type EventKind = (typeof EVENT_KINDS)[number];
 export type EliminationCause = "day_vote" | "night";
 
 /** Precise per-death cause, recorded only in the server-scope audit.night. */
-export type NightDeathCause = "wolf_attack" | "hunter_retaliation" | "harlot_exposure";
+export type NightDeathCause =
+  | "wolf_attack"
+  | "hunter_retaliation"
+  | "harlot_exposure"
+  | "serial_killer_attack";
 
-export type VictoryReason = "wolves_eliminated" | "wolves_outnumber";
+export type VictoryReason =
+  | "wolves_eliminated"
+  | "village_eliminated"
+  | "veteran_lynched"
+  | "serial_killer_survives";
 
 export type VoteChoice =
   | { type: "player"; targetId: UserId }
@@ -108,6 +116,7 @@ export interface EventPayloads {
     wolfTarget: UserId | null;
     seerInspection: { targetId: UserId; role: RoleId } | null;
     harlotAction: { type: "stay" } | { type: "visit"; targetId: UserId } | null;
+    serialKillerAction: { type: "stay" } | { type: "visit"; targetId: UserId } | null;
     deaths: { playerId: UserId; cause: NightDeathCause }[];
     conversions: UserId[];
   };
@@ -147,8 +156,14 @@ export const NightDeathCauseSchema = z.enum([
   "wolf_attack",
   "hunter_retaliation",
   "harlot_exposure",
+  "serial_killer_attack",
 ]);
-export const VictoryReasonSchema = z.enum(["wolves_eliminated", "wolves_outnumber"]);
+export const VictoryReasonSchema = z.enum([
+  "wolves_eliminated",
+  "village_eliminated",
+  "veteran_lynched",
+  "serial_killer_survives",
+]);
 
 /** Runtime validation for a GameEvent; mirrors the type above branch for branch. */
 export const GameEventSchema = z.discriminatedUnion("kind", [
@@ -336,6 +351,12 @@ export const GameEventSchema = z.discriminatedUnion("kind", [
       wolfTarget: UserIdSchema.nullable(),
       seerInspection: z.object({ targetId: UserIdSchema, role: RoleIdSchema }).nullable(),
       harlotAction: z
+        .discriminatedUnion("type", [
+          z.object({ type: z.literal("stay") }),
+          z.object({ type: z.literal("visit"), targetId: UserIdSchema }),
+        ])
+        .nullable(),
+      serialKillerAction: z
         .discriminatedUnion("type", [
           z.object({ type: z.literal("stay") }),
           z.object({ type: z.literal("visit"), targetId: UserIdSchema }),

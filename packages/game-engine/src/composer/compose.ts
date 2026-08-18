@@ -6,6 +6,7 @@ import {
   getSpecialSlotWeights,
   getStartingWolfCount,
   minimumVanillaVillagers,
+  wolfCountForComposition,
 } from "./balance-v1.ts";
 import { isValidComposition } from "./constraints.ts";
 
@@ -22,7 +23,7 @@ function chooseSpecialRoles(count: number, playerCount: number, rng: SeededRng):
     if (slots === count) {
       const roles = [...selected];
       if (roles.includes("mason")) roles.push("mason");
-      const wolves = getStartingWolfCount(playerCount);
+      const wolves = wolfCountForComposition(playerCount, roles);
       const composition = [
         ...Array(wolves).fill("werewolf" as RoleId),
         ...roles,
@@ -61,10 +62,11 @@ export function composeBalancedGame(input: ComposeBalancedGameInput): RoleId[] {
   const rng = new SeededRng(seed).derive(`balance-v${balanceVersion}:composition`);
   const specialCount = rng.weightedPick(counts);
   const specials = chooseSpecialRoles(specialCount, playerCount, rng.derive("roles"));
+  const compositionWolves = wolfCountForComposition(playerCount, specials);
   const roles: RoleId[] = [
-    ...Array(wolves).fill("werewolf" as RoleId),
+    ...Array(compositionWolves).fill("werewolf" as RoleId),
     ...specials,
-    ...Array(playerCount - wolves - specials.length).fill("villager" as RoleId),
+    ...Array(playerCount - compositionWolves - specials.length).fill("villager" as RoleId),
   ];
   if (!isValidComposition(roles, playerCount)) throw new Error("No valid balanced composition");
   return roles;

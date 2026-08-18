@@ -21,7 +21,8 @@ function makeState(
           status: "alive",
           originalRole: role,
           role,
-          faction: role === "werewolf" ? "wolves" : "village",
+          faction:
+            role === "werewolf" ? "wolves" : role === "serial_killer" ? "serial_killer" : "village",
           roleState: {},
           phaseState: { phaseId, actions: actions[`p${index}`] },
         },
@@ -90,7 +91,7 @@ describe("night resolution", () => {
       { p0: action("p2"), p1: action("p2") },
       ["p0"],
       { p2: "alive" },
-      "c",
+      "seed",
     ],
     [
       "wolves attack the Hunter who fails and dies",
@@ -98,7 +99,7 @@ describe("night resolution", () => {
       { p0: action("p2"), p1: action("p2") },
       ["p2"],
       { p2: "dead" },
-      "seed",
+      "c",
     ],
     [
       "wolves attack the Harlot while she is away and the attack fails",
@@ -145,14 +146,14 @@ describe("night resolution", () => {
       ["werewolf", "harlot", "hunter", "villager"],
       { p0: action("p2"), p1: { "harlot.visit": { targetId: id("p2") } } },
       ["p0"],
-      "c",
+      "seed",
     ],
     [
       "the Harlot visits the Hunter who fails and both die",
       ["werewolf", "harlot", "hunter", "villager"],
       { p0: action("p2"), p1: { "harlot.visit": { targetId: id("p2") } } },
       ["p1", "p2"],
-      "seed",
+      "c",
     ],
   ] as const)("%s", (_name, roles, actions, deaths, seed = "seed") => {
     const transition = resolve(makeState(roles as unknown as PlayerState["role"][], actions), seed);
@@ -237,7 +238,7 @@ describe("night resolution", () => {
         p0: action("p2"),
         p1: action("p2"),
       }),
-      "c",
+      "seed",
     );
     const exposure = resolve(
       makeState(["werewolf", "harlot", "villager", "villager"], {
@@ -276,5 +277,212 @@ describe("night resolution", () => {
     expect(auditDeaths(attack)).toEqual([{ playerId: id("p1"), cause: "wolf_attack" }]);
     expect(auditDeaths(retaliation)).toEqual([{ playerId: id("p0"), cause: "hunter_retaliation" }]);
     expect(auditDeaths(exposure)).toEqual([{ playerId: id("p1"), cause: "harlot_exposure" }]);
+  });
+
+  test("a harlot who visits a wolf's house survives when the pack has a target", () => {
+    const transition = resolve(
+      makeState(["werewolf", "harlot", "villager"], {
+        p0: action("p2"),
+        p1: { "harlot.visit": { targetId: id("p0") } },
+      }),
+    );
+    expect(deadPlayerIds(transition)).toEqual(["p2"]);
+  });
+
+  test("a visiting serial killer is never killed at home", () => {
+    const transition = resolve(
+      makeState(["werewolf", "serial_killer", "villager"], {
+        p0: action("p1"),
+        p1: { "serial_killer.visit": { targetId: id("p0") } },
+      }),
+    );
+    expect(deadPlayerIds(transition)).toEqual([]);
+  });
+
+  test("a serial killer who stays home dies to a pack attack like anyone else", () => {
+    const transition = resolve(
+      makeState(["werewolf", "serial_killer", "villager"], {
+        p0: action("p1"),
+        p1: { "serial_killer.stay": {} },
+      }),
+    );
+    expect(deadPlayerIds(transition)).toEqual(["p1"]);
+    expect(auditDeaths(transition)).toEqual([{ playerId: id("p1"), cause: "wolf_attack" }]);
+  });
+
+  test("the pack attacking a house whose owner is away kills the owner's visitors but not the owner", () => {
+    const transition = resolve(
+      makeState(["werewolf", "serial_killer", "harlot", "villager"], {
+        p0: action("p1"),
+        p1: { "serial_killer.visit": { targetId: id("p3") } },
+        p2: { "harlot.visit": { targetId: id("p1") } },
+      }),
+    );
+    expect(deadPlayerIds(transition)).toEqual(["p2", "p3"]);
+  });
+
+  test("an attacked house's visitors die too", () => {
+    const transition = resolve(
+      makeState(["serial_killer", "harlot", "villager"], {
+        p0: { "serial_killer.visit": { targetId: id("p2") } },
+        p1: { "harlot.visit": { targetId: id("p2") } },
+      }),
+    );
+    expect(deadPlayerIds(transition)).toEqual(["p1", "p2"]);
+  });
+
+  test("the seer is killable at home on a night it inspects", () => {
+    const transition = resolve(
+      makeState(["werewolf", "seer", "villager"], {
+        p0: action("p1"),
+        p1: { "seer.inspect": { targetId: id("p2") } },
+      }),
+    );
+    expect(deadPlayerIds(transition)).toEqual(["p1"]);
+  });
+
+  test("the serial killer kills a villager it visits", () => {
+    const transition = resolve(
+      makeState(["serial_killer", "villager", "villager"], {
+        p0: { "serial_killer.visit": { targetId: id("p1") } },
+      }),
+    );
+    expect(deadPlayerIds(transition)).toEqual(["p1"]);
+    expect(auditDeaths(transition)).toEqual([
+      { playerId: id("p1"), cause: "serial_killer_attack" },
+    ]);
+  });
+
+  test("the serial killer wins the clash against a wolf it visits", () => {
+    const transition = resolve(
+      makeState(["werewolf", "serial_killer", "villager"], {
+        p1: { "serial_killer.visit": { targetId: id("p0") } },
+      }),
+      "seed",
+    );
+    expect(deadPlayerIds(transition)).toEqual(["p0"]);
+    expect(auditDeaths(transition)).toEqual([
+      { playerId: id("p0"), cause: "serial_killer_attack" },
+    ]);
+  });
+
+  test("the serial killer loses the clash against a wolf it visits", () => {
+    const transition = resolve(
+      makeState(["werewolf", "serial_killer", "villager"], {
+        p1: { "serial_killer.visit": { targetId: id("p0") } },
+      }),
+      "c",
+    );
+    expect(deadPlayerIds(transition)).toEqual(["p1"]);
+    expect(auditDeaths(transition)).toEqual([{ playerId: id("p1"), cause: "wolf_attack" }]);
+  });
+
+  test("a hunter repels a visiting serial killer", () => {
+    const transition = resolve(
+      makeState(["serial_killer", "hunter", "villager"], {
+        p0: { "serial_killer.visit": { targetId: id("p1") } },
+      }),
+      "same",
+    );
+    expect(deadPlayerIds(transition)).toEqual(["p0"]);
+    expect(auditDeaths(transition)).toEqual([{ playerId: id("p0"), cause: "hunter_retaliation" }]);
+  });
+
+  test("a hunter killed by a visiting serial killer", () => {
+    const transition = resolve(
+      makeState(["serial_killer", "hunter", "villager"], {
+        p0: { "serial_killer.visit": { targetId: id("p1") } },
+      }),
+      "c",
+    );
+    expect(deadPlayerIds(transition)).toEqual(["p1"]);
+    expect(auditDeaths(transition)).toEqual([
+      { playerId: id("p1"), cause: "serial_killer_attack" },
+    ]);
+  });
+
+  test("a cursed hit by both the pack and the serial killer dies instead of converting", () => {
+    const transition = resolve(
+      makeState(["werewolf", "serial_killer", "cursed"], {
+        p0: action("p2"),
+        p1: { "serial_killer.visit": { targetId: id("p2") } },
+      }),
+    );
+    expect(deadPlayerIds(transition)).toEqual(["p0", "p2"]);
+    expect(transition.playerPatches).not.toContainEqual({
+      playerId: id("p2"),
+      changes: { role: "werewolf", faction: "wolves" },
+    });
+  });
+
+  test("a cursed visited by the serial killer dies, it does not convert", () => {
+    const transition = resolve(
+      makeState(["serial_killer", "cursed", "villager"], {
+        p0: { "serial_killer.visit": { targetId: id("p1") } },
+      }),
+    );
+    expect(deadPlayerIds(transition)).toEqual(["p1"]);
+    expect(auditDeaths(transition)).toEqual([
+      { playerId: id("p1"), cause: "serial_killer_attack" },
+    ]);
+  });
+
+  test("audit.night records the serial killer's visit", () => {
+    const transition = resolve(
+      makeState(["serial_killer", "villager", "villager"], {
+        p0: { "serial_killer.visit": { targetId: id("p1") } },
+      }),
+    );
+    const event = transition.events.find((candidate) => candidate.kind === "audit.night");
+    expect((event!.payload as EventPayloads["audit.night"]).serialKillerAction).toEqual({
+      type: "visit",
+      targetId: id("p1"),
+    });
+  });
+
+  test("audit.night records the serial killer's stay", () => {
+    const transition = resolve(
+      makeState(["serial_killer", "villager"], {
+        p0: { "serial_killer.stay": {} },
+      }),
+    );
+    const event = transition.events.find((candidate) => candidate.kind === "audit.night");
+    expect((event!.payload as EventPayloads["audit.night"]).serialKillerAction).toEqual({
+      type: "stay",
+    });
+  });
+
+  test("audit.night records no serial killer action without a serial killer", () => {
+    const transition = resolve(makeState(["werewolf", "villager"], { p0: action("p1") }));
+    const event = transition.events.find((candidate) => candidate.kind === "audit.night");
+    expect((event!.payload as EventPayloads["audit.night"]).serialKillerAction).toBeNull();
+  });
+
+  test("the harlot receives a harlot.result when she dies", () => {
+    const transition = resolve(
+      makeState(["werewolf", "harlot", "villager"], {
+        p1: { "harlot.visit": { targetId: id("p0") } },
+      }),
+    );
+    expect(transition.events).toContainEqual({
+      kind: "harlot.result",
+      scope: "player",
+      scopeId: "p1",
+      payload: { outcome: "killed" },
+    });
+  });
+
+  test("the harlot receives a safe harlot.result when she survives", () => {
+    const transition = resolve(
+      makeState(["harlot", "villager", "villager"], {
+        p0: { "harlot.visit": { targetId: id("p1") } },
+      }),
+    );
+    expect(transition.events).toContainEqual({
+      kind: "harlot.result",
+      scope: "player",
+      scopeId: "p0",
+      payload: { outcome: "safe" },
+    });
   });
 });

@@ -43,8 +43,20 @@ function state(
   } as unknown as GameState;
 }
 
-function setAction(payload: NightActionSetPayload, phaseId = 1, commandId = "c1"): GameplayCommand {
-  return { commandId, phaseId: phaseId as never, type: "night.action.set", payload };
+// The wire payload type predates the serial killer's actions; the engine
+// accepts them, so the helper widens the payload to cover them.
+type NightPayload =
+  | NightActionSetPayload
+  | { action: "serial_killer.visit"; targetId: UserId }
+  | { action: "serial_killer.stay" };
+
+function setAction(payload: NightPayload, phaseId = 1, commandId = "c1"): GameplayCommand {
+  return {
+    commandId,
+    phaseId: phaseId as never,
+    type: "night.action.set",
+    payload: payload as NightActionSetPayload,
+  };
 }
 
 function clearAction(action: ActionId, phaseId = 1, commandId = "c1"): GameplayCommand {
@@ -72,6 +84,12 @@ describe("night action validation", () => {
     ["seer", "seer.inspect", { action: "seer.inspect", targetId: uid("p1") }],
     ["harlot", "harlot.visit", { action: "harlot.visit", targetId: uid("p1") }],
     ["harlot", "harlot.stay", { action: "harlot.stay" }],
+    [
+      "serial_killer",
+      "serial_killer.visit",
+      { action: "serial_killer.visit", targetId: uid("p1") },
+    ],
+    ["serial_killer", "serial_killer.stay", { action: "serial_killer.stay" }],
   ] as const)("a %s may submit %s during night", (role, _action, payload) => {
     const game = state([role, "villager", "villager"] as PlayerState["role"][]);
     const result = validateCommand(game, uid("p0"), setAction(payload), { now: 1 });
@@ -84,6 +102,13 @@ describe("night action validation", () => {
     ["seer", "seer.inspect", { action: "seer.inspect", targetId: uid("p1") }, "discussion"],
     ["harlot", "harlot.visit", { action: "harlot.visit", targetId: uid("p1") }, "voting"],
     ["harlot", "harlot.stay", { action: "harlot.stay" }, "discussion"],
+    [
+      "serial_killer",
+      "serial_killer.visit",
+      { action: "serial_killer.visit", targetId: uid("p1") },
+      "discussion",
+    ],
+    ["serial_killer", "serial_killer.stay", { action: "serial_killer.stay" }, "voting"],
   ] as const)("%s %s is rejected outside night", (role, _action, payload, phase) => {
     const game = state([role, "villager", "villager"] as PlayerState["role"][], phase);
     const result = validateCommand(game, uid("p0"), setAction(payload), { now: 1 });
@@ -129,12 +154,34 @@ describe("night action validation", () => {
     expect(result).toEqual({ code: "INVALID_TARGET" });
   });
 
+  test("the serial killer may not visit itself", () => {
+    const game = state(["serial_killer", "villager"] as PlayerState["role"][]);
+    const result = validateCommand(
+      game,
+      uid("p0"),
+      setAction({ action: "serial_killer.visit", targetId: uid("p0") }),
+      { now: 1 },
+    );
+    expect(result).toEqual({ code: "INVALID_TARGET" });
+  });
+
   test("a villager is not granted the seer's action", () => {
     const game = state(["villager", "villager"] as PlayerState["role"][]);
     const result = validateCommand(
       game,
       uid("p0"),
       setAction({ action: "seer.inspect", targetId: uid("p1") }),
+      { now: 1 },
+    );
+    expect(result).toEqual({ code: "ACTION_NOT_AVAILABLE" });
+  });
+
+  test("a villager is not granted the serial killer's action", () => {
+    const game = state(["villager", "villager"] as PlayerState["role"][]);
+    const result = validateCommand(
+      game,
+      uid("p0"),
+      setAction({ action: "serial_killer.visit", targetId: uid("p1") }),
       { now: 1 },
     );
     expect(result).toEqual({ code: "ACTION_NOT_AVAILABLE" });

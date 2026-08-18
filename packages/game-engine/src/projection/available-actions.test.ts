@@ -10,6 +10,7 @@ function state(
   roles: PlayerState["role"][],
   phase: "discussion" | "voting" | "night" = "night",
   dead: string[] = [],
+  actions: Record<string, Record<string, unknown>> = {},
 ): GameState {
   const players = Object.fromEntries(
     roles.map((role, index) => {
@@ -21,9 +22,10 @@ function state(
           status: dead.includes(id) ? "dead" : "alive",
           originalRole: role,
           role,
-          faction: role === "werewolf" ? "wolves" : "village",
+          faction:
+            role === "werewolf" ? "wolves" : role === "serial_killer" ? "serial_killer" : "village",
           roleState: {},
-          phaseState: { phaseId: 1 },
+          phaseState: { phaseId: 1, actions: actions[`p${index}`] },
         },
       ];
     }),
@@ -102,6 +104,21 @@ describe("available actions projection", () => {
     ]);
   });
 
+  test("a serial killer may visit any living player but herself, or stay home", () => {
+    const game = state(["serial_killer", "villager", "villager"]);
+    expect(getAvailableActions(game, uid("p0"))).toEqual([
+      {
+        id: "serial_killer.visit",
+        type: "target",
+        targets: [
+          { userId: uid("p1"), enabled: true },
+          { userId: uid("p2"), enabled: true },
+        ],
+      },
+      { id: "serial_killer.stay", type: "choice" },
+    ]);
+  });
+
   test("a plain villager has no night actions", () => {
     const game = state(["villager", "villager"]);
     expect(getAvailableActions(game, uid("p0"))).toEqual([]);
@@ -150,6 +167,38 @@ describe("available actions projection", () => {
         targets: [{ userId: uid("p1"), enabled: true }],
       },
       { id: "harlot.stay", type: "choice", selected: true },
+    ]);
+  });
+
+  test("the serial killer's stored visit is reflected as the selected target", () => {
+    const game = state(["serial_killer", "villager", "villager"], "night", [], {
+      p0: { "serial_killer.visit": { targetId: uid("p1") } },
+    });
+    expect(getAvailableActions(game, uid("p0"))).toEqual([
+      {
+        id: "serial_killer.visit",
+        type: "target",
+        targets: [
+          { userId: uid("p1"), enabled: true },
+          { userId: uid("p2"), enabled: true },
+        ],
+        selectedTargetId: uid("p1"),
+      },
+      { id: "serial_killer.stay", type: "choice" },
+    ]);
+  });
+
+  test("serial_killer.stay is reported as selected once chosen", () => {
+    const game = state(["serial_killer", "villager"], "night", [], {
+      p0: { "serial_killer.stay": {} },
+    });
+    expect(getAvailableActions(game, uid("p0"))).toEqual([
+      {
+        id: "serial_killer.visit",
+        type: "target",
+        targets: [{ userId: uid("p1"), enabled: true }],
+      },
+      { id: "serial_killer.stay", type: "choice", selected: true },
     ]);
   });
 });
