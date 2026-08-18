@@ -22,7 +22,13 @@ function makeState(
           originalRole: role,
           role,
           faction:
-            role === "werewolf" ? "wolves" : role === "serial_killer" ? "serial_killer" : "village",
+            role === "werewolf" || role === "alpha_wolf"
+              ? "wolves"
+              : role === "serial_killer"
+                ? "serial_killer"
+                : role === "veteran"
+                  ? "veteran"
+                  : "village",
           roleState: {},
           phaseState: { phaseId, actions: actions[`p${index}`] },
         },
@@ -131,6 +137,106 @@ describe("night resolution", () => {
       scope: "player",
       scopeId: "p2",
       payload: { role: "werewolf", faction: "wolves", cause: "cursed" },
+    });
+  });
+
+  test("the Alpha Wolf converts the pack's victim when the roll succeeds", () => {
+    const transition = resolve(
+      makeState(["alpha_wolf", "werewolf", "villager"], {
+        p0: action("p2"),
+        p1: action("p2"),
+      }),
+      "seed-8",
+    );
+    expect(deadPlayerIds(transition)).toEqual([]);
+    expect(transition.playerPatches).toContainEqual({
+      playerId: id("p2"),
+      changes: { role: "werewolf", faction: "wolves" },
+    });
+    expect(transition.events).toContainEqual({
+      kind: "player.converted",
+      scope: "player",
+      scopeId: "p2",
+      payload: { role: "werewolf", faction: "wolves", cause: "alpha_wolf" },
+    });
+  });
+
+  test("the Alpha Wolf kills the pack's victim when the roll fails", () => {
+    const transition = resolve(
+      makeState(["alpha_wolf", "werewolf", "villager"], {
+        p0: action("p2"),
+        p1: action("p2"),
+      }),
+      "seed-0",
+    );
+    expect(deadPlayerIds(transition)).toEqual(["p2"]);
+    expect(transition.playerPatches).not.toContainEqual({
+      playerId: id("p2"),
+      changes: { role: "werewolf", faction: "wolves" },
+    });
+  });
+
+  test("a Seer victim always dies even on a succeeding alpha roll", () => {
+    const transition = resolve(
+      makeState(["alpha_wolf", "werewolf", "seer"], {
+        p0: action("p2"),
+        p1: action("p2"),
+      }),
+      "seed-8",
+    );
+    expect(deadPlayerIds(transition)).toEqual(["p2"]);
+    expect(transition.playerPatches).not.toContainEqual({
+      playerId: id("p2"),
+      changes: { role: "werewolf", faction: "wolves" },
+    });
+  });
+
+  test("a Veteran or Serial Killer victim always dies even on a succeeding alpha roll", () => {
+    for (const role of ["veteran", "serial_killer"] as const) {
+      const transition = resolve(
+        makeState(["alpha_wolf", "werewolf", role], {
+          p0: action("p2"),
+          p1: action("p2"),
+        }),
+        "seed-8",
+      );
+      expect(deadPlayerIds(transition)).toEqual(["p2"]);
+      expect(transition.playerPatches).not.toContainEqual({
+        playerId: id("p2"),
+        changes: { role: "werewolf", faction: "wolves" },
+      });
+    }
+  });
+
+  test("a Cursed victim still converts with cause cursed, not the alpha roll", () => {
+    const transition = resolve(
+      makeState(["alpha_wolf", "werewolf", "cursed"], {
+        p0: action("p2"),
+        p1: action("p2"),
+      }),
+      "seed-8",
+    );
+    expect(deadPlayerIds(transition)).toEqual([]);
+    expect(transition.events).toContainEqual({
+      kind: "player.converted",
+      scope: "player",
+      scopeId: "p2",
+      payload: { role: "werewolf", faction: "wolves", cause: "cursed" },
+    });
+  });
+
+  test("no conversion happens when no alpha wolf is alive", () => {
+    const transition = resolve(
+      makeState(["werewolf", "werewolf", "villager"], {
+        p0: action("p2"),
+        p1: action("p2"),
+      }),
+      "seed-8",
+    );
+    expect(deadPlayerIds(transition)).toEqual(["p2"]);
+    expect(transition.playerPatches).not.toContainEqual({
+      playerId: id("p2"),
+      changes: { role: "werewolf", faction: "wolves" },
     });
   });
 

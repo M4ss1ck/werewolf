@@ -23,6 +23,7 @@ export interface RoleDefinition<State = unknown> {
   onDaySelected?(ctx: DaySelectionContext<State>): RoleEffect[];
 }
 
+import { alphaWolf } from "./alpha-wolf.ts";
 import { cursed } from "./cursed.ts";
 import { harlot } from "./harlot.ts";
 import { hunter } from "./hunter.ts";
@@ -47,6 +48,7 @@ export const roleRegistry: Readonly<Record<RoleId, RoleDefinition>> = {
   princess,
   veteran,
   serial_killer: serialKiller,
+  alpha_wolf: alphaWolf,
 };
 
 export function getRoleDefinition(role: RoleId): RoleDefinition {
@@ -55,4 +57,4 @@ export function getRoleDefinition(role: RoleId): RoleDefinition {
 
 /** Roles that may read and write the wolves chat channel. Membership is by
  * ROLE, not faction: a future wolf-faction role may be denied the channel. */
-export const WOLF_CHAT_ROLES: ReadonlySet<RoleId> = new Set<RoleId>(["werewolf"]);
+export const WOLF_CHAT_ROLES: ReadonlySet<RoleId> = new Set<RoleId>(["werewolf", "alpha_wolf"]);

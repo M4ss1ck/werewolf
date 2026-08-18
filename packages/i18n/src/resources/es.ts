@@ -54,6 +54,11 @@ export const es: TranslationResource = {
       description:
         "Visita una casa cada noche y mata a quien esté dentro. Gana siendo el último en pie.",
     },
+    alpha_wolf: {
+      name: "Lobo Alfa",
+      description:
+        "Cazas con la manada. Cada noche, tu mordisco puede convertir a la víctima de la manada en hombre lobo en lugar de matarla.",
+    },
   },
   factions: {
     village: "La aldea",

@@ -56,6 +56,11 @@ export const en = {
       description:
         "Visits one house each night and kills whoever is home. Wins by being the last one standing.",
     },
+    alpha_wolf: {
+      name: "Alpha Wolf",
+      description:
+        "You hunt with the pack. Each night, your bite may turn the pack's victim into a werewolf instead of killing them.",
+    },
   },
   factions: {
     village: "Village",

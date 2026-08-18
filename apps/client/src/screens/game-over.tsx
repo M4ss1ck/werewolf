@@ -1,4 +1,4 @@
-import type { GameEvent, ViewerGameSnapshot } from "@werewolf/protocol";
+import { type GameEvent, type ViewerGameSnapshot, WOLF_ROLE_IDS } from "@werewolf/protocol";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -71,7 +71,10 @@ export function GameOverScreen({
         return null;
     }
   };
-  const wolves = snapshot.players.filter((player) => player.revealedRole === "werewolf").length;
+  const wolves = snapshot.players.filter(
+    (player) =>
+      player.revealedRole && (WOLF_ROLE_IDS as readonly string[]).includes(player.revealedRole),
+  ).length;
   const villagers = snapshot.players.length - wolves;
   return (
     <div className="flex min-h-0 flex-1 overflow-y-auto flex-col gap-[22px] bg-[radial-gradient(100%_45%_at_50%_0%,rgba(179,58,54,.18),transparent_70%)] px-[18px] pb-5 pt-9">
@@ -92,7 +95,9 @@ export function GameOverScreen({
       <section className="flex flex-col gap-2.5">
         <p className="eyebrow">{t("ui.over.rolesRevealed")}</p>
         {snapshot.players.map((player) => {
-          const wolf = player.revealedRole === "werewolf";
+          const wolf =
+            player.revealedRole !== undefined &&
+            (WOLF_ROLE_IDS as readonly string[]).includes(player.revealedRole);
           return (
             <div className={`row ${wolf ? "border-blood/35 bg-blood/10" : ""}`} key={player.userId}>
               <Avatar name={player.displayName} />

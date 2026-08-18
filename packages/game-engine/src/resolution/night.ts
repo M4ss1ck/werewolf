@@ -1,4 +1,5 @@
-import type { NightDeathCause, RoleId, UserId } from "@werewolf/protocol";
+import type { ConversionCause, NightDeathCause, RoleId, UserId } from "@werewolf/protocol";
+import { ALPHA_CONVERSION_CHANCE } from "../composer/balance-v1.ts";
 import type { SeededRng } from "../rng/rng.ts";
 import type {
   DomainResult,
@@ -29,7 +30,7 @@ type FrozenNight = {
 
 type NightOutcome = {
   deaths: Map<UserId, NightDeathCause>;
-  conversions: UserId[];
+  conversions: { playerId: UserId; cause: ConversionCause }[];
 };
 
 export function resolveNight(state: GameState, context: NightResolutionContext): DomainResult {
@@ -191,7 +192,7 @@ function resolveHouseAttacks(
   day: number,
 ): NightOutcome {
   const deaths = new Map<UserId, NightDeathCause>();
-  const conversions: UserId[] = [];
+  const conversions: { playerId: UserId; cause: ConversionCause }[] = [];
 
   const attacks: { attacker: "wolves" | "serial_killer"; houseId: UserId }[] = [];
   if (wolfTargetId !== null) attacks.push({ attacker: "wolves", houseId: wolfTargetId });
@@ -267,8 +268,27 @@ function resolveHouseAttacks(
   for (const [victimId, attackers] of hits) {
     if (deaths.has(victimId)) continue;
     const victim = state.players[victimId]!;
+    // The Cursed converts at 100% and must not consume the alpha roll, so it
+    // is checked first and unchanged.
     if (victim.role === "cursed" && attackers.has("wolves") && !attackers.has("serial_killer")) {
-      conversions.push(victimId);
+      conversions.push({ playerId: victimId, cause: "cursed" });
+      continue;
+    }
+    // The Alpha Wolf occasionally turns the pack's balloted victim instead of
+    // killing them. Only a clean pack kill of the balloted target converts;
+    // the Veteran and the Serial Killer are immune (converting them would
+    // delete a faction mid-game) and the Seer always dies instead. The cheap
+    // conditions are checked before the roll.
+    if (
+      victimId === wolfTargetId &&
+      attackers.has("wolves") &&
+      !attackers.has("serial_killer") &&
+      livingPlayers(state).some((player) => player.role === "alpha_wolf") &&
+      victim.faction === "village" &&
+      victim.role !== "seer" &&
+      rng.derive(`night:${day}:alpha:conversion`).float() < ALPHA_CONVERSION_CHANCE
+    ) {
+      conversions.push({ playerId: victimId, cause: "alpha_wolf" });
       continue;
     }
     const cause: NightDeathCause = attackers.has("serial_killer")
@@ -301,7 +321,7 @@ function livingPlayers(state: GameState): PlayerState[] {
 function commitNight(outcome: NightOutcome): PlayerPatch[] {
   const patches: PlayerPatch[] = [];
   for (const [playerId] of outcome.deaths) patches.push({ playerId, changes: { status: "dead" } });
-  for (const playerId of outcome.conversions)
+  for (const { playerId } of outcome.conversions)
     patches.push({ playerId, changes: { role: "werewolf", faction: "wolves" } });
   return patches;
 }
@@ -342,12 +362,12 @@ function makeNightEvents(
       payload: { outcome: killed ? "killed" : "safe" },
     });
   }
-  for (const playerId of outcome.conversions) {
+  for (const { playerId, cause } of outcome.conversions) {
     events.push({
       kind: "player.converted",
       scope: "player",
       scopeId: playerId,
-      payload: { role: "werewolf", faction: "wolves", cause: "cursed" },
+      payload: { role: "werewolf", faction: "wolves", cause },
     });
     events.push({
       kind: "wolves.member_joined",
@@ -375,7 +395,7 @@ function makeNightEvents(
           : { type: "stay" }
         : null,
       deaths: [...outcome.deaths.entries()].map(([playerId, cause]) => ({ playerId, cause })),
-      conversions: outcome.conversions,
+      conversions: outcome.conversions.map(({ playerId }) => playerId),
     },
   });
   return events;

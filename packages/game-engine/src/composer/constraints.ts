@@ -13,7 +13,16 @@ export function hasValidSpecialCardinality(roles: readonly RoleId[]): boolean {
   const masons = roles.filter((role) => role === "mason").length;
   if (masons !== 0 && masons !== 2) return false;
   return (
-    ["seer", "harlot", "princess", "hunter", "cursed", "veteran", "serial_killer"] as const
+    [
+      "seer",
+      "harlot",
+      "princess",
+      "hunter",
+      "cursed",
+      "veteran",
+      "serial_killer",
+      "alpha_wolf",
+    ] as const
   ).every((role) => roles.filter((candidate) => candidate === role).length <= 1);
 }
 

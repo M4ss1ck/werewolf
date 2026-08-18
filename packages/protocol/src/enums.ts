@@ -16,9 +16,16 @@ export const ROLE_IDS = [
   "princess",
   "veteran",
   "serial_killer",
+  "alpha_wolf",
 ] as const;
 export type RoleId = (typeof ROLE_IDS)[number];
 export const RoleIdSchema = z.enum(ROLE_IDS);
+
+/** Role ids that belong to the wolves faction. The client needs this to render a
+ * revealed role as a wolf, and it may not import the engine. Distinct from the
+ * engine's WOLF_CHAT_ROLES: a wolf-faction role does not automatically get wolf chat. */
+export const WOLF_ROLE_IDS = ["werewolf", "alpha_wolf"] as const;
+export type WolfRoleId = (typeof WOLF_ROLE_IDS)[number];
 
 export const FACTION_IDS = ["village", "wolves", "veteran", "serial_killer"] as const;
 export type FactionId = (typeof FACTION_IDS)[number];
@@ -62,6 +69,6 @@ export const GAME_VISIBILITIES = ["public", "private"] as const;
 export type GameVisibility = (typeof GAME_VISIBILITIES)[number];
 export const GameVisibilitySchema = z.enum(GAME_VISIBILITIES);
 
-export const CONVERSION_CAUSES = ["cursed"] as const;
+export const CONVERSION_CAUSES = ["cursed", "alpha_wolf"] as const;
 export type ConversionCause = (typeof CONVERSION_CAUSES)[number];
 export const ConversionCauseSchema = z.enum(CONVERSION_CAUSES);

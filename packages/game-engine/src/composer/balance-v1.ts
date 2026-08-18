@@ -2,6 +2,9 @@ import type { RoleId } from "@werewolf/protocol";
 
 export const BALANCE_V1 = 1 as const;
 
+/** Per-night chance the pack's victim is turned instead of killed. */
+export const ALPHA_CONVERSION_CHANCE = 0.1;
+
 export const specialSlotWeights = [
   { maximumPlayers: 5, weights: { 0: 3, 1: 5, 2: 2 } },
   { maximumPlayers: 6, weights: { 0: 2, 1: 5, 2: 3 } },
@@ -15,6 +18,7 @@ export const roleAvailabilityMinimums: Partial<Record<RoleId, number>> = {
   cursed: 6,
   hunter: 7,
   mason: 8,
+  alpha_wolf: 10,
 };
 
 export const forbiddenCombinations: readonly (readonly RoleId[])[] = [["seer", "princess"]];
@@ -26,6 +30,7 @@ export function getStartingWolfCount(players: number): number {
 
 export function wolfCountForComposition(playerCount: number, specials: readonly RoleId[]): number {
   if (playerCount === 5 && specials.includes("serial_killer")) return 0;
+  if (specials.includes("alpha_wolf")) return getStartingWolfCount(playerCount) - 1;
   return getStartingWolfCount(playerCount);
 }
 
@@ -46,4 +51,5 @@ export const availableSpecialRoles: readonly RoleId[] = [
   "mason",
   "veteran",
   "serial_killer",
+  "alpha_wolf",
 ];

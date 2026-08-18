@@ -1,4 +1,9 @@
-import type { GameEvent, GameplayCommand, ViewerGameSnapshot } from "@werewolf/protocol";
+import {
+  type GameEvent,
+  type GameplayCommand,
+  type ViewerGameSnapshot,
+  WOLF_ROLE_IDS,
+} from "@werewolf/protocol";
 import { useTranslation } from "react-i18next";
 
 import { Avatar } from "../components.tsx";
@@ -58,7 +63,7 @@ export function Me({
               <p className="mt-1 font-mono text-xs text-sage-light">
                 {t("ui.factionTeam", {
                   faction: t(
-                    `factions.${snapshot.me?.faction ?? (role === "werewolf" ? "wolves" : "village")}`,
+                    `factions.${snapshot.me?.faction ?? ((WOLF_ROLE_IDS as readonly string[]).includes(role) ? "wolves" : "village")}`,
                   ),
                 })}
               </p>
@@ -72,7 +77,9 @@ export function Me({
       <section className="flex flex-col gap-3">
         <p className="eyebrow">{t("ui.intel.title")}</p>
         {intel.map((event, index) => {
-          const wolf = event.kind === "seer.result" && event.payload.role === "werewolf";
+          const wolf =
+            event.kind === "seer.result" &&
+            (WOLF_ROLE_IDS as readonly string[]).includes(event.payload.role);
           return (
             <div
               className={`card flex gap-3.5 p-4 ${wolf ? "border-blood/35 bg-blood/10" : ""}`}
