@@ -66,7 +66,9 @@ export type VictoryReason =
   | "wolves_eliminated"
   | "village_eliminated"
   | "veteran_lynched"
-  | "serial_killer_survives";
+  | "serial_killer_survives"
+  | "stalemate"
+  | "no_survivors";
 
 export type VoteChoice =
   | { type: "player"; targetId: UserId }
@@ -171,6 +173,8 @@ export const VictoryReasonSchema = z.enum([
   "village_eliminated",
   "veteran_lynched",
   "serial_killer_survives",
+  "stalemate",
+  "no_survivors",
 ]);
 
 /** Runtime validation for a GameEvent; mirrors the type above branch for branch. */

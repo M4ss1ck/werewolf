@@ -290,6 +290,8 @@ function gamePatchToRow(patch: DomainTransition["gamePatch"]): Partial<typeof ga
   }
   if (patch.winner !== undefined)
     result.winnerJson = patch.winner === null ? null : JSON.stringify(patch.winner);
+  if (patch.nightsWithoutElimination !== undefined)
+    result.nightsWithoutElimination = patch.nightsWithoutElimination;
   return result;
 }
 async function applyPlayerPatch(

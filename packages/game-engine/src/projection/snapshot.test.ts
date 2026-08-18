@@ -40,6 +40,7 @@ function makeState(): GameState {
     players,
     settings: { discussionDurationMs: 1000, votingDurationMs: 1000, nightDurationMs: 1000 },
     balanceVersion: 1,
+    nightsWithoutElimination: 0,
     winner: null,
     version: 1,
   };

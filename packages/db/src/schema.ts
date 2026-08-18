@@ -27,6 +27,7 @@ export const games = sqliteTable(
     phaseEndsAt: integer("phase_ends_at"),
     settingsJson: text("settings_json").notNull(),
     balanceVersion: integer("balance_version").notNull(),
+    nightsWithoutElimination: integer("nights_without_elimination").notNull().default(0),
     rngSeed: text("rng_seed"),
     winnerJson: text("winner_json"),
     version: integer("version").notNull().default(0),

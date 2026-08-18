@@ -61,12 +61,18 @@ export interface GameState {
   players: Record<UserId, PlayerState>;
   settings: GameSettings;
   balanceVersion: number;
+  /** Consecutive night resolutions that produced no elimination. Reset to 0 by
+   * any elimination from any cause. */
+  nightsWithoutElimination: number;
   winner: VictoryResult | null;
   version: number;
 }
 
 export type GamePatch = Partial<
-  Pick<GameState, "status" | "scheduledAt" | "day" | "phase" | "winner" | "version">
+  Pick<
+    GameState,
+    "status" | "scheduledAt" | "day" | "phase" | "winner" | "version" | "nightsWithoutElimination"
+  >
 >;
 export type PlayerPatch = { playerId: UserId; changes: Partial<PlayerState> };
 export type EventDraft<K extends EventKind = EventKind> = {

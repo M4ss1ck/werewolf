@@ -1,0 +1,1 @@
+ALTER TABLE `games` ADD `nights_without_elimination` integer DEFAULT 0 NOT NULL;

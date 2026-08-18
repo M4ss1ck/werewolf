@@ -29,6 +29,13 @@
       "when": 1786858606642,
       "tag": "0003_condemned_epoch",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1787094335015,
+      "tag": "0004_mixed_cassandra_nova",
+      "breakpoints": true
     }
   ]
 }

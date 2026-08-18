@@ -30,6 +30,7 @@ function state(
     },
     settings: { discussionDurationMs: 1, votingDurationMs: 1, nightDurationMs: 1 },
     balanceVersion: 1,
+    nightsWithoutElimination: 0,
     winner: null,
     version: 1,
   } as GameState;

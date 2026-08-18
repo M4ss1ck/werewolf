@@ -52,6 +52,7 @@ export function mapGame(rows: { game: GameRow; players: PlayerRow[] }): GameStat
     players: Object.fromEntries(rows.players.map((player) => [player.userId, mapPlayer(player)])),
     settings: json(game.settingsJson),
     balanceVersion: game.balanceVersion,
+    nightsWithoutElimination: game.nightsWithoutElimination,
     winner: game.winnerJson === null ? null : json(game.winnerJson),
     version: game.version,
   };

@@ -66,7 +66,7 @@ export function resolveDayVote(state: GameState): DomainResult {
         return {
           ok: true,
           transition: {
-            gamePatch: { status: "finished", winner },
+            gamePatch: { status: "finished", winner, nightsWithoutElimination: 0 },
             playerPatches,
             events,
             ephemeral: [],
@@ -103,14 +103,33 @@ export function resolveDayVote(state: GameState): DomainResult {
       }
     }
   }
-  const projected = applyPatches(state, playerPatches);
+  const eliminated = playerPatches.some((patch) => patch.changes.status === "dead");
+  const projected = {
+    ...applyPatches(state, playerPatches),
+    nightsWithoutElimination: eliminated ? 0 : state.nightsWithoutElimination,
+  };
   const winner = checkVictory(projected);
   if (winner) {
     events.push({ kind: "game.finished", scope: "public", payload: winner });
     return {
       ok: true,
       transition: {
-        gamePatch: { status: "finished", winner },
+        gamePatch: {
+          status: "finished",
+          winner,
+          nightsWithoutElimination: eliminated ? 0 : state.nightsWithoutElimination,
+        },
+        playerPatches,
+        events,
+        ephemeral: [],
+      },
+    };
+  }
+  if (eliminated) {
+    return {
+      ok: true,
+      transition: {
+        gamePatch: { nightsWithoutElimination: 0 },
         playerPatches,
         events,
         ephemeral: [],

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { EventPayloads } from "@werewolf/protocol";
+import { STALEMATE_NIGHTS } from "../composer/balance-v1.ts";
 import { SeededRng } from "../rng/rng.ts";
 import type { DomainTransition, GameState, PlayerState } from "../state.ts";
 import { resolveNight } from "./night.ts";
@@ -10,6 +11,7 @@ function makeState(
   roles: PlayerState["role"][],
   actions: Record<string, Record<string, unknown>> = {},
   phaseId = 1,
+  nightsWithoutElimination = 0,
 ): GameState {
   const players = Object.fromEntries(
     roles.map((role, index) => {
@@ -44,6 +46,7 @@ function makeState(
     players,
     settings: { discussionDurationMs: 10, votingDurationMs: 10, nightDurationMs: 10 },
     balanceVersion: 1,
+    nightsWithoutElimination,
     winner: null,
     version: 1,
   } as unknown as GameState;
@@ -605,5 +608,44 @@ describe("night resolution", () => {
       scopeId: "p0",
       payload: { outcome: "safe" },
     });
+  });
+
+  test("a night with no deaths increments nightsWithoutElimination in the gamePatch", () => {
+    const transition = resolve(
+      makeState(["werewolf", "werewolf", "villager", "villager"], {
+        p0: action("p2"),
+        p1: action("p3"),
+      }),
+    );
+    expect(transition.gamePatch?.nightsWithoutElimination).toBe(1);
+  });
+
+  test("a night with a death resets nightsWithoutElimination to 0", () => {
+    const transition = resolve(
+      makeState(["werewolf", "werewolf", "villager"], {
+        p0: action("p2"),
+        p1: action("p2"),
+      }),
+    );
+    expect(deadPlayerIds(transition)).toEqual(["p2"]);
+    expect(transition.gamePatch?.nightsWithoutElimination).toBe(0);
+  });
+
+  test("a night that pushes the counter to STALEMATE_NIGHTS finishes the game with reason stalemate", () => {
+    const transition = resolve(
+      makeState(
+        ["werewolf", "werewolf", "villager", "villager"],
+        { p0: action("p2"), p1: action("p3") },
+        1,
+        STALEMATE_NIGHTS - 1,
+      ),
+    );
+    expect(transition.gamePatch).toMatchObject({
+      status: "finished",
+      winner: { winningFactions: [], winningPlayers: [], reason: "stalemate" },
+    });
+    expect(
+      transition.events.some((event) => event.kind === "game.finished" && event.scope === "public"),
+    ).toBe(true);
   });
 });

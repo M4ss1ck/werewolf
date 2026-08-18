@@ -29,6 +29,7 @@ function makeState(count: number, status: GameState["status"] = "lobby"): GameSt
     players: players as GameState["players"],
     settings: { discussionDurationMs: 10, votingDurationMs: 20, nightDurationMs: 30 },
     balanceVersion: 1,
+    nightsWithoutElimination: 0,
     winner: null,
     version: 1,
   };

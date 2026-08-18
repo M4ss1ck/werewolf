@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { STALEMATE_NIGHTS } from "../composer/balance-v1.ts";
 import type { GameState, PlayerState } from "../state.ts";
 import { checkVictory } from "./victory.ts";
 
@@ -25,16 +26,17 @@ function player(
     ...overrides,
   };
 }
-function game(players: PlayerState[]): GameState {
+function game(players: PlayerState[], nightsWithoutElimination = 0): GameState {
   return {
     id: "g" as GameState["id"],
-    ownerUserId: players[0]!.id,
+    ownerUserId: players[0]?.id ?? ("owner" as PlayerState["id"]),
     status: "running",
     day: 1,
     phase: { id: 1 as never, type: "voting", startedAt: 0, endsAt: 100 },
     players: Object.fromEntries(players.map((p) => [p.id, p])),
     settings: { discussionDurationMs: 1, votingDurationMs: 1, nightDurationMs: 1 },
     balanceVersion: 1,
+    nightsWithoutElimination,
     winner: null,
     version: 1,
   } as unknown as GameState;
@@ -122,5 +124,147 @@ describe("victory checks", () => {
       winningPlayers: ["p0" as PlayerState["id"], "p1" as PlayerState["id"]],
       reason: "village_eliminated",
     });
+  });
+
+  // Branch 1: nobody alive.
+  test("all players dead is a no_survivors draw, not a village win", () => {
+    const state = game([
+      player("p0", "villager", { status: "dead" }),
+      player("p1", "werewolf", { status: "dead" }),
+    ]);
+    expect(checkVictory(state)).toEqual({
+      winningFactions: [],
+      winningPlayers: [],
+      reason: "no_survivors",
+    });
+  });
+
+  // Branch 2: every living player is a serial killer.
+  test("all living players being serial killers is a serial killer win", () => {
+    const state = game([
+      player("p0", "serial_killer"),
+      player("p1", "serial_killer"),
+      player("p2", "villager", { status: "dead" }),
+    ]);
+    expect(checkVictory(state)).toEqual({
+      winningFactions: ["serial_killer"],
+      winningPlayers: ["p0" as PlayerState["id"], "p1" as PlayerState["id"]],
+      reason: "serial_killer_survives",
+    });
+  });
+
+  // Branch 3: every living player is a wolf.
+  test("all living players being wolves is a wolves win", () => {
+    const state = game([
+      player("p0", "werewolf"),
+      player("p1", "werewolf"),
+      player("p2", "villager", { status: "dead" }),
+    ]);
+    expect(checkVictory(state)).toEqual({
+      winningFactions: ["wolves"],
+      winningPlayers: ["p0" as PlayerState["id"], "p1" as PlayerState["id"]],
+      reason: "village_eliminated",
+    });
+  });
+
+  // Branch 4: no wolves, no serial killers, at least one living villager.
+  test("no wolves or serial killers alive with a living villager is a village win", () => {
+    const state = game([player("p0", "villager"), player("p1", "werewolf", { status: "dead" })]);
+    expect(checkVictory(state)).toEqual({
+      winningFactions: ["village"],
+      winningPlayers: ["p0" as PlayerState["id"]],
+      reason: "wolves_eliminated",
+    });
+  });
+
+  // Branch 4 regression: only a living veteran, no living villager.
+  test("the only living player being a veteran is not a village win", () => {
+    const state = game([
+      player("p0", "veteran"),
+      player("p1", "villager", { status: "dead" }),
+      player("p2", "werewolf", { status: "dead" }),
+    ]);
+    expect(checkVictory(state)).toBeNull();
+  });
+
+  // Branch 5: stalemate.
+  test("the stalemate branch fires at exactly STALEMATE_NIGHTS", () => {
+    const state = game(
+      [
+        player("p0", "veteran"),
+        player("p1", "villager", { status: "dead" }),
+        player("p2", "werewolf", { status: "dead" }),
+      ],
+      STALEMATE_NIGHTS,
+    );
+    expect(checkVictory(state)).toEqual({
+      winningFactions: [],
+      winningPlayers: [],
+      reason: "stalemate",
+    });
+  });
+
+  test("the stalemate branch does not fire at STALEMATE_NIGHTS - 1", () => {
+    const state = game(
+      [
+        player("p0", "veteran"),
+        player("p1", "villager", { status: "dead" }),
+        player("p2", "werewolf", { status: "dead" }),
+      ],
+      STALEMATE_NIGHTS - 1,
+    );
+    expect(checkVictory(state)).toBeNull();
+  });
+
+  test("the stalemate branch does not fire when an earlier branch matches", () => {
+    // A lone serial killer wins even with a huge counter.
+    const state = game([player("p0", "serial_killer")], STALEMATE_NIGHTS);
+    expect(checkVictory(state)).toEqual({
+      winningFactions: ["serial_killer"],
+      winningPlayers: ["p0" as PlayerState["id"]],
+      reason: "serial_killer_survives",
+    });
+  });
+
+  // Invariant: any non-empty winning faction has at least one living member.
+  test("every named winning faction has at least one living member", () => {
+    // Enumerate every population of living players with counts 0..3 per faction.
+    for (let v = 0; v <= 3; v += 1) {
+      for (let w = 0; w <= 3; w += 1) {
+        for (let vet = 0; vet <= 3; vet += 1) {
+          for (let sk = 0; sk <= 3; sk += 1) {
+            const players: PlayerState[] = [];
+            let index = 0;
+            for (const [faction, count] of [
+              ["village", v],
+              ["wolves", w],
+              ["veteran", vet],
+              ["serial_killer", sk],
+            ] as const) {
+              for (let i = 0; i < count; i += 1) {
+                players.push({
+                  id: `p${index++}` as PlayerState["id"],
+                  status: "alive",
+                  originalRole: null,
+                  role: null,
+                  faction,
+                  roleState: {},
+                  phaseState: { phaseId: 1 as never },
+                });
+              }
+            }
+            const result = checkVictory(game(players));
+            if (result && result.winningFactions.length > 0) {
+              for (const faction of result.winningFactions) {
+                expect(
+                  players.some((p) => p.faction === faction),
+                  `faction ${faction} must have a living member for population v=${v} w=${w} vet=${vet} sk=${sk}`,
+                ).toBe(true);
+              }
+            }
+          }
+        }
+      }
+    }
   });
 });

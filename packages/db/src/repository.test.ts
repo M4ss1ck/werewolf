@@ -119,6 +119,7 @@ describe("GameRepository", () => {
       ) as GameState["players"],
       settings: SETTINGS,
       balanceVersion: 1,
+      nightsWithoutElimination: 0,
       winner: null,
       version: 0,
     };

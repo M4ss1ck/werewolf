@@ -5,6 +5,9 @@ export const BALANCE_V1 = 1 as const;
 /** Per-night chance the pack's victim is turned instead of killed. */
 export const ALPHA_CONVERSION_CHANCE = 0.1;
 
+/** Consecutive night resolutions with no elimination that end the game in a draw. */
+export const STALEMATE_NIGHTS = 5;
+
 export const specialSlotWeights = [
   { maximumPlayers: 5, weights: { 0: 3, 1: 5, 2: 2 } },
   { maximumPlayers: 6, weights: { 0: 2, 1: 5, 2: 3 } },

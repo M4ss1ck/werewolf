@@ -1,10 +1,24 @@
-import { type GameEvent, type ViewerGameSnapshot, WOLF_ROLE_IDS } from "@werewolf/protocol";
+import {
+  type GameEvent,
+  type VictoryReason,
+  type ViewerGameSnapshot,
+  WOLF_ROLE_IDS,
+} from "@werewolf/protocol";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client.ts";
 import { Avatar } from "../components.tsx";
 import { navigate } from "../routes.tsx";
+
+const REASON_KEYS: Record<VictoryReason, string> = {
+  wolves_eliminated: "ui.over.reasonWolvesEliminated",
+  village_eliminated: "ui.over.reasonVillageEliminated",
+  veteran_lynched: "ui.over.reasonVeteranLynched",
+  serial_killer_survives: "ui.over.reasonSerialKillerSurvives",
+  stalemate: "ui.over.reasonStalemate",
+  no_survivors: "ui.over.reasonNoSurvivors",
+};
 
 export function GameOverScreen({
   snapshot,
@@ -24,30 +38,26 @@ export function GameOverScreen({
   }, [events, snapshot.game.id]);
   const winner = snapshot.game.winner;
   const winnerFaction = winner?.winningFactions[0];
-  const winTitleKey =
-    winnerFaction === "wolves"
+  const isDraw = winner !== undefined && winner.winningFactions.length === 0;
+  const winTitleKey = isDraw
+    ? "ui.over.drawTitle"
+    : winnerFaction === "wolves"
       ? "ui.over.wolvesWinTitle"
       : winnerFaction === "village"
         ? "ui.over.villageWinsTitle"
         : winnerFaction === "veteran"
           ? "ui.over.veteranWinsTitle"
           : "ui.over.serialKillerWinsTitle";
-  const factionWinKey =
-    winnerFaction === "wolves"
+  const factionWinKey = isDraw
+    ? "ui.over.drawFaction"
+    : winnerFaction === "wolves"
       ? "ui.over.packWins"
       : winnerFaction === "village"
         ? "ui.over.villageWins"
         : winnerFaction === "veteran"
           ? "ui.over.veteranWins"
           : "ui.over.serialKillerWins";
-  const reasonKey =
-    winner?.reason === "wolves_eliminated"
-      ? "ui.over.reasonWolvesEliminated"
-      : winner?.reason === "village_eliminated"
-        ? "ui.over.reasonVillageEliminated"
-        : winner?.reason === "veteran_lynched"
-          ? "ui.over.reasonVeteranLynched"
-          : "ui.over.reasonSerialKillerSurvives";
+  const reasonKey = winner ? REASON_KEYS[winner.reason] : "ui.over.reasonSerialKillerSurvives";
   const publicEvents = loadedEvents.filter((event) => event.scope === "public");
   const names = new Map(snapshot.players.map((player) => [player.userId, player.displayName]));
   const line = (event: GameEvent) => {

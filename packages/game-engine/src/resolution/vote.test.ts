@@ -3,7 +3,12 @@ import { applyCommand } from "../commands/apply.ts";
 import type { DomainResult, DomainTransition, GameState, PlayerState } from "../state.ts";
 import { resolveDayVote } from "./vote.ts";
 
-function state(roles: PlayerState["role"][], phaseId = 1, endsAt = 100): GameState {
+function state(
+  roles: PlayerState["role"][],
+  phaseId = 1,
+  endsAt = 100,
+  nightsWithoutElimination = 0,
+): GameState {
   const players = Object.fromEntries(
     roles.map((role, index) => {
       const id = `p${index}` as PlayerState["id"];
@@ -39,6 +44,7 @@ function state(roles: PlayerState["role"][], phaseId = 1, endsAt = 100): GameSta
     players,
     settings: { discussionDurationMs: 1, votingDurationMs: 1, nightDurationMs: 1 },
     balanceVersion: 1,
+    nightsWithoutElimination,
     winner: null,
     version: 1,
   } as unknown as GameState;
@@ -221,6 +227,38 @@ describe("day vote resolution", () => {
     expect(
       transition.events.some((event) => event.kind === "game.finished" && event.scope === "public"),
     ).toBe(true);
+  });
+
+  test("a day vote that eliminates a player while the game continues resets nightsWithoutElimination to 0", () => {
+    // Two wolves and two villagers: lynching a villager leaves the game running.
+    let game = state(
+      ["villager", "villager", "werewolf", "werewolf"] as PlayerState["role"][],
+      1,
+      100,
+      3,
+    );
+    for (const voter of ["p0", "p1", "p2"]) game = vote(game, voter, "p0", voter);
+    const transition = expectTransition(resolveDayVote(game));
+    expect(
+      transition.playerPatches.some(
+        (patch) => patch.playerId === "p0" && patch.changes.status === "dead",
+      ),
+    ).toBe(true);
+    expect(transition.gamePatch).toEqual({ nightsWithoutElimination: 0 });
+  });
+
+  test("a day vote that eliminates nobody does not reset nightsWithoutElimination", () => {
+    // A tie eliminates nobody; the game continues and the counter is untouched.
+    let game = state(
+      ["villager", "villager", "werewolf", "werewolf"] as PlayerState["role"][],
+      1,
+      100,
+      3,
+    );
+    game = vote(game, "p0", "p1", "a");
+    game = vote(game, "p1", "p0", "b");
+    const transition = expectTransition(resolveDayVote(game));
+    expect(transition.gamePatch).toBeUndefined();
   });
 });
 

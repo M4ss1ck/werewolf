@@ -42,7 +42,12 @@ export function resolveNight(state: GameState, context: NightResolutionContext):
   const locations = resolveNightLocations(state, frozen, targetId);
   const outcome = resolveHouseAttacks(state, frozen, targetId, locations, context.rng, state.day);
   const playerPatches = commitNight(outcome);
-  const projected = applyPatches(state, playerPatches);
+  const nextNightsWithoutElimination =
+    outcome.deaths.size > 0 ? 0 : state.nightsWithoutElimination + 1;
+  const projected = {
+    ...applyPatches(state, playerPatches),
+    nightsWithoutElimination: nextNightsWithoutElimination,
+  };
   const events = makeNightEvents(state, frozen, targetId, outcome, seer);
   const winner = checkVictory(projected);
   if (winner) {
@@ -50,7 +55,11 @@ export function resolveNight(state: GameState, context: NightResolutionContext):
     return {
       ok: true,
       transition: {
-        gamePatch: { status: "finished", winner },
+        gamePatch: {
+          status: "finished",
+          winner,
+          nightsWithoutElimination: nextNightsWithoutElimination,
+        },
         playerPatches,
         events,
         ephemeral: [],
@@ -76,7 +85,11 @@ export function resolveNight(state: GameState, context: NightResolutionContext):
   return {
     ok: true,
     transition: {
-      gamePatch: { day: state.day + 1, phase: nextPhase },
+      gamePatch: {
+        day: state.day + 1,
+        phase: nextPhase,
+        nightsWithoutElimination: nextNightsWithoutElimination,
+      },
       playerPatches,
       events,
       ephemeral: [],
