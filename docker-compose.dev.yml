@@ -15,6 +15,14 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
+    # Development only: the container shares a workstation with the editor and
+    # the browser, so a runaway build or watch loop must not be able to starve
+    # the desktop. Production sets its own limits at the deployment level.
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 4g
     env_file:
       - .env
     environment:
