@@ -20,7 +20,7 @@
   {
     "id": "elke",
     "displayName": "Elke",
-    "model": "glm-5",
+    "model": "deepseek-v4-flash",
     "temperature": 0.8,
     "maxOutputTokens": 1200,
     "timeoutMs": 15000,
@@ -29,7 +29,7 @@
   {
     "id": "rowan",
     "displayName": "Rowan",
-    "model": "minimax-m2.7",
+    "model": "deepseek-v4-flash",
     "temperature": 1,
     "maxOutputTokens": 1200,
     "timeoutMs": 15000,
@@ -38,7 +38,7 @@
   {
     "id": "ines",
     "displayName": "Ines",
-    "model": "qwen3.7-plus",
+    "model": "deepseek-v4-flash",
     "temperature": 0.6,
     "maxOutputTokens": 1200,
     "timeoutMs": 15000,
@@ -47,7 +47,7 @@
   {
     "id": "caspar",
     "displayName": "Caspar",
-    "model": "kimi-k2.7-code",
+    "model": "deepseek-v4-flash",
     "temperature": 0.7,
     "maxOutputTokens": 1200,
     "timeoutMs": 15000,
@@ -56,7 +56,7 @@
   {
     "id": "nadia",
     "displayName": "Nadia",
-    "model": "deepseek-v4-pro",
+    "model": "deepseek-v4-flash",
     "temperature": 0.7,
     "maxOutputTokens": 1200,
     "timeoutMs": 20000,
@@ -65,7 +65,7 @@
   {
     "id": "bram",
     "displayName": "Bram",
-    "model": "glm-5.2",
+    "model": "deepseek-v4-flash",
     "temperature": 0.85,
     "maxOutputTokens": 1200,
     "timeoutMs": 15000,
