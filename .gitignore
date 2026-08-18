@@ -27,5 +27,7 @@ werewolf-product-technical-spec-v1.md
 docs/superpowers/
 docs/plans/
 .agents/skills/
-.claude/skills/
+.claude/
 skills-lock.json
+# Reticle
+.reticle/

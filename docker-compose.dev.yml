@@ -38,6 +38,11 @@ services:
       VITE_SERVER_ORIGIN: http://localhost:3000
       # Bind mounts do not deliver inotify events; poll instead.
       VITE_POLL: "1"
+      # The Vite plugin bakes a pairing token into the page, minting one in its
+      # own $HOME when it finds none. Inside the container that is not the
+      # token the host's Reticle daemon expects, so the browser is refused with
+      # "authentication failed". Point the plugin at the host's token instead.
+      RETICLE_PAIRING_TOKEN_DIR: /reticle-host
     ports:
       - "3000:3000"
       - "1420:1420"
@@ -48,6 +53,8 @@ services:
       - /app/node_modules
       # Persist the development database across restarts.
       - ./data:/app/data
+      # Read-only: the plugin only needs to read the host's pairing token.
+      - ${HOME}/.reticle:/reticle-host:ro
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/health"]
       interval: 30s
