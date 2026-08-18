@@ -14,9 +14,11 @@ import {
   type Db,
   GameRepository,
   GlobalChatRepository,
+  games,
 } from "@werewolf/db";
 import type { GameState } from "@werewolf/game-engine";
 import type { GameId, ViewerGameSnapshot } from "@werewolf/protocol";
+import { eq } from "drizzle-orm";
 import type { App } from "../app.ts";
 import { createApp } from "../app.ts";
 import { createAuthTables } from "../auth/schema.ts";
@@ -120,6 +122,29 @@ export async function startGameWithPlayers(
     const response = await as(app, player, `/api/games/${game.id}/join`, jsonRequest("POST", {}));
     expect(response.status).toBe(200);
   }
+  const start = await as(app, owner, `/api/games/${game.id}/start`, jsonRequest("POST", {}));
+  expect(start.status).toBe(200);
+  return game.id;
+}
+
+/** Like `startGameWithPlayers`, but pins the game's RNG seed first so the role
+ * composition is deterministic. Use it whenever a test depends on which roles were
+ * dealt: the seed is otherwise a random UUID per game. */
+export async function startGameWithSeed(
+  app: App,
+  db: Db,
+  owner: string,
+  players: string[],
+  seed: string,
+): Promise<GameId> {
+  const game = await createGame(app, owner);
+  for (const player of players) {
+    const response = await as(app, player, `/api/games/${game.id}/join`, jsonRequest("POST", {}));
+    expect(response.status).toBe(200);
+  }
+  // The seed is read at start time (coordinator.ts `row.rngSeed ?? gameId`), so
+  // it must be written before the start endpoint is called.
+  await db.update(games).set({ rngSeed: seed }).where(eq(games.id, game.id));
   const start = await as(app, owner, `/api/games/${game.id}/start`, jsonRequest("POST", {}));
   expect(start.status).toBe(200);
   return game.id;

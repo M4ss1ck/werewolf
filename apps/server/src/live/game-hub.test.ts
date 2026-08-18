@@ -3,13 +3,16 @@
 // point is that per-viewer filtering and cursor handling are exercised.
 
 import { expect, test } from "bun:test";
+import { games } from "@werewolf/db";
 import type { GameId, ServerFrame, UserId } from "@werewolf/protocol";
+import { eq } from "drizzle-orm";
 import {
   as,
   createGame,
   jsonRequest,
   setup,
   startGameWithPlayers,
+  startGameWithSeed,
   USERS,
 } from "../test/harness.ts";
 import { GameHub } from "./game-hub.ts";
@@ -59,13 +62,14 @@ test("a subscriber receives a sync frame with a snapshot and their visible event
 });
 
 test("a villager subscriber never receives a wolf chat event, while a wolf does", async () => {
-  const { app, coordinator, repo } = await setup();
-  const gameId = await startGameWithPlayers(app, USERS[0]!, [
-    USERS[1]!,
-    USERS[2]!,
-    USERS[3]!,
-    USERS[4]!,
-  ]);
+  const { app, coordinator, repo, db } = await setup();
+  const gameId = await startGameWithSeed(
+    app,
+    db,
+    USERS[0]!,
+    [USERS[1]!, USERS[2]!, USERS[3]!, USERS[4]!],
+    "find-1",
+  );
   const state = (await repo.loadGameState(gameId))!;
   const wolf = Object.values(state.players).find((player) => player.faction === "wolves")!;
   const villager = Object.values(state.players).find((player) => player.faction === "village")!;
@@ -106,7 +110,7 @@ test("a villager subscriber never receives a wolf chat event, while a wolf does"
 });
 
 test("a spectator receives public events only", async () => {
-  const { app, coordinator, repo } = await setup();
+  const { app, coordinator, repo, db } = await setup();
   const game = await createGame(app, USERS[0]!);
   for (const userId of [USERS[1]!, USERS[2]!, USERS[3]!, USERS[4]!]) {
     const response = await as(app, userId, `/api/games/${game.id}/join`, jsonRequest("POST", {}));
@@ -120,6 +124,8 @@ test("a spectator receives public events only", async () => {
     jsonRequest("POST", {}),
   );
   expect(spectated.status).toBe(200);
+  // Pin the seed before start so the composition is deterministic.
+  await db.update(games).set({ rngSeed: "find-1" }).where(eq(games.id, game.id));
   const start = await as(app, USERS[0]!, `/api/games/${game.id}/start`, jsonRequest("POST", {}));
   expect(start.status).toBe(200);
 

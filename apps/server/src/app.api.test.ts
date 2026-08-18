@@ -16,6 +16,7 @@ import {
   setup,
   snapshot,
   startGameWithPlayers,
+  startGameWithSeed,
   USERS,
   voteCommand,
 } from "./test/harness.ts";
@@ -149,13 +150,14 @@ test("a viewer's snapshot never reveals another living player's role", async () 
 });
 
 test("the replay endpoint refuses while running and returns a projected snapshot once finished", async () => {
-  const { app, coordinator, repo, clock } = await setup();
-  const gameId = await startGameWithPlayers(app, USERS[0]!, [
-    USERS[1]!,
-    USERS[2]!,
-    USERS[3]!,
-    USERS[4]!,
-  ]);
+  const { app, coordinator, repo, clock, db } = await setup();
+  const gameId = await startGameWithSeed(
+    app,
+    db,
+    USERS[0]!,
+    [USERS[1]!, USERS[2]!, USERS[3]!, USERS[4]!],
+    "find-1",
+  );
 
   const whileRunning = await as(app, USERS[0]!, `/api/games/${gameId}/replay`);
   expect(whileRunning.status).toBe(409);
