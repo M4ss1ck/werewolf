@@ -68,7 +68,7 @@ function describeEvent(input: BotDecisionInput, event: GameEvent): string | null
       return `You are the ${event.payload.role} (${event.payload.faction} faction).`;
     case "seer.result":
       return `Your inspection: ${who(event.payload.targetId)} is a ${event.payload.role}.`;
-    case "cursed.converted":
+    case "player.converted":
       return "You were bitten and are now a werewolf.";
     case "harlot.result":
       return `Your night visit ended: ${event.payload.outcome}.`;

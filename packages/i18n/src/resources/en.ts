@@ -153,7 +153,7 @@ export const en = {
     player: {
       "role.assigned": "Your role is {{role}}.",
       "seer.result": "{{player}} is a {{role}}.",
-      "cursed.converted": "You were turned into a werewolf. Your new role is {{role}}.",
+      "player.converted": "You were turned into a werewolf. Your new role is {{role}}.",
       "harlot.result": {
         safe: "You returned home safely.",
         killed: "You were killed during your visit.",

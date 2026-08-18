@@ -151,7 +151,7 @@ export const es: TranslationResource = {
     player: {
       "role.assigned": "Tu rol es {{role}}.",
       "seer.result": "El rol de {{player}} es {{role}}.",
-      "cursed.converted": "Te has convertido en hombre lobo. Tu nuevo rol es {{role}}.",
+      "player.converted": "Te has convertido en hombre lobo. Tu nuevo rol es {{role}}.",
       "harlot.result": {
         safe: "Volviste a casa sin problemas.",
         killed: "Te mataron durante tu visita.",

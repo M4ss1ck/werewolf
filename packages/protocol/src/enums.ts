@@ -61,3 +61,7 @@ export const ChatChannelSchema = z.enum(CHAT_CHANNELS);
 export const GAME_VISIBILITIES = ["public", "private"] as const;
 export type GameVisibility = (typeof GAME_VISIBILITIES)[number];
 export const GameVisibilitySchema = z.enum(GAME_VISIBILITIES);
+
+export const CONVERSION_CAUSES = ["cursed"] as const;
+export type ConversionCause = (typeof CONVERSION_CAUSES)[number];
+export const ConversionCauseSchema = z.enum(CONVERSION_CAUSES);

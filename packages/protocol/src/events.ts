@@ -4,10 +4,18 @@
 // scope; the `scope` field on the event distinguishes the two.
 
 import { z } from "zod";
-import type { ChatChannel, EventScope, FactionId, GamePhase, RoleId } from "./enums.ts";
+import type {
+  ChatChannel,
+  ConversionCause,
+  EventScope,
+  FactionId,
+  GamePhase,
+  RoleId,
+} from "./enums.ts";
 
 import {
   ChatChannelSchema,
+  ConversionCauseSchema,
   EventScopeSchema,
   FactionIdSchema,
   GamePhaseSchema,
@@ -29,7 +37,7 @@ export const EVENT_KINDS = [
   // Player-private
   "role.assigned",
   "seer.result",
-  "cursed.converted",
+  "player.converted",
   "harlot.result",
   // Wolf faction
   "wolves.member_joined",
@@ -99,7 +107,7 @@ export interface EventPayloads {
   // Player-private
   "role.assigned": { role: RoleId; faction: FactionId };
   "seer.result": { targetId: UserId; role: RoleId };
-  "cursed.converted": { role: RoleId; faction: FactionId };
+  "player.converted": { role: RoleId; faction: FactionId; cause: ConversionCause };
   "harlot.result": { outcome: "safe" | "killed" };
   // Wolf faction
   "wolves.member_joined": { playerId: UserId };
@@ -278,12 +286,16 @@ export const GameEventSchema = z.discriminatedUnion("kind", [
   }),
   z.object({
     id: EventIdSchema,
-    kind: z.literal("cursed.converted"),
+    kind: z.literal("player.converted"),
     scope: EventScopeSchema,
     scopeId: z.string().optional(),
     actorUserId: UserIdSchema.optional(),
     createdAt: z.number(),
-    payload: z.object({ role: RoleIdSchema, faction: FactionIdSchema }),
+    payload: z.object({
+      role: RoleIdSchema,
+      faction: FactionIdSchema,
+      cause: ConversionCauseSchema,
+    }),
   }),
   z.object({
     id: EventIdSchema,

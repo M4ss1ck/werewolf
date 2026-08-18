@@ -6,7 +6,7 @@ import { Avatar } from "../components.tsx";
 export const INTEL_KINDS = [
   "role.assigned",
   "seer.result",
-  "cursed.converted",
+  "player.converted",
   "harlot.result",
 ] as const;
 
@@ -34,8 +34,8 @@ export function Me({
           player: names.get(event.payload.targetId) ?? event.payload.targetId,
           role: t(`roles.${event.payload.role}.name`),
         });
-      case "cursed.converted":
-        return t("events.player.cursed.converted", { role: t(`roles.${event.payload.role}.name`) });
+      case "player.converted":
+        return t("events.player.player.converted", { role: t(`roles.${event.payload.role}.name`) });
       case "harlot.result":
         return t(`events.player.harlot.result.${event.payload.outcome}`);
       default:

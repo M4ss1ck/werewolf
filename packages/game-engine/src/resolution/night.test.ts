@@ -119,6 +119,21 @@ describe("night resolution", () => {
       });
   });
 
+  test("the pack's attack on the Cursed emits a player.converted event naming the cause", () => {
+    const transition = resolve(
+      makeState(["werewolf", "werewolf", "cursed"], {
+        p0: action("p2"),
+        p1: action("p2"),
+      }),
+    );
+    expect(transition.events).toContainEqual({
+      kind: "player.converted",
+      scope: "player",
+      scopeId: "p2",
+      payload: { role: "werewolf", faction: "wolves", cause: "cursed" },
+    });
+  });
+
   test.each([
     [
       "the Harlot visits a wolf and dies",

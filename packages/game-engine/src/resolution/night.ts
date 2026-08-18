@@ -344,10 +344,10 @@ function makeNightEvents(
   }
   for (const playerId of outcome.conversions) {
     events.push({
-      kind: "cursed.converted",
+      kind: "player.converted",
       scope: "player",
       scopeId: playerId,
-      payload: { role: "werewolf", faction: "wolves" },
+      payload: { role: "werewolf", faction: "wolves", cause: "cursed" },
     });
     events.push({
       kind: "wolves.member_joined",
