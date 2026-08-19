@@ -29,6 +29,7 @@ import { drunk } from "./drunk.ts";
 import { harlot } from "./harlot.ts";
 import { hunter } from "./hunter.ts";
 import { mason } from "./mason.ts";
+import { mayor } from "./mayor.ts";
 import { princess } from "./princess.ts";
 import { seer } from "./seer.ts";
 import { serialKiller } from "./serial-killer.ts";
@@ -51,6 +52,7 @@ export const roleRegistry: Readonly<Record<RoleId, RoleDefinition>> = {
   serial_killer: serialKiller,
   alpha_wolf: alphaWolf,
   drunk,
+  mayor,
 };
 
 export function getRoleDefinition(role: RoleId): RoleDefinition {

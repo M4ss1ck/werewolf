@@ -795,6 +795,165 @@ test("action controls render from availableActions; none offered renders none ev
   expect(screen.getByRole("button", { name: /Odile/ })).toBeInTheDocument();
 });
 
+test("discussion: offered day actions render; none offered renders no action controls", () => {
+  const withActions = renderWithI18n(
+    <Act
+      events={[]}
+      send={() => Promise.resolve()}
+      snapshot={makeGameSnapshot({
+        game: { phase: { id: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 } },
+        me: { userId: "wren" as UserId, status: "alive", role: "mayor" },
+        availableActions: [
+          {
+            id: "mayor.reveal" as ActionId,
+            type: "target",
+            targets: [
+              { userId: "odile" as UserId, enabled: true },
+              { userId: "mattias" as UserId, enabled: true },
+            ],
+          },
+          { id: "mayor.pardon" as ActionId, type: "choice" },
+        ],
+      })}
+    />,
+  );
+  // The target action renders a player picker, the choice action a toggle.
+  expect(screen.getByRole("heading", { name: /vote no longer decides/ })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /Odile/ })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Reveal and pardon" })).toBeInTheDocument();
+  withActions.unmount();
+
+  renderWithI18n(
+    <Act
+      events={[]}
+      send={() => Promise.resolve()}
+      snapshot={makeGameSnapshot({
+        game: { phase: { id: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 } },
+        me: { userId: "wren" as UserId, status: "alive", role: "mayor" },
+        availableActions: [],
+      })}
+    />,
+  );
+  expect(screen.getByText("Nothing to do today.")).toBeInTheDocument();
+  expect(screen.queryByRole("button")).not.toBeInTheDocument();
+});
+
+test("discussion: picking a target for mayor.reveal posts day.action.set with that targetId", () => {
+  const send = vi.fn(() => Promise.resolve());
+  renderWithI18n(
+    <Act
+      events={[]}
+      send={send}
+      snapshot={makeGameSnapshot({
+        game: { phase: { id: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 } },
+        me: { userId: "wren" as UserId, status: "alive", role: "mayor" },
+        availableActions: [
+          {
+            id: "mayor.reveal" as ActionId,
+            type: "target",
+            targets: [
+              { userId: "odile" as UserId, enabled: true },
+              { userId: "mattias" as UserId, enabled: true },
+            ],
+          },
+          { id: "mayor.pardon" as ActionId, type: "choice" },
+        ],
+      })}
+    />,
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: /Odile/ }));
+  fireEvent.click(screen.getByRole("button", { name: /Confirm · Odile/ }));
+  expect(send).toHaveBeenCalledWith({
+    type: "day.action.set",
+    phaseId: 1,
+    payload: { action: "mayor.reveal", targetId: "odile" },
+  });
+});
+
+test("discussion: mayor.pardon posts day.action.set with no targetId", () => {
+  const send = vi.fn(() => Promise.resolve());
+  renderWithI18n(
+    <Act
+      events={[]}
+      send={send}
+      snapshot={makeGameSnapshot({
+        game: { phase: { id: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 } },
+        me: { userId: "wren" as UserId, status: "alive", role: "mayor" },
+        availableActions: [{ id: "mayor.pardon" as ActionId, type: "choice" }],
+      })}
+    />,
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: "Reveal and pardon" }));
+  fireEvent.click(screen.getByRole("button", { name: /Confirm · Reveal and pardon/ }));
+  expect(send).toHaveBeenCalledWith({
+    type: "day.action.set",
+    phaseId: 1,
+    payload: { action: "mayor.pardon" },
+  });
+});
+
+test("voting: the vote list and the offered day actions both render", () => {
+  renderWithI18n(
+    <Act
+      events={[]}
+      send={() => Promise.resolve()}
+      snapshot={makeGameSnapshot({
+        game: { phase: { id: 7 as PhaseId, type: "voting", startedAt: 1000, endsAt: 10_000 } },
+        me: { userId: "wren" as UserId, status: "alive", role: "mayor" },
+        availableActions: [
+          {
+            id: "mayor.reveal" as ActionId,
+            type: "target",
+            targets: [{ userId: "odile" as UserId, enabled: true }],
+          },
+          { id: "mayor.pardon" as ActionId, type: "choice" },
+        ],
+      })}
+    />,
+  );
+
+  // The vote list is untouched...
+  expect(screen.getByRole("heading", { name: "Who hangs today?" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Abstain" })).toBeInTheDocument();
+  // ...and the offered day actions render alongside it.
+  expect(screen.getByRole("heading", { name: /vote no longer decides/ })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Reveal and pardon" })).toBeInTheDocument();
+});
+
+test("night regression: the night branch still renders its actions and posts night.action.set", () => {
+  const send = vi.fn(() => Promise.resolve());
+  renderWithI18n(
+    <Act
+      events={[]}
+      send={send}
+      snapshot={makeGameSnapshot({
+        game: { phase: { id: 2 as PhaseId, type: "night", startedAt: 1000, endsAt: 10_000 } },
+        me: { userId: "wren" as UserId, status: "alive", role: "seer" },
+        availableActions: [
+          {
+            id: "seer.inspect" as ActionId,
+            type: "target",
+            targets: [{ userId: "odile" as UserId, enabled: true }],
+          },
+        ],
+      })}
+    />,
+  );
+
+  expect(screen.getByText("Choose a player to learn their role.")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /Odile/ }));
+  fireEvent.click(screen.getByRole("button", { name: /Confirm · Odile/ }));
+  // The command type must stay night.action.set: a night action sent as
+  // day.action.set would be silently rejected by the server.
+  expect(send).toHaveBeenCalledWith({
+    type: "night.action.set",
+    phaseId: 2,
+    payload: { action: "seer.inspect", targetId: "odile" },
+  });
+});
+
 test("the wolf chat tab appears only when the snapshot lists that channel", () => {
   const withWolfChat = renderWithI18n(
     <Talk

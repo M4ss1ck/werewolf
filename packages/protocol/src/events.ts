@@ -31,6 +31,7 @@ export const EVENT_KINDS = [
   "vote.resolved",
   "player.eliminated",
   "princess.revealed",
+  "mayor.revealed",
   "night.resolved",
   "game.finished",
   "chat.message",
@@ -99,6 +100,7 @@ export interface EventPayloads {
     cause: EliminationCause;
   };
   "princess.revealed": { playerId: UserId };
+  "mayor.revealed": { playerId: UserId; targetId: UserId | null };
   "night.resolved": { deaths: UserId[] };
   "game.finished": {
     winningFactions: FactionId[];
@@ -239,6 +241,15 @@ export const GameEventSchema = z.discriminatedUnion("kind", [
     actorUserId: UserIdSchema.optional(),
     createdAt: z.number(),
     payload: z.object({ playerId: UserIdSchema }),
+  }),
+  z.object({
+    id: EventIdSchema,
+    kind: z.literal("mayor.revealed"),
+    scope: EventScopeSchema,
+    scopeId: z.string().optional(),
+    actorUserId: UserIdSchema.optional(),
+    createdAt: z.number(),
+    payload: z.object({ playerId: UserIdSchema, targetId: UserIdSchema.nullable() }),
   }),
   z.object({
     id: EventIdSchema,

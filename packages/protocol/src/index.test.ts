@@ -200,6 +200,7 @@ test("EVENT_KINDS covers the initial protocol vocabulary", () => {
     "vote.resolved",
     "player.eliminated",
     "princess.revealed",
+    "mayor.revealed",
     "night.resolved",
     "game.finished",
     "chat.message",

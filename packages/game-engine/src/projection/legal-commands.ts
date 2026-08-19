@@ -75,6 +75,29 @@ export function getLegalCommands(state: GameState, playerId: UserId, now: number
     }
   }
 
+  if (phase.type === "discussion" || phase.type === "voting") {
+    for (const action of getAvailableActions(state, playerId)) {
+      // The pardon takes no target; handling it first leaves the rest narrowed
+      // to the ones that do.
+      if (action.id === "mayor.pardon") {
+        candidates.push({
+          type: "day.action.set",
+          phaseId: phase.id,
+          payload: { action: "mayor.pardon" },
+        });
+        continue;
+      }
+      if (action.id !== "mayor.reveal" || action.type !== "target") continue;
+      const targets = [...action.targets].sort((a, b) => (a.userId < b.userId ? -1 : 1));
+      for (const target of targets)
+        candidates.push({
+          type: "day.action.set",
+          phaseId: phase.id,
+          payload: { action: "mayor.reveal", targetId: target.userId },
+        });
+    }
+  }
+
   return candidates.filter((candidate) => isLegal(state, playerId, candidate, now));
 }
 

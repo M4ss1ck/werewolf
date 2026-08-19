@@ -201,4 +201,107 @@ describe("available actions projection", () => {
       { id: "serial_killer.stay", type: "choice", selected: true },
     ]);
   });
+
+  // Regression guard: the day-action work must not disturb the night model.
+  // Every existing role's night actions are asserted exactly as before.
+  test("night actions are unchanged for every existing role", () => {
+    const cases: {
+      role: PlayerState["role"];
+      expected: ReturnType<typeof getAvailableActions>;
+    }[] = [
+      {
+        role: "villager",
+        expected: [],
+      },
+      {
+        role: "werewolf",
+        expected: [
+          {
+            id: "wolf.attack",
+            type: "target",
+            targets: [
+              { userId: uid("p1"), enabled: true },
+              { userId: uid("p2"), enabled: true },
+            ],
+          },
+        ],
+      },
+      {
+        role: "mason",
+        expected: [],
+      },
+      {
+        role: "seer",
+        expected: [
+          {
+            id: "seer.inspect",
+            type: "target",
+            targets: [
+              { userId: uid("p1"), enabled: true },
+              { userId: uid("p2"), enabled: true },
+            ],
+          },
+        ],
+      },
+      {
+        role: "cursed",
+        expected: [],
+      },
+      {
+        role: "harlot",
+        expected: [
+          {
+            id: "harlot.visit",
+            type: "target",
+            targets: [
+              { userId: uid("p1"), enabled: true },
+              { userId: uid("p2"), enabled: true },
+            ],
+          },
+          { id: "harlot.stay", type: "choice" },
+        ],
+      },
+      {
+        role: "hunter",
+        expected: [],
+      },
+      {
+        role: "princess",
+        expected: [],
+      },
+      {
+        role: "veteran",
+        expected: [],
+      },
+      {
+        role: "serial_killer",
+        expected: [
+          {
+            id: "serial_killer.visit",
+            type: "target",
+            targets: [
+              { userId: uid("p1"), enabled: true },
+              { userId: uid("p2"), enabled: true },
+            ],
+          },
+          { id: "serial_killer.stay", type: "choice" },
+        ],
+      },
+      {
+        role: "alpha_wolf",
+        // The test helper seats alpha_wolf in the village faction, so no
+        // wolf.attack is offered; the point is that the night model is
+        // unchanged from before the day-action work.
+        expected: [],
+      },
+      {
+        role: "drunk",
+        expected: [],
+      },
+    ];
+    for (const { role, expected } of cases) {
+      const game = state([role, "villager", "villager"], "night");
+      expect(getAvailableActions(game, uid("p0"))).toEqual(expected);
+    }
+  });
 });

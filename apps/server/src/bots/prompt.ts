@@ -33,6 +33,12 @@ function describeAction(input: BotDecisionInput, action: LegalAction): string {
   if (command.type === "night.action.clear") return "clear your night action";
   if (command.type === "chat.send") return "speak";
   if (command.type === "phase.ready") return "declare yourself ready";
+  if (command.type === "day.action.set") {
+    const day = command.payload;
+    return day.action === "mayor.pardon"
+      ? "reveal yourself as the mayor and spare everyone today"
+      : `reveal yourself as the mayor and send ${nameOf(input, day.targetId)} to the gallows`;
+  }
   const payload = command.payload;
   if (payload.action === "harlot.stay") return "stay home tonight";
   const target = nameOf(input, payload.targetId);

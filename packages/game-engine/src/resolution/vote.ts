@@ -29,8 +29,30 @@ export function resolveDayVote(state: GameState): DomainResult {
   }
   const highest = Math.max(0, ...tally.values());
   const winners = [...tally.entries()].filter(([, count]) => count === highest && count > 0);
-  const eliminatedId: UserId | null = winners.length === 1 ? winners[0]![0] : null;
+  const tallyWinner: UserId | null = winners.length === 1 ? winners[0]![0] : null;
   const tallyPayload = [...tally.entries()].map(([targetId, count]) => ({ targetId, count }));
+  // The Mayor may override the day's elimination outright. Find a LIVING mayor
+  // whose once-per-game action was used today; the override replaces the tally
+  // winner. A pardon (null target) or a target dead at resolution eliminates
+  // nobody. The tallies above are still published as they really were.
+  const mayorOverride = Object.values(state.players).find(
+    (player) =>
+      player.status === "alive" &&
+      player.role === "mayor" &&
+      isMayorState(player.roleState) &&
+      player.roleState.used &&
+      player.roleState.overrideDay === state.day,
+  );
+  let eliminatedId: UserId | null = tallyWinner;
+  if (mayorOverride && isMayorState(mayorOverride.roleState)) {
+    const target = mayorOverride.roleState.overrideTarget;
+    if (target === null) {
+      eliminatedId = null;
+    } else {
+      const targetPlayer = state.players[target];
+      eliminatedId = targetPlayer && targetPlayer.status === "alive" ? target : null;
+    }
+  }
   const events: DomainTransition["events"] = [
     {
       kind: "vote.resolved",
@@ -145,6 +167,16 @@ function isPrincessState(value: unknown): value is { lynchProtectionUsed: boolea
     value !== null &&
     "lynchProtectionUsed" in value &&
     typeof (value as { lynchProtectionUsed: unknown }).lynchProtectionUsed === "boolean"
+  );
+}
+function isMayorState(
+  value: unknown,
+): value is { used: boolean; overrideDay: number | null; overrideTarget: UserId | null } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "used" in value &&
+    typeof (value as { used: unknown }).used === "boolean"
   );
 }
 function applyPatches(state: GameState, patches: DomainTransition["playerPatches"]): GameState {

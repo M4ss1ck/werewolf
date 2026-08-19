@@ -67,6 +67,27 @@ export const NightActionClearCommandSchema = z.object({
 });
 export type NightActionClearCommand = z.infer<typeof NightActionClearCommandSchema>;
 
+export const DayActionSetPayloadSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("mayor.reveal"),
+    targetId: UserIdSchema,
+  }),
+  z
+    .object({
+      action: z.literal("mayor.pardon"),
+    })
+    .strict(),
+]);
+export type DayActionSetPayload = z.infer<typeof DayActionSetPayloadSchema>;
+
+export const DayActionSetCommandSchema = z.object({
+  commandId: z.string().min(1),
+  phaseId: PhaseIdSchema,
+  type: z.literal("day.action.set"),
+  payload: DayActionSetPayloadSchema,
+});
+export type DayActionSetCommand = z.infer<typeof DayActionSetCommandSchema>;
+
 export const ChatSendCommandSchema = z.object({
   commandId: z.string().min(1),
   phaseId: PhaseIdSchema,
@@ -91,6 +112,7 @@ export const GameplayCommandSchema = z.discriminatedUnion("type", [
   VoteAbstainCommandSchema,
   NightActionSetCommandSchema,
   NightActionClearCommandSchema,
+  DayActionSetCommandSchema,
   ChatSendCommandSchema,
   PhaseReadyCommandSchema,
 ]);

@@ -66,6 +66,11 @@ export const en = {
       description:
         "Believes they are another village role and acts on that belief, but the results they get are wrong. Their true role is revealed on death.",
     },
+    mayor: {
+      name: "Mayor",
+      description:
+        "Once per game, during the day, you may reveal yourself and name the day's elimination outright, overriding the vote — or pardon everyone and cancel the lynch.",
+    },
   },
   factions: {
     village: "Village",
@@ -118,6 +123,16 @@ export const en = {
       label: "Stay home",
       prompt: "Kill no one tonight and stay out of the wolves' way.",
     },
+    "mayor.reveal": {
+      label: "Reveal and name",
+      prompt:
+        "Step forward, reveal yourself as the Mayor, and name who hangs today — the vote no longer decides it.",
+    },
+    "mayor.pardon": {
+      label: "Reveal and pardon",
+      prompt:
+        "Step forward, reveal yourself as the Mayor, and spare the village — nobody hangs today.",
+    },
   },
   errors: {
     UNKNOWN_ERROR: "Something went wrong. Please try again.",
@@ -149,6 +164,7 @@ export const en = {
       "vote.resolved": "The vote is over. {{abstain}} abstained and {{noVote}} did not vote.",
       "player.eliminated": "{{player}} was eliminated. Their role was {{role}}.",
       "princess.revealed": "{{player}} revealed themselves as the Princess.",
+      "mayor.revealed": "{{player}} revealed themselves as the Mayor.",
       "night.resolved": {
         count_one: "{{count}} player died during the night.",
         count_other: "{{count}} players died during the night.",
@@ -310,6 +326,11 @@ export const en = {
       villageSleeps: "The village sleeps. Public chat is closed until dawn.",
       confirm: "Confirm · {{player}}",
       noAction: "Nothing to do tonight.",
+    },
+    dayAction: {
+      yourMove: "Your move · {{role}}",
+      confirm: "Confirm · {{player}}",
+      noAction: "Nothing to do today.",
     },
     cancelled: {
       title: "Game cancelled",

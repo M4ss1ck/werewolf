@@ -63,6 +63,31 @@ export function applyCommand(
       },
     };
   }
+  if (command.type === "day.action.set") {
+    const targetId = command.payload.action === "mayor.reveal" ? command.payload.targetId : null;
+    return {
+      ok: true,
+      transition: {
+        playerPatches: [
+          {
+            playerId: actorId,
+            changes: {
+              roleState: { used: true, overrideDay: state.day, overrideTarget: targetId },
+            },
+          },
+        ],
+        events: [
+          {
+            kind: "mayor.revealed",
+            scope: "public",
+            actorUserId: actorId,
+            payload: { playerId: actorId, targetId },
+          },
+        ],
+        ephemeral: [],
+      },
+    };
+  }
   if (command.type === "phase.ready") {
     const player = state.players[actorId]!;
     const base =

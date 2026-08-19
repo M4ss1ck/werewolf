@@ -64,6 +64,11 @@ export const es: TranslationResource = {
       description:
         "Cree que es otro rol de la aldea y actúa en consecuencia, pero los resultados que obtiene son erróneos. Su rol real se revela al morir.",
     },
+    mayor: {
+      name: "Alcalde",
+      description:
+        "Una vez por partida, durante el día, puedes revelarte y nombrar directamente al eliminado del día, anulando la votación; o indultar a todos y cancelar el linchamiento.",
+    },
   },
   factions: {
     village: "La aldea",
@@ -116,6 +121,16 @@ export const es: TranslationResource = {
       label: "Quedarse en casa",
       prompt: "No mates a nadie esta noche y mantente fuera del camino de los lobos.",
     },
+    "mayor.reveal": {
+      label: "Revelarse y nombrar",
+      prompt:
+        "Da un paso al frente, revélate como el Alcalde y nombra a quién cuelgan hoy: la votación ya no decide.",
+    },
+    "mayor.pardon": {
+      label: "Revelarse e indultar",
+      prompt:
+        "Da un paso al frente, revélate como el Alcalde y perdona a la aldea: hoy no cuelgan a nadie.",
+    },
   },
   errors: {
     UNKNOWN_ERROR: "Algo salió mal. Inténtalo de nuevo.",
@@ -145,6 +160,7 @@ export const es: TranslationResource = {
       "vote.resolved": "La votación ha terminado. Abstenciones: {{abstain}}. Sin voto: {{noVote}}.",
       "player.eliminated": "{{player}} ya no está en la partida. Su rol era {{role}}.",
       "princess.revealed": "{{player}} se ha revelado como la Princesa.",
+      "mayor.revealed": "{{player}} se ha revelado como el Alcalde.",
       "night.resolved": {
         count_one: "{{count}} jugador murió durante la noche.",
         count_other: "{{count}} jugadores murieron durante la noche.",
@@ -310,6 +326,11 @@ export const es: TranslationResource = {
       villageSleeps: "La aldea duerme. El chat público está cerrado hasta el amanecer.",
       confirm: "Confirmar · {{player}}",
       noAction: "Nada que hacer esta noche.",
+    },
+    dayAction: {
+      yourMove: "Tu jugada · {{role}}",
+      confirm: "Confirmar · {{player}}",
+      noAction: "Nada que hacer hoy.",
     },
     cancelled: {
       title: "Partida cancelada",

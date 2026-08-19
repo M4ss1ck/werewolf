@@ -81,5 +81,27 @@ export function validateCommand(
         return null;
     }
   }
+  if (command.type === "day.action.set") {
+    if (state.phase.type !== "discussion" && state.phase.type !== "voting")
+      return { code: "ACTION_NOT_AVAILABLE" };
+    const perceivedRole = getPerceivedRole(player);
+    if (perceivedRole !== "mayor") return { code: "ACTION_NOT_AVAILABLE" };
+    if (!isMayorState(player.roleState) || player.roleState.used)
+      return { code: "ACTION_NOT_AVAILABLE" };
+    if (command.payload.action === "mayor.reveal") {
+      const target = state.players[command.payload.targetId];
+      if (!target || target.status !== "alive") return { code: "INVALID_TARGET" };
+    }
+    return null;
+  }
   return { code: "ACTION_NOT_AVAILABLE" };
+}
+
+function isMayorState(value: unknown): value is { used: boolean } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "used" in value &&
+    typeof (value as { used: unknown }).used === "boolean"
+  );
 }

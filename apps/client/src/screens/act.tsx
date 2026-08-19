@@ -7,7 +7,7 @@ import type {
   UserId,
   ViewerGameSnapshot,
 } from "@werewolf/protocol";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Avatar } from "../components.tsx";
@@ -31,6 +31,8 @@ export function Act({
   if (phase?.type === "voting")
     return <VotingBranch phase={phase} send={send} snapshot={snapshot} />;
   if (phase?.type === "night") return <NightBranch phase={phase} send={send} snapshot={snapshot} />;
+  if (phase?.type === "discussion")
+    return <DiscussionBranch phase={phase} send={send} snapshot={snapshot} />;
   return null;
 }
 
@@ -150,6 +152,14 @@ function VotingBranch({
             </button>
           </li>
         </ul>
+        {snapshot.availableActions.length > 0 && (
+          <ActionList
+            actions={snapshot.availableActions}
+            players={snapshot.players}
+            phase={phase}
+            send={send}
+          />
+        )}
       </div>
       {alive && shown !== null && (
         <div className="border-t border-paper/10 bg-bar px-[18px] py-3">
@@ -184,28 +194,37 @@ function VotingBranch({
   );
 }
 
-function NightBranch({
+function ActionList({
+  actions,
+  players,
   phase,
-  snapshot,
   send,
+  heading,
+  footnote,
 }: {
+  actions: AvailableAction[];
+  players: ViewerGameSnapshot["players"];
   phase: PhaseInfo;
-  snapshot: ViewerGameSnapshot;
   send: Send;
+  heading?: ReactNode;
+  footnote?: ReactNode;
 }) {
   const { t } = useTranslation();
-  const me = snapshot.me;
-  const role = me?.role;
-  const names = new Map(snapshot.players.map((player) => [player.userId, player.displayName]));
-  const actions = snapshot.availableActions;
+  const names = new Map(players.map((player) => [player.userId, player.displayName]));
+  const commandType = phase.type === "night" ? "night.action.set" : "day.action.set";
   const [picked, setPicked] = useState<{
     phaseId: PhaseId;
     active: ActionId | null;
     actions: Record<string, { targetId?: UserId }>;
   } | null>(() => {
-    const server = me?.currentIntent?.actions ?? {};
-    const first = Object.keys(server)[0] as ActionId | undefined;
-    return { phaseId: phase.id, active: first ?? null, actions: server };
+    const initial: Record<string, { targetId?: UserId }> = {};
+    for (const action of actions) {
+      if (action.type === "target" && action.selectedTargetId !== undefined)
+        initial[action.id] = { targetId: action.selectedTargetId };
+      else if (action.type === "choice" && action.selected === true) initial[action.id] = {};
+    }
+    const first = Object.keys(initial)[0] as ActionId | undefined;
+    return { phaseId: phase.id, active: first ?? null, actions: initial };
   });
   const pickedForPhase = picked !== null && picked.phaseId === phase.id ? picked : null;
   const activeAction =
@@ -235,7 +254,7 @@ function NightBranch({
         label: t(`actions.${activeAction.id}.label`),
         send: () =>
           void send({
-            type: "night.action.set",
+            type: commandType,
             phaseId: phase.id,
             payload: { action: activeAction.id },
           } as Omit<GameplayCommand, "commandId">).catch(() => undefined),
@@ -247,28 +266,16 @@ function NightBranch({
       label: names.get(targetId) ?? targetId,
       send: () =>
         void send({
-          type: "night.action.set",
+          type: commandType,
           phaseId: phase.id,
           payload: { action: activeAction.id, targetId },
         } as Omit<GameplayCommand, "commandId">).catch(() => undefined),
     };
   })();
-  if (actions.length === 0) {
-    return (
-      <div className="screen__scroll flex flex-col gap-4 px-[18px] pb-5">
-        {role !== undefined && (
-          <p className="eyebrow">{t("ui.night.yourMove", { role: t(`roles.${role}.name`) })}</p>
-        )}
-        <p className="text-sm text-fog">{t("ui.night.noAction")}</p>
-      </div>
-    );
-  }
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="screen__scroll flex flex-col gap-5 px-[18px] pb-5">
-        {role !== undefined && (
-          <p className="eyebrow">{t("ui.night.yourMove", { role: t(`roles.${role}.name`) })}</p>
-        )}
+        {heading}
         {actions.map((action) => (
           <section className="flex flex-col gap-3" key={action.id}>
             <h2 className="text-[28px] font-semibold leading-tight tracking-[-0.03em] text-paper">
@@ -323,19 +330,100 @@ function NightBranch({
             )}
           </section>
         ))}
-        <div className="flex items-center gap-2.5 rounded-[14px] border border-paper/10 bg-surface px-3.5 py-3 text-sm text-fog">
-          <span aria-hidden="true" className="h-2 w-2 flex-none rounded-full bg-sage" />
-          {t("ui.night.villageSleeps")}
-        </div>
+        {footnote}
       </div>
       {confirm !== null && (
         <div className="border-t border-paper/10 bg-bar px-[18px] py-3">
           <button className="btn btn--pale w-full" onClick={confirm.send} type="button">
-            {t("ui.night.confirm", { player: confirm.label })}
+            {t(phase.type === "night" ? "ui.night.confirm" : "ui.dayAction.confirm", {
+              player: confirm.label,
+            })}
           </button>
         </div>
       )}
     </div>
+  );
+}
+
+function NightBranch({
+  phase,
+  snapshot,
+  send,
+}: {
+  phase: PhaseInfo;
+  snapshot: ViewerGameSnapshot;
+  send: Send;
+}) {
+  const { t } = useTranslation();
+  const me = snapshot.me;
+  const role = me?.role;
+  const actions = snapshot.availableActions;
+  if (actions.length === 0) {
+    return (
+      <div className="screen__scroll flex flex-col gap-4 px-[18px] pb-5">
+        {role !== undefined && (
+          <p className="eyebrow">{t("ui.night.yourMove", { role: t(`roles.${role}.name`) })}</p>
+        )}
+        <p className="text-sm text-fog">{t("ui.night.noAction")}</p>
+      </div>
+    );
+  }
+  return (
+    <ActionList
+      actions={actions}
+      players={snapshot.players}
+      phase={phase}
+      send={send}
+      heading={
+        role !== undefined ? (
+          <p className="eyebrow">{t("ui.night.yourMove", { role: t(`roles.${role}.name`) })}</p>
+        ) : undefined
+      }
+      footnote={
+        <div className="flex items-center gap-2.5 rounded-[14px] border border-paper/10 bg-surface px-3.5 py-3 text-sm text-fog">
+          <span aria-hidden="true" className="h-2 w-2 flex-none rounded-full bg-sage" />
+          {t("ui.night.villageSleeps")}
+        </div>
+      }
+    />
+  );
+}
+
+function DiscussionBranch({
+  phase,
+  snapshot,
+  send,
+}: {
+  phase: PhaseInfo;
+  snapshot: ViewerGameSnapshot;
+  send: Send;
+}) {
+  const { t } = useTranslation();
+  const me = snapshot.me;
+  const role = me?.role;
+  const actions = snapshot.availableActions;
+  if (actions.length === 0) {
+    return (
+      <div className="screen__scroll flex flex-col gap-4 px-[18px] pb-5">
+        {role !== undefined && (
+          <p className="eyebrow">{t("ui.dayAction.yourMove", { role: t(`roles.${role}.name`) })}</p>
+        )}
+        <p className="text-sm text-fog">{t("ui.dayAction.noAction")}</p>
+      </div>
+    );
+  }
+  return (
+    <ActionList
+      actions={actions}
+      players={snapshot.players}
+      phase={phase}
+      send={send}
+      heading={
+        role !== undefined ? (
+          <p className="eyebrow">{t("ui.dayAction.yourMove", { role: t(`roles.${role}.name`) })}</p>
+        ) : undefined
+      }
+    />
   );
 }
 
