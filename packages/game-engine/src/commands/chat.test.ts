@@ -36,7 +36,7 @@ function state(
   } as GameState;
 }
 
-function command(channel: "public" | "wolves") {
+function command(channel: "public" | "wolves" | "grave") {
   return {
     commandId: "c1",
     phaseId: 1 as never,
@@ -83,7 +83,7 @@ describe("chat commands", () => {
       "converted player writes to wolves",
       "discussion",
       "wolves",
-      { faction: "wolves", role: "werewolf", wolfSinceEventId: "e1" },
+      { faction: "wolves", role: "werewolf", channelSince: { wolves: "e1" as never } },
       null,
     ],
   ] as const)("%s", (_name, phase, channel, player, expected) => {
@@ -114,6 +114,72 @@ describe("chat commands", () => {
         ],
         ephemeral: [],
       },
+    });
+  });
+
+  describe("grave chat", () => {
+    test.each([
+      ["dead player writes to grave during discussion", "discussion", null],
+      ["dead player writes to grave during voting", "voting", null],
+      ["dead player writes to grave during night", "night", null],
+    ] as const)("%s", (_name, phase, expected) => {
+      const result = validateCommand(
+        state(phase, { status: "dead" }),
+        PLAYER_ID,
+        command("grave"),
+        { now: 1 },
+      );
+      expect(result?.code ?? null).toBe(expected);
+    });
+
+    test("a living player sending on grave is rejected", () => {
+      const result = validateCommand(state("discussion", {}), PLAYER_ID, command("grave"), {
+        now: 1,
+      });
+      expect(result?.code).toBe("CHANNEL_NOT_AVAILABLE");
+    });
+
+    test("a spectator sending on grave is rejected", () => {
+      const result = validateCommand(
+        state("discussion", { status: "spectator" }),
+        PLAYER_ID,
+        command("grave"),
+        { now: 1 },
+      );
+      expect(result?.code).toBe("CHANNEL_NOT_AVAILABLE");
+    });
+
+    test("a dead player may still not send on public or wolves", () => {
+      expect(
+        validateCommand(state("discussion", { status: "dead" }), PLAYER_ID, command("public"), {
+          now: 1,
+        })?.code,
+      ).toBe("CHAT_READ_ONLY");
+      expect(
+        validateCommand(
+          state("discussion", { status: "dead", faction: "wolves", role: "werewolf" }),
+          PLAYER_ID,
+          command("wolves"),
+          { now: 1 },
+        )?.code,
+      ).toBe("CHAT_READ_ONLY");
+    });
+
+    test("a grave chat.message event is emitted with scope faction and scopeId grave", () => {
+      const result = applyCommand(state("night", { status: "dead" }), PLAYER_ID, command("grave"), {
+        now: 1,
+      });
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error("should be ok");
+      expect(result.transition.events).toEqual([
+        {
+          kind: "chat.message",
+          scope: "faction",
+          scopeId: "grave",
+          actorUserId: PLAYER_ID,
+          payload: { channel: "grave", text: "hello" },
+        },
+      ]);
     });
   });
 });

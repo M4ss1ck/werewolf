@@ -60,7 +60,7 @@ export type EventScope = (typeof EVENT_SCOPES)[number];
 export const EventScopeSchema = z.enum(EVENT_SCOPES);
 
 /** Chat channels a client may address; the server decides who may access them. */
-export const CHAT_CHANNELS = ["public", "wolves"] as const;
+export const CHAT_CHANNELS = ["public", "wolves", "grave"] as const;
 export type ChatChannel = (typeof CHAT_CHANNELS)[number];
 export const ChatChannelSchema = z.enum(CHAT_CHANNELS);
 

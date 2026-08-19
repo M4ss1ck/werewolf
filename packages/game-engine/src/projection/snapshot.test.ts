@@ -107,7 +107,7 @@ describe("viewer projection security", () => {
     const privateEvent = event(1, "player", "seer.result", "seer");
     const wolfEvent = event(2, "faction", "chat.message", "wolves");
     const oldWolfEvent = event(3, "faction", "chat.message", "wolves");
-    state.players[id("seer")]!.wolfSinceEventId = 4 as GameEvent["id"];
+    state.players[id("seer")]!.channelSince = { wolves: 4 as GameEvent["id"] };
     expect(canViewEvent(privateEvent, id("seer"), state)).toBe(true);
     expect(canViewEvent(privateEvent, id("wolf"), state)).toBe(false);
     expect(canViewEvent(wolfEvent, id("seer"), state)).toBe(false);
@@ -120,13 +120,19 @@ describe("viewer projection security", () => {
     const state = makeState();
     state.players[id("seer")]!.faction = "wolves";
     state.players[id("seer")]!.role = "werewolf";
-    state.players[id("seer")]!.wolfSinceEventId = 10 as GameEvent["id"];
+    state.players[id("seer")]!.channelSince = { wolves: 10 as GameEvent["id"] };
     expect(canViewEvent(event(9, "faction", "chat.message", "wolves"), id("seer"), state)).toBe(
       false,
     );
     expect(canViewEvent(event(10, "faction", "chat.message", "wolves"), id("seer"), state)).toBe(
       true,
     );
+  });
+
+  test("availableChannels includes grave for a dead viewer and not for a living one", () => {
+    const state = makeState();
+    expect(projectSnapshot(state, id("dead-wolf")).availableChannels).toContain("grave");
+    expect(projectSnapshot(state, id("seer")).availableChannels).not.toContain("grave");
   });
 });
 

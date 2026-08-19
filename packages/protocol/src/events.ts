@@ -136,7 +136,8 @@ export interface GameEventBase {
   id: EventId;
   kind: EventKind;
   scope: EventScope;
-  /** The userId for scope "player", "wolves" for scope "faction". */
+  /** The userId for scope "player"; for scope "faction" the CHANNEL id (e.g.
+   * "wolves" or "grave"), not necessarily a faction. */
   scopeId?: string;
   /** The user who caused the event, when there is one. */
   actorUserId?: UserId;

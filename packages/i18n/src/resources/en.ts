@@ -220,6 +220,7 @@ export const en = {
     sendMessage: "Send message",
     publicChat: "Public chat",
     wolfChat: "Wolf chat",
+    graveChat: "Grave chat",
     yourRole: "Your role",
     factionTeam: "{{faction}} team",
     vote: {

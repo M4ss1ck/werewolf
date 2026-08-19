@@ -828,6 +828,87 @@ test("the wolf chat tab appears only when the snapshot lists that channel", () =
   expect(screen.queryByRole("button", { name: "Wolf chat" })).not.toBeInTheDocument();
 });
 
+test("the grave chip appears only when the snapshot lists that channel", () => {
+  const withGraveChat = renderWithI18n(
+    <Talk
+      events={[]}
+      send={() => Promise.resolve()}
+      snapshot={makeGameSnapshot({
+        game: {
+          phase: { id: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 },
+        },
+        me: { userId: "wren" as UserId, status: "dead", role: "villager" },
+        availableChannels: ["public", "grave"] as ChatChannel[],
+      })}
+    />,
+  );
+  expect(screen.getByRole("button", { name: "Grave chat" })).toBeInTheDocument();
+  withGraveChat.unmount();
+
+  renderWithI18n(
+    <Talk
+      events={[]}
+      send={() => Promise.resolve()}
+      snapshot={makeGameSnapshot({
+        game: {
+          phase: { id: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 },
+        },
+        me: { userId: "wren" as UserId, status: "dead", role: "villager" },
+        availableChannels: ["public"] as ChatChannel[],
+      })}
+    />,
+  );
+  expect(screen.queryByRole("button", { name: "Grave chat" })).not.toBeInTheDocument();
+});
+
+test("sending on the grave channel posts chat.send with channel grave", async () => {
+  const send = vi.fn(() => Promise.resolve());
+  renderWithI18n(
+    <Talk
+      events={[]}
+      send={send}
+      snapshot={makeGameSnapshot({
+        game: {
+          phase: { id: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 },
+        },
+        me: { userId: "wren" as UserId, status: "dead", role: "villager" },
+        availableChannels: ["public", "grave"] as ChatChannel[],
+      })}
+    />,
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: "Grave chat" }));
+  fireEvent.change(screen.getByLabelText(/Message/), { target: { value: "rest well" } });
+  await reactAct(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  });
+
+  expect(send).toHaveBeenCalledWith({
+    type: "chat.send",
+    phaseId: 1,
+    payload: { channel: "grave", text: "rest well" },
+  });
+});
+
+test("a dead viewer can type on the grave channel during the night phase", () => {
+  const snapshot = makeGameSnapshot({
+    game: { phase: { id: 2 as PhaseId, type: "night", startedAt: 1000, endsAt: 10_000 } },
+    players: [
+      { userId: "wren" as UserId, displayName: "Wren", status: "dead", revealedRole: "villager" },
+      { userId: "odile" as UserId, displayName: "Odile", status: "alive" },
+    ],
+    me: { userId: "wren" as UserId, status: "dead", role: "villager" },
+    availableChannels: ["public", "grave"] as ChatChannel[],
+  });
+  renderWithI18n(<Talk events={[]} send={() => Promise.resolve()} snapshot={snapshot} />);
+
+  // Public chat is silenced at night even for the dead; the grave is not.
+  expect(screen.getByLabelText(/Message/)).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "Grave chat" }));
+  expect(screen.getByLabelText(/Message/)).toBeEnabled();
+  expect(screen.getByRole("button", { name: "Send message" })).toBeEnabled();
+});
+
 test("a dead player's revealed role shows in the list; living players show none", () => {
   renderWithI18n(
     <Act

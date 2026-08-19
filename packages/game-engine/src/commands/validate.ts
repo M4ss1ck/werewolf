@@ -23,6 +23,12 @@ export function validateCommand(
       }
       return null;
     }
+    if (command.payload.channel === "grave") {
+      // The dead may speak in the graveyard in every phase, including night.
+      // A spectator who never played is not dead and must not sit in it.
+      if (player.status !== "dead") return { code: "CHANNEL_NOT_AVAILABLE" };
+      return null;
+    }
     if (player.role === null || !WOLF_CHAT_ROLES.has(player.role))
       return { code: "CHANNEL_NOT_AVAILABLE" };
     if (player.status !== "alive") return { code: "CHAT_READ_ONLY" };

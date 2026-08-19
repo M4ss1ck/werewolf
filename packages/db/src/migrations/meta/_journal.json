@@ -36,6 +36,13 @@
       "when": 1787094335015,
       "tag": "0004_mixed_cassandra_nova",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1787101189287,
+      "tag": "0005_loose_talon",
+      "breakpoints": true
     }
   ]
 }

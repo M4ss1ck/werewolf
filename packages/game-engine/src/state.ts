@@ -1,4 +1,5 @@
 import type {
+  ChatChannel,
   ErrorCode,
   EventId,
   EventKind,
@@ -39,7 +40,11 @@ export interface PlayerState {
   faction: FactionId | null;
   roleState: unknown;
   phaseState: StoredPhaseState;
-  wolfSinceEventId?: EventId;
+  /** Per-channel entitlement marker: the id of the event from which this
+   * player may read that channel. Absent means "no entitlement yet". A
+   * player converted into a channel must not read what was said before they
+   * arrived. */
+  channelSince?: Partial<Record<ChatChannel, EventId>>;
   /** Absent on a human seat. A bot seat carries the config its controller
    * decides with; the engine itself never reads it. */
   controller?: PlayerController;

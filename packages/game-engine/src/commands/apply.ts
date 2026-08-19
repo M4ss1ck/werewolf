@@ -21,7 +21,7 @@ export function applyCommand(
           {
             kind: "chat.message",
             scope: command.payload.channel === "public" ? "public" : "faction",
-            ...(command.payload.channel === "wolves" ? { scopeId: "wolves" } : {}),
+            ...(command.payload.channel !== "public" ? { scopeId: command.payload.channel } : {}),
             actorUserId: actorId,
             payload: command.payload,
           },

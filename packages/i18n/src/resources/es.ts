@@ -218,6 +218,7 @@ export const es: TranslationResource = {
     sendMessage: "Enviar mensaje",
     publicChat: "Chat público",
     wolfChat: "Chat de los lobos",
+    graveChat: "Chat de los muertos",
     yourRole: "Tu rol",
     factionTeam: "Equipo de {{faction}}",
     vote: {

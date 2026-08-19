@@ -25,7 +25,8 @@ export function mapPlayer(row: PlayerRow): PlayerState {
     roleState: json(row.roleStateJson),
     phaseState: json<StoredPhaseState>(row.phaseStateJson),
   } as PlayerState;
-  if (row.wolfSinceEventId !== null) result.wolfSinceEventId = row.wolfSinceEventId as EventId;
+  const channelSince = json<PlayerState["channelSince"]>(row.channelSinceJson);
+  if (channelSince && Object.keys(channelSince).length > 0) result.channelSince = channelSince;
   if (row.controllerJson !== null) result.controller = json<PlayerController>(row.controllerJson);
   return result;
 }

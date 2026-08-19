@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import type { GameEvent, UserId } from "@werewolf/protocol";
 import type { GameState, PlayerState } from "../state.ts";
 import { canViewEvent } from "./permissions.ts";
@@ -34,7 +34,7 @@ const state = {
       originalRole: "cursed",
       role: "werewolf",
       faction: "wolves",
-      wolfSinceEventId: 50 as NonNullable<PlayerState["wolfSinceEventId"]>,
+      channelSince: { wolves: 50 as GameEvent["id"] },
     }),
     convertedWithoutMarker: player("convertedWithoutMarker", {
       originalRole: "cursed",
@@ -60,6 +60,16 @@ const wolfEvent = (id: number) =>
     payload: {},
   }) as unknown as GameEvent;
 
+const graveEvent = (id: number) =>
+  ({
+    id,
+    kind: "chat.message",
+    scope: "faction",
+    scopeId: "grave",
+    createdAt: 0,
+    payload: {},
+  }) as unknown as GameEvent;
+
 test.each([
   ["a starting wolf reads the whole wolf history", "startingWolf", 1, true],
   ["a dead wolf still reads wolf chat", "deadWolf", 99, true],
@@ -81,4 +91,37 @@ test("a converted player with no conversion marker is denied rather than trusted
   // missing the player must see nothing, not everything.
   expect(canViewEvent(wolfEvent(1), "convertedWithoutMarker" as UserId, state)).toBe(false);
   expect(canViewEvent(wolfEvent(9999), "convertedWithoutMarker" as UserId, state)).toBe(false);
+});
+
+describe("grave channel visibility", () => {
+  const deadVillager = player("deadVillager", {
+    originalRole: "villager",
+    role: "villager",
+    faction: "village",
+    status: "dead",
+  });
+  const graveState = {
+    ...state,
+    players: { ...state.players, deadVillager },
+  } as unknown as GameState;
+
+  test("a living player cannot see a grave-channel event", () => {
+    expect(canViewEvent(graveEvent(1), "villager" as UserId, graveState)).toBe(false);
+    expect(canViewEvent(graveEvent(1), "startingWolf" as UserId, graveState)).toBe(false);
+  });
+
+  test("a dead player sees grave events, including ones older than any marker and their own death", () => {
+    // The dead see the whole graveyard history, no since-marker applies.
+    expect(canViewEvent(graveEvent(1), "deadWolf" as UserId, graveState)).toBe(true);
+    expect(canViewEvent(graveEvent(1), "deadVillager" as UserId, graveState)).toBe(true);
+  });
+
+  test("a spectator cannot see grave events", () => {
+    const spectator = player("spectator", { status: "spectator" });
+    const withSpectator = {
+      ...graveState,
+      players: { ...graveState.players, spectator },
+    } as unknown as GameState;
+    expect(canViewEvent(graveEvent(1), "spectator" as UserId, withSpectator)).toBe(false);
+  });
 });

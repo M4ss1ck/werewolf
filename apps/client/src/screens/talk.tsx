@@ -26,7 +26,7 @@ export function Talk({
   const me = snapshot.me;
   const readOnly =
     me === undefined ||
-    me.status === "dead" ||
+    (me.status === "dead" && channel !== "grave") ||
     me.status === "spectator" ||
     (channel === "public" && snapshot.game.phase?.type === "night");
   const names = new Map(snapshot.players.map((player) => [player.userId, player.displayName]));
@@ -62,6 +62,16 @@ export function Talk({
                 <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-blood" />
                 {t("ui.wolfChat")}
               </Chip>
+            </button>
+          )}
+          {snapshot.availableChannels.includes("grave") && (
+            <button
+              aria-pressed={channel === "grave"}
+              className="rounded-full p-0.5"
+              onClick={() => setChannel("grave")}
+              type="button"
+            >
+              <Chip tone={channel === "grave" ? "active" : "running"}>{t("ui.graveChat")}</Chip>
             </button>
           )}
         </div>

@@ -11,6 +11,7 @@ import type {
   StoredPhaseState,
 } from "@werewolf/game-engine";
 import type {
+  EventId,
   EventKind,
   EventPayloads,
   EventScope,
@@ -571,7 +572,7 @@ describe("GameRepository", () => {
     expect(await repo.getUserStats(USER_IDS[0]!)).toEqual({ games: 0, survived: 0, asWolf: 0 });
   });
 
-  test("wolves.member_joined sets the converted player's wolf_since_event_id to the event's own id", async () => {
+  test("wolves.member_joined sets the converted player's channel_since_json wolves marker to the event's own id", async () => {
     const { db, repo } = await setup();
     await createGame(repo);
     const cursed = USER_IDS[0]!;
@@ -607,7 +608,7 @@ describe("GameRepository", () => {
       .from(gamePlayers)
       .where(and(eq(gamePlayers.gameId, GAME_ID), eq(gamePlayers.userId, cursed)));
     expect(rows).toHaveLength(1);
-    expect(rows[0]!.wolfSinceEventId).toBe(joined!.id);
+    expect(JSON.parse(rows[0]!.channelSinceJson)).toEqual({ wolves: joined!.id });
   });
 
   test("commitTransition returns one mapped event per draft when two share a kind and createdAt", async () => {
@@ -665,7 +666,7 @@ describe("GameRepository", () => {
     expect(stored.map((row) => row.id)).toEqual(ids);
   });
 
-  test("wolves.member_joined with two converts sets each wolf_since_event_id to its own event's id", async () => {
+  test("wolves.member_joined with two converts sets each channel_since_json wolves marker to its own event's id", async () => {
     const { db, repo } = await setup();
     await createGame(repo);
     const first = USER_IDS[0]!;
@@ -714,7 +715,77 @@ describe("GameRepository", () => {
         .where(and(eq(gamePlayers.gameId, GAME_ID), eq(gamePlayers.userId, second)))
     )[0]!;
     const ownEventId = new Map(joined.map((event) => [event.payload.playerId, event.id]));
-    expect(firstRow.wolfSinceEventId).toBe(ownEventId.get(first)!);
-    expect(secondRow.wolfSinceEventId).toBe(ownEventId.get(second)!);
+    expect(JSON.parse(firstRow.channelSinceJson)).toEqual({ wolves: ownEventId.get(first)! });
+    expect(JSON.parse(secondRow.channelSinceJson)).toEqual({ wolves: ownEventId.get(second)! });
+  });
+
+  test("channelSince round-trips through the database", async () => {
+    const { repo } = await setup();
+    await createGame(repo);
+    const playerId = USER_IDS[0]!;
+    await repo.addPlayer({
+      gameId: GAME_ID,
+      userId: playerId,
+      displayName: "P0",
+      joinedAt: 1_000,
+    });
+
+    await repo.commitTransition(GAME_ID, 0, {
+      gamePatch: { status: "running" },
+      playerPatches: [
+        {
+          playerId,
+          changes: { channelSince: { wolves: 7 as EventId, grave: 3 as EventId } },
+        },
+      ],
+      events: [],
+      ephemeral: [],
+    });
+
+    const loaded = await repo.loadGameState(GAME_ID);
+    expect(loaded!.players[playerId]!.channelSince).toEqual({
+      wolves: 7 as EventId,
+      grave: 3 as EventId,
+    } as PlayerState["channelSince"]);
+  });
+
+  test("a second member_joined style write merges rather than replacing an existing marker for a different channel", async () => {
+    const { db, repo } = await setup();
+    await createGame(repo);
+    const playerId = USER_IDS[0]!;
+    await repo.addPlayer({
+      gameId: GAME_ID,
+      userId: playerId,
+      displayName: "P0",
+      joinedAt: 1_000,
+    });
+
+    // Seed a marker for a different channel (e.g. grave) via a player patch.
+    await repo.commitTransition(GAME_ID, 0, {
+      gamePatch: { status: "running" },
+      playerPatches: [{ playerId, changes: { channelSince: { grave: 3 as EventId } } }],
+      events: [],
+      ephemeral: [],
+    });
+
+    // A wolves.member_joined write must merge, not overwrite, the grave marker.
+    const result = await repo.commitTransition(GAME_ID, 1, {
+      gamePatch: {},
+      playerPatches: [],
+      events: [draft("wolves.member_joined", "faction", { playerId }, { scopeId: "wolves" })],
+      ephemeral: [],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("transition should not be stale");
+    const joined = result.events.find((event) => event.kind === "wolves.member_joined")!;
+
+    const rows = await db
+      .select()
+      .from(gamePlayers)
+      .where(and(eq(gamePlayers.gameId, GAME_ID), eq(gamePlayers.userId, playerId)));
+    expect(JSON.parse(rows[0]!.channelSinceJson)).toEqual({
+      grave: 3,
+      wolves: joined.id,
+    });
   });
 });

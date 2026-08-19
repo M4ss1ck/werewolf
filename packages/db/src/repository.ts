@@ -259,16 +259,21 @@ export class GameRepository {
               )[0]
             : undefined);
         if (row) inserted.push(mapEvent(row));
-        if (draft.kind === "wolves.member_joined" && row)
+        if (draft.kind === "wolves.member_joined" && row) {
+          const playerId = (draft.payload as { playerId: UserId }).playerId;
+          const existing = await tx
+            .select({ channelSinceJson: gamePlayers.channelSinceJson })
+            .from(gamePlayers)
+            .where(and(eq(gamePlayers.gameId, gameId), eq(gamePlayers.userId, playerId)))
+            .limit(1);
+          const channelSince = existing[0]
+            ? (JSON.parse(existing[0].channelSinceJson) as Record<string, EventId>)
+            : {};
           await tx
             .update(gamePlayers)
-            .set({ wolfSinceEventId: row.id as EventId })
-            .where(
-              and(
-                eq(gamePlayers.gameId, gameId),
-                eq(gamePlayers.userId, (draft.payload as { playerId: UserId }).playerId),
-              ),
-            );
+            .set({ channelSinceJson: JSON.stringify({ ...channelSince, wolves: row.id }) })
+            .where(and(eq(gamePlayers.gameId, gameId), eq(gamePlayers.userId, playerId)));
+        }
       }
       for (const patch of transition.playerPatches) await applyPlayerPatch(tx, gameId, patch);
       return { ok: true, events: inserted, version: expectedVersion + 1 };
@@ -308,7 +313,8 @@ async function applyPlayerPatch(
       originalRole: changes.originalRole,
       role: changes.role,
       faction: changes.faction,
-      wolfSinceEventId: changes.wolfSinceEventId,
+      channelSinceJson:
+        changes.channelSince === undefined ? undefined : JSON.stringify(changes.channelSince),
       roleStateJson:
         changes.roleState === undefined ? undefined : JSON.stringify(changes.roleState),
       phaseStateJson:

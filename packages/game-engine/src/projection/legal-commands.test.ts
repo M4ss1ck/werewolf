@@ -121,4 +121,11 @@ describe("legal command projection", () => {
       ),
     ).toEqual(["public", "wolves"]);
   });
+
+  test("a dead player may speak on grave in every phase", () => {
+    for (const phase of ["discussion", "voting", "night"] as const) {
+      const game = state(["werewolf", "villager", "seer", "villager", "villager"], phase, ["p1"]);
+      expect(getSpeakableChannels(game, uid("p1"), 1)).toEqual(["grave"]);
+    }
+  });
 });

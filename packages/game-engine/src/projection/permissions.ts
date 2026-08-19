@@ -5,10 +5,20 @@ import type { GameState } from "../state.ts";
 export function canViewEvent(event: GameEvent, viewer: UserId, state: GameState): boolean {
   if (event.scope === "public" || event.scope === "server") return event.scope === "public";
   if (event.scope === "player") return event.scopeId === viewer;
-  if (event.scope !== "faction" || event.scopeId !== "wolves") return false;
+  if (event.scope !== "faction") return false;
 
   const player = state.players[viewer];
-  if (!player || player.role === null || !WOLF_CHAT_ROLES.has(player.role)) return false;
+  if (!player) return false;
+
+  if (event.scopeId === "grave") {
+    // The graveyard is a room: the dead see the whole history, including
+    // messages from before they died. A spectator who never played is not dead.
+    return player.status === "dead";
+  }
+
+  if (event.scopeId !== "wolves") return false;
+
+  if (player.role === null || !WOLF_CHAT_ROLES.has(player.role)) return false;
 
   // A starting wolf sees the whole faction history.
   if (player.originalRole !== null && WOLF_CHAT_ROLES.has(player.originalRole)) return true;
@@ -18,6 +28,7 @@ export function canViewEvent(event: GameEvent, viewer: UserId, state: GameState)
   // persisted, so treat a missing one as "not yet entitled" and fail closed:
   // failing open would hand a freshly converted Cursed every earlier wolf
   // message.
-  if (player.wolfSinceEventId === undefined) return false;
-  return event.id >= player.wolfSinceEventId;
+  const since = player.channelSince?.wolves;
+  if (since === undefined) return false;
+  return event.id >= since;
 }

@@ -55,9 +55,12 @@ function voteTallies(state: GameState): { targetId: UserId; count: number }[] | 
 }
 
 function availableChannels(player: PlayerState | undefined): ChatChannel[] {
-  return player && (player.faction === "wolves" || player.wolfSinceEventId !== undefined)
-    ? ["public", "wolves"]
-    : ["public"];
+  if (!player) return ["public"];
+  const channels: ChatChannel[] = ["public"];
+  if (player.faction === "wolves" || player.channelSince?.wolves !== undefined)
+    channels.push("wolves");
+  if (player.status === "dead") channels.push("grave");
+  return channels;
 }
 
 export function projectSnapshot(
