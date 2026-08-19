@@ -12,8 +12,9 @@
 import type { ChatChannel, GameplayCommand, UserId } from "@werewolf/protocol";
 import { CHAT_CHANNELS } from "@werewolf/protocol";
 import { validateCommand } from "../commands/validate.ts";
+import { getActionSpecsFor } from "../roles/action-spec.ts";
+import { resolveTargets } from "../roles/targets.ts";
 import type { GameState } from "../state.ts";
-import { getAvailableActions } from "./available-actions.ts";
 
 /** A gameplay command minus the `commandId` the submitter mints per attempt.
  * Distributes over the union so each member keeps its own payload shape. */
@@ -41,6 +42,8 @@ function sortedPlayerIds(state: GameState): UserId[] {
 export function getLegalCommands(state: GameState, playerId: UserId, now: number): LegalCommand[] {
   const phase = state.phase;
   if (!phase) return [];
+  const player = state.players[playerId];
+  if (!player) return [];
   const candidates: LegalCommand[] = [];
 
   if (phase.type === "voting") {
@@ -49,70 +52,44 @@ export function getLegalCommands(state: GameState, playerId: UserId, now: number
     candidates.push({ type: "vote.abstain", phaseId: phase.id, payload: {} });
   }
 
-  if (phase.type === "night") {
-    for (const action of getAvailableActions(state, playerId)) {
-      // Actions that take no target at all.
-      if (action.id === "harlot.stay" || action.id === "serial_killer.stay") {
-        candidates.push({
-          type: "night.action.set",
-          phaseId: phase.id,
-          payload: { action: action.id },
-        });
-        continue;
-      }
-      if (action.type === "targets") {
-        // cupid.link: every unordered distinct pair of living players, in a
-        // stable sorted order so a seeded fallback pick is reproducible.
-        const living = sortedPlayerIds(state).filter((id) => state.players[id]?.status === "alive");
-        for (let i = 0; i < living.length; i += 1) {
-          for (let j = i + 1; j < living.length; j += 1) {
-            candidates.push({
-              type: "night.action.set",
-              phaseId: phase.id,
-              payload: { action: "cupid.link", targetIds: [living[i]!, living[j]!] },
-            });
-          }
-        }
-        continue;
-      }
-      if (action.type !== "target") continue;
-      const targets = [...action.targets].sort((a, b) => (a.userId < b.userId ? -1 : 1));
-      for (const target of targets) {
-        // Every remaining night action has the same { action, targetId } shape,
-        // so the id carries straight through. A ternary chain here used to end
-        // in a default, which silently mapped serial_killer.visit onto a
-        // harlot.visit payload that validation then rejected — leaving the
-        // Serial Killer with no legal visit at all.
-        const payload = { action: action.id, targetId: target.userId } as Extract<
-          LegalCommand,
-          { type: "night.action.set" }
-        >["payload"];
-        candidates.push({ type: "night.action.set", phaseId: phase.id, payload });
-      }
-    }
-  }
+  for (const spec of getActionSpecsFor(state, player)) {
+    const type = spec.phase === "night" ? "night.action.set" : "day.action.set";
 
-  if (phase.type === "discussion" || phase.type === "voting") {
-    for (const action of getAvailableActions(state, playerId)) {
-      // The pardon takes no target; handling it first leaves the rest narrowed
-      // to the ones that do.
-      if (action.id === "mayor.pardon") {
-        candidates.push({
-          type: "day.action.set",
-          phaseId: phase.id,
-          payload: { action: "mayor.pardon" },
-        });
-        continue;
-      }
-      if (action.id !== "mayor.reveal" || action.type !== "target") continue;
-      const targets = [...action.targets].sort((a, b) => (a.userId < b.userId ? -1 : 1));
-      for (const target of targets)
-        candidates.push({
-          type: "day.action.set",
-          phaseId: phase.id,
-          payload: { action: "mayor.reveal", targetId: target.userId },
-        });
+    if (spec.target === null) {
+      candidates.push({ type, phaseId: phase.id, payload: { action: spec.id } } as LegalCommand);
+      continue;
     }
+
+    // Sorted so a seeded fallback pick is reproducible regardless of the order
+    // the storage layer returned the roster in.
+    const eligible = resolveTargets(spec, player, state)
+      .filter((target) => target.enabled)
+      .map((target) => target.userId)
+      .sort();
+
+    if (spec.target.kind === "pair") {
+      for (let i = 0; i < eligible.length; i += 1)
+        for (let j = i + 1; j < eligible.length; j += 1)
+          candidates.push({
+            type,
+            phaseId: phase.id,
+            payload: { action: spec.id, targetIds: [eligible[i]!, eligible[j]!] },
+          } as LegalCommand);
+      continue;
+    }
+
+    // Every remaining action has the same { action, targetId } shape, so the
+    // id carries straight through from the spec. A ternary chain here used to
+    // end in a default, which silently mapped serial_killer.visit onto a
+    // harlot.visit payload that validation then rejected — leaving the Serial
+    // Killer with no legal visit at all. Deriving from the spec is what makes
+    // that class of bug impossible.
+    for (const targetId of eligible)
+      candidates.push({
+        type,
+        phaseId: phase.id,
+        payload: { action: spec.id, targetId },
+      } as LegalCommand);
   }
 
   return candidates.filter((candidate) => isLegal(state, playerId, candidate, now));
