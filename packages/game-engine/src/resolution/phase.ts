@@ -5,7 +5,7 @@ import { SeededRng } from "../rng/rng.ts";
 import { getPerceivedRole } from "../roles/perceived.ts";
 import { getRoleDefinition, isPackMember } from "../roles/registry.ts";
 import type { DomainResult, DomainTransition, GameSettings, GameState } from "../state.ts";
-import { resolveNight } from "./night.ts";
+import { resolveNight } from "./night/index.ts";
 import { resolveDayVote } from "./vote.ts";
 
 export interface PhaseContext {

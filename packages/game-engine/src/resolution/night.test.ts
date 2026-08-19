@@ -3,7 +3,7 @@ import type { EventPayloads } from "@werewolf/protocol";
 import { STALEMATE_NIGHTS } from "../composer/balance-v1.ts";
 import { SeededRng } from "../rng/rng.ts";
 import type { DomainTransition, GameState, PlayerState } from "../state.ts";
-import { resolveNight } from "./night.ts";
+import { resolveNight } from "./night/index.ts";
 
 export const id = (value: string) => value as PlayerState["id"];
 

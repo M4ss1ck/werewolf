@@ -6,7 +6,7 @@ import { getAvailableActions } from "../projection/available-actions.ts";
 import { getLegalCommands, getSpeakableChannels } from "../projection/legal-commands.ts";
 import { canViewEvent } from "../projection/permissions.ts";
 import { projectSnapshot } from "../projection/snapshot.ts";
-import { resolveNight } from "../resolution/night.ts";
+import { resolveNight } from "../resolution/night/index.ts";
 import { startGame } from "../resolution/phase.ts";
 import { checkVictory } from "../resolution/victory.ts";
 import { SeededRng } from "../rng/rng.ts";

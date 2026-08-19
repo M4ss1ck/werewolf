@@ -6,7 +6,7 @@ import { getAvailableActions } from "../projection/available-actions.ts";
 import { canViewEvent } from "../projection/permissions.ts";
 import { SeededRng } from "../rng/rng.ts";
 import type { DomainTransition, GameState, PlayerState } from "../state.ts";
-import { resolveNight } from "./night.ts";
+import { resolveNight } from "./night/index.ts";
 
 const id = (value: string) => value as PlayerState["id"];
 

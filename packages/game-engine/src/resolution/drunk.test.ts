@@ -7,7 +7,7 @@ import { getAvailableActions } from "../projection/available-actions.ts";
 import { projectSnapshot } from "../projection/snapshot.ts";
 import { SeededRng } from "../rng/rng.ts";
 import type { DomainTransition, GameState, PlayerState } from "../state.ts";
-import { resolveNight } from "./night.ts";
+import { resolveNight } from "./night/index.ts";
 import { startGame } from "./phase.ts";
 
 const id = (value: string) => value as PlayerState["id"];

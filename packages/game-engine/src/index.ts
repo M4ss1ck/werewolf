@@ -14,7 +14,7 @@ export * from "./projection/events.ts";
 export * from "./projection/legal-commands.ts";
 export * from "./projection/permissions.ts";
 export * from "./projection/snapshot.ts";
-export * from "./resolution/night.ts";
+export * from "./resolution/night/index.ts";
 export * from "./resolution/phase.ts";
 export * from "./resolution/victory.ts";
 export * from "./resolution/vote.ts";

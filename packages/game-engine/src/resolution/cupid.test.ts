@@ -5,7 +5,7 @@ import { validateCommand } from "../commands/validate.ts";
 import { getAvailableActions } from "../projection/available-actions.ts";
 import { SeededRng } from "../rng/rng.ts";
 import type { DomainTransition, GameState, PlayerState, VictoryResult } from "../state.ts";
-import { resolveNight } from "./night.ts";
+import { resolveNight } from "./night/index.ts";
 import { applyLoverRider, checkVictory } from "./victory.ts";
 import { resolveDayVote } from "./vote.ts";
 

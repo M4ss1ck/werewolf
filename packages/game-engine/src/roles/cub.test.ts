@@ -4,7 +4,7 @@ import { WOLF_ROLE_IDS } from "@werewolf/protocol";
 import { validateCommand } from "../commands/validate.ts";
 import { getAvailableActions } from "../projection/available-actions.ts";
 import { canViewEvent } from "../projection/permissions.ts";
-import { resolveNight } from "../resolution/night.ts";
+import { resolveNight } from "../resolution/night/index.ts";
 import { checkVictory } from "../resolution/victory.ts";
 import { SeededRng } from "../rng/rng.ts";
 import type { GameState, PlayerState } from "../state.ts";
