@@ -32,6 +32,7 @@ export const roleAvailabilityMinimums: Partial<Record<RoleId, number>> = {
   cupid: 8,
   priest: 7,
   guardian: 7,
+  cub: 7,
 };
 
 /** Roles a Drunk may believe they are. Restricted to roles whose output is
@@ -47,10 +48,15 @@ export function getStartingWolfCount(players: number): number {
   return Math.max(1, Math.floor((players + 1) / 4));
 }
 
+/** Specials that replace a plain wolf in the pack: each one present subtracts
+ * one from the starting wolf count, so an extra body with no ability cannot
+ * buff the strongest faction. */
+export const WOLF_REPLACING_ROLES = ["alpha_wolf", "cub"] as const;
+
 export function wolfCountForComposition(playerCount: number, specials: readonly RoleId[]): number {
   if (playerCount === 5 && specials.includes("serial_killer")) return 0;
-  if (specials.includes("alpha_wolf")) return getStartingWolfCount(playerCount) - 1;
-  return getStartingWolfCount(playerCount);
+  const replaced = WOLF_REPLACING_ROLES.filter((role) => specials.includes(role)).length;
+  return Math.max(0, getStartingWolfCount(playerCount) - replaced);
 }
 
 export function minimumVanillaVillagers(playerCount: number): number {
@@ -76,4 +82,5 @@ export const availableSpecialRoles: readonly RoleId[] = [
   "cupid",
   "priest",
   "guardian",
+  "cub",
 ];

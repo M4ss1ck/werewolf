@@ -22,6 +22,7 @@ export const ROLE_IDS = [
   "cupid",
   "priest",
   "guardian",
+  "cub",
 ] as const;
 export type RoleId = (typeof ROLE_IDS)[number];
 export const RoleIdSchema = z.enum(ROLE_IDS);
@@ -29,7 +30,7 @@ export const RoleIdSchema = z.enum(ROLE_IDS);
 /** Role ids that belong to the wolves faction. The client needs this to render a
  * revealed role as a wolf, and it may not import the engine. Distinct from the
  * engine's WOLF_CHAT_ROLES: a wolf-faction role does not automatically get wolf chat. */
-export const WOLF_ROLE_IDS = ["werewolf", "alpha_wolf"] as const;
+export const WOLF_ROLE_IDS = ["werewolf", "alpha_wolf", "cub"] as const;
 export type WolfRoleId = (typeof WOLF_ROLE_IDS)[number];
 
 export const FACTION_IDS = ["village", "wolves", "veteran", "serial_killer"] as const;

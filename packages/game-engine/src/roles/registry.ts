@@ -24,6 +24,7 @@ export interface RoleDefinition<State = unknown> {
 }
 
 import { alphaWolf } from "./alpha-wolf.ts";
+import { cub } from "./cub.ts";
 import { cupid } from "./cupid.ts";
 import { cursed } from "./cursed.ts";
 import { drunk } from "./drunk.ts";
@@ -59,6 +60,7 @@ export const roleRegistry: Readonly<Record<RoleId, RoleDefinition>> = {
   cupid,
   priest,
   guardian,
+  cub,
 };
 
 export function getRoleDefinition(role: RoleId): RoleDefinition {
@@ -67,4 +69,8 @@ export function getRoleDefinition(role: RoleId): RoleDefinition {
 
 /** Roles that may read and write the wolves chat channel. Membership is by
  * ROLE, not faction: a future wolf-faction role may be denied the channel. */
-export const WOLF_CHAT_ROLES: ReadonlySet<RoleId> = new Set<RoleId>(["werewolf", "alpha_wolf"]);
+export const WOLF_CHAT_ROLES: ReadonlySet<RoleId> = new Set<RoleId>([
+  "werewolf",
+  "alpha_wolf",
+  "cub",
+]);

@@ -84,6 +84,10 @@ export const es: TranslationResource = {
       description:
         "En la primera noche, se une a un jugador. Si alguna vez lo atacan, mueres en su lugar.",
     },
+    cub: {
+      name: "Cachorro",
+      description: "Un lobo joven sin poderes especiales: cazas con la manada y ganas con ella.",
+    },
   },
   factions: {
     village: "La aldea",

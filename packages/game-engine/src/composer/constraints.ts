@@ -27,6 +27,7 @@ export function hasValidSpecialCardinality(roles: readonly RoleId[]): boolean {
       "cupid",
       "priest",
       "guardian",
+      "cub",
     ] as const
   ).every((role) => roles.filter((candidate) => candidate === role).length <= 1);
 }

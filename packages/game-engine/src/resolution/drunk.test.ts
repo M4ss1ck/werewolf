@@ -254,7 +254,7 @@ describe("determinism", () => {
       "werewolf",
       "villager",
       "werewolf",
-      "cursed",
+      "veteran",
       "villager",
       "villager",
       "villager",

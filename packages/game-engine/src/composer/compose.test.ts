@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { RoleId } from "@werewolf/protocol";
-import { composeBalancedGame, getStartingWolfCount, minimumVanillaVillagers } from "../index.ts";
+import {
+  composeBalancedGame,
+  getStartingWolfCount,
+  minimumVanillaVillagers,
+  WOLF_REPLACING_ROLES,
+  wolfCountForComposition,
+} from "../index.ts";
 
 const playerCounts = Array.from({ length: 20 }, (_, index) => index + 5);
 const seeds = Array.from({ length: 40 }, (_, index) => `seed-${index}`);
@@ -28,9 +34,11 @@ describe("balance-v1 role composer", () => {
       const expectedWolves =
         playerCount === 5 && roles.includes("serial_killer")
           ? 0
-          : roles.includes("alpha_wolf")
-            ? getStartingWolfCount(playerCount) - 1
-            : getStartingWolfCount(playerCount);
+          : Math.max(
+              0,
+              getStartingWolfCount(playerCount) -
+                WOLF_REPLACING_ROLES.filter((role) => roles.includes(role)).length,
+            );
       expect(roles.filter((role) => role === "werewolf")).toHaveLength(expectedWolves);
       expect([0, 2].includes(roles.filter((role) => role === "mason").length)).toBe(true);
       expect(roles.filter((role) => role === "villager").length).toBeGreaterThanOrEqual(
@@ -75,7 +83,7 @@ describe("balance-v1 role composer", () => {
 
   test("a 6+ player composition containing serial_killer keeps the normal wolf count", () => {
     for (const playerCount of [6, 7, 8, 10, 14, 20]) {
-      const roles = findCompositionWith(playerCount, "serial_killer", ["alpha_wolf"]);
+      const roles = findCompositionWith(playerCount, "serial_killer", ["alpha_wolf", "cub"]);
       expect(roles.filter((role) => role === "werewolf")).toHaveLength(
         getStartingWolfCount(playerCount),
       );
@@ -84,7 +92,11 @@ describe("balance-v1 role composer", () => {
 
   test("veteran never changes the wolf count at any player count", () => {
     for (const playerCount of [5, 6, 7, 8, 10, 14, 20]) {
-      const roles = findCompositionWith(playerCount, "veteran", ["serial_killer", "alpha_wolf"]);
+      const roles = findCompositionWith(playerCount, "veteran", [
+        "serial_killer",
+        "alpha_wolf",
+        "cub",
+      ]);
       expect(roles.filter((role) => role === "werewolf")).toHaveLength(
         getStartingWolfCount(playerCount),
       );
@@ -92,8 +104,49 @@ describe("balance-v1 role composer", () => {
   });
 
   test("a 10-player composition containing alpha_wolf has one fewer plain werewolf", () => {
-    const roles = findCompositionWith(10, "alpha_wolf");
+    const roles = findCompositionWith(10, "alpha_wolf", ["cub"]);
     expect(roles.filter((role) => role === "werewolf")).toHaveLength(getStartingWolfCount(10) - 1);
+  });
+
+  test("a composition containing cub has one fewer plain werewolf", () => {
+    const roles = findCompositionWith(10, "cub", ["alpha_wolf"]);
+    expect(roles.filter((role) => role === "werewolf")).toHaveLength(getStartingWolfCount(10) - 1);
+  });
+
+  test("a composition containing both alpha_wolf and cub has two fewer plain werewolves", () => {
+    for (let seed = 0; seed < 2000; seed += 1) {
+      const roles = composeBalancedGame({ playerCount: 10, seed: `find-${seed}` });
+      if (roles.includes("alpha_wolf") && roles.includes("cub")) {
+        expect(roles.filter((role) => role === "werewolf")).toHaveLength(
+          getStartingWolfCount(10) - 2,
+        );
+        return;
+      }
+    }
+    throw new Error("no 10-player composition with both alpha_wolf and cub");
+  });
+
+  test("wolfCountForComposition never returns a negative count", () => {
+    expect(wolfCountForComposition(5, ["alpha_wolf", "cub"])).toBe(0);
+    expect(wolfCountForComposition(7, ["alpha_wolf", "cub"])).toBe(0);
+  });
+
+  test("never two cubs in a composition", () => {
+    for (const playerCount of [7, 8, 10, 14, 20]) {
+      for (let seed = 0; seed < 2000; seed += 1) {
+        const roles = composeBalancedGame({ playerCount, seed: `find-${seed}` });
+        expect(roles.filter((role) => role === "cub").length).toBeLessThanOrEqual(1);
+      }
+    }
+  }, 30000);
+
+  test("cub never appears below 7 players", () => {
+    for (const playerCount of [5, 6]) {
+      for (let seed = 0; seed < 2000; seed += 1) {
+        const roles = composeBalancedGame({ playerCount, seed: `find-${seed}` });
+        expect(roles).not.toContain("cub");
+      }
+    }
   });
 
   test("alpha_wolf never appears in a 9-player composition", () => {

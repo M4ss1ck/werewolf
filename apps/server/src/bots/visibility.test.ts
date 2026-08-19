@@ -14,6 +14,16 @@ function playersWith(state: GameState, predicate: (role: string) => boolean): Us
     .map((player) => player.id);
 }
 
+/** The pack is a FACTION, not the "werewolf" role: a cub or an alpha is in it
+ * too, and the composer replaces a plain wolf with them. Keying this on the
+ * role would silently stop finding a pack the moment another wolf role is
+ * dealt. */
+function packMembers(state: GameState): UserId[] {
+  return Object.values(state.players)
+    .filter((player) => player.faction === "wolves")
+    .map((player) => player.id);
+}
+
 function kinds(input: BotDecisionInput): string[] {
   return input.visibleEvents.map((event) => event.kind);
 }
@@ -50,7 +60,7 @@ describe("bot player visibility", () => {
     // Six seats guarantee two wolves, so there is a pack to learn about.
     const gameId = await harness.startBotGame(7);
     const state = await harness.state(gameId);
-    const wolves = playersWith(state, (role) => role === "werewolf");
+    const wolves = packMembers(state);
     expect(wolves.length).toBeGreaterThan(1);
 
     for (const wolf of wolves) {
@@ -62,7 +72,10 @@ describe("bot player visibility", () => {
       // Wolf chat is a channel only the pack may address.
       expect(input.speakableChannels).toContain("wolves");
     }
-    for (const villager of playersWith(state, (role) => role !== "werewolf")) {
+    const pack = new Set(packMembers(state));
+    for (const villager of Object.values(state.players)
+      .filter((player) => !pack.has(player.id))
+      .map((player) => player.id)) {
       const input = agent.forPlayer(villager)[0]!;
       expect(kinds(input)).not.toContain("wolves.member_joined");
       expect(input.speakableChannels).not.toContain("wolves");

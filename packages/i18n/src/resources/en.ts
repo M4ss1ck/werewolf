@@ -86,6 +86,10 @@ export const en = {
       description:
         "On the first night, bonds to one player. If they are ever attacked, you die in their place.",
     },
+    cub: {
+      name: "Cub",
+      description: "A young wolf with no special power: you hunt with the pack and win with it.",
+    },
   },
   factions: {
     village: "Village",
