@@ -106,6 +106,7 @@ export const availableSpecialRoles: readonly RoleId[] = [
   "sorcerer",
   "detective",
   "cult_leader",
+  "lone_wolf",
 ];
 
 export interface Preset {

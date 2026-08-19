@@ -5,6 +5,7 @@ import {
   composeBalancedGame,
   isValidComposition,
   presets,
+  roleAvailabilityMinimums,
 } from "../index.ts";
 
 /** Roles added by the roster expansion; a classic composition must never
@@ -80,6 +81,28 @@ describe("composition presets", () => {
       }
       expect(found).toBe(true);
     }
+  });
+
+  test("every role with an availability minimum is in availableSpecialRoles", () => {
+    // A role can only be dealt if it is in the pool. Declaring a minimum player
+    // count for a role the composer never draws is a role nobody can play.
+    for (const role of Object.keys(roleAvailabilityMinimums) as RoleId[]) {
+      expect(availableSpecialRoles).toContain(role);
+    }
+  });
+
+  test("a chaos composition may contain lone_wolf", () => {
+    let found = false;
+    for (let seed = 0; seed < 2000; seed += 1) {
+      const roles = composeBalancedGame({ playerCount: 14, seed: `seed-${seed}`, preset: "chaos" });
+      if (roles.includes("lone_wolf")) {
+        // The Lone Wolf is a dead seat without an Alpha to hunt.
+        expect(roles).toContain("alpha_wolf");
+        found = true;
+        break;
+      }
+    }
+    expect(found).toBe(true);
   });
 
   test("cultist is never dealt by any preset", () => {
