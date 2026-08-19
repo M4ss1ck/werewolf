@@ -4,4 +4,6 @@ export const alphaWolf: RoleDefinition = {
   startingFaction: "wolves",
   createState: () => ({}),
   composition: { minimumPlayers: 10, replacesWolf: true },
+  channels: ["wolves"],
+  packMember: true,
 };

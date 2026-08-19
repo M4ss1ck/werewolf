@@ -1,6 +1,12 @@
-import type { FactionId, RoleId, UserId } from "@werewolf/protocol";
+import type { ChatChannel, FactionId, RoleId, UserId } from "@werewolf/protocol";
+import { ROLE_IDS } from "@werewolf/protocol";
 import type { ActionSpec } from "./action-spec.ts";
 import type { RoleComposition } from "./composition.ts";
+
+/** The chat channels a role can be a member of. Derived from the protocol's
+ * vocabulary so renaming a channel there breaks here rather than silently
+ * leaving a role in a channel that no longer exists. */
+type FactionChannel = Extract<ChatChannel, "wolves" | "cult">;
 
 export interface DaySelectionContext<State = unknown> {
   playerId: UserId;
@@ -24,6 +30,15 @@ export interface RoleDefinition<State = unknown> {
    * attack is declared on `werewolf` and located via pack membership, not
    * here. */
   actions?: readonly ActionSpec[];
+  /** The chat channels this role may read and write. Membership is by ROLE,
+   * not faction: a wolf-faction role may be denied the channel. Only the
+   * faction channels are role-gated; `public` and `grave` are decided by
+   * status, so declaring one here would mean nothing. */
+  channels?: readonly FactionChannel[];
+  /** True when the role is one of the pack: a seat in the wolf ballot, wolf
+   * chat, the nightly hunt. Membership is by ROLE, not faction — the sorcerer
+   * is wolf-faction but never one of the pack. */
+  packMember?: boolean;
   onDaySelected?(ctx: DaySelectionContext<State>): RoleEffect[];
 }
 
@@ -83,22 +98,22 @@ export function getRoleDefinition(role: RoleId): RoleDefinition {
 
 /** Roles that may read and write the wolves chat channel. Membership is by
  * ROLE, not faction: a wolf-faction role may be denied the channel. */
-export const WOLF_CHAT_ROLES: ReadonlySet<RoleId> = new Set<RoleId>([
-  "werewolf",
-  "alpha_wolf",
-  "cub",
-]);
+export const WOLF_CHAT_ROLES: ReadonlySet<RoleId> = new Set(
+  ROLE_IDS.filter((role) => roleRegistry[role].channels?.includes("wolves")),
+);
 
 /** True when the player is one of the pack: a seat in the wolf ballot, wolf
  * chat, the nightly hunt. Membership is by ROLE, not faction — the sorcerer is
  * wolf-faction but never one of the pack. */
 export function isPackMember(player: { role: RoleId | null }): boolean {
-  return player.role !== null && WOLF_CHAT_ROLES.has(player.role);
+  return player.role !== null && roleRegistry[player.role].packMember === true;
 }
 
 /** Roles that may read and write the cult chat channel. Membership is by ROLE,
  * not faction: only the leader and converted cultists are in the cult. */
-export const CULT_CHAT_ROLES: ReadonlySet<RoleId> = new Set<RoleId>(["cult_leader", "cultist"]);
+export const CULT_CHAT_ROLES: ReadonlySet<RoleId> = new Set(
+  ROLE_IDS.filter((role) => roleRegistry[role].channels?.includes("cult")),
+);
 
 /** True when the player is a member of the cult: a seat in the cult chat. The
  * cult leader starts in it; everyone else got there by conversion. */

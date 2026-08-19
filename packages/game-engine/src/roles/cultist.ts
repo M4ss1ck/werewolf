@@ -3,4 +3,5 @@ export const cultist: RoleDefinition = {
   id: "cultist",
   startingFaction: "cult",
   createState: () => ({}),
+  channels: ["cult"],
 };

@@ -5,6 +5,8 @@ export const werewolf: RoleDefinition = {
   id: "werewolf",
   startingFaction: "wolves",
   createState: () => ({}),
+  channels: ["wolves"],
+  packMember: true,
   actions: [
     {
       id: "wolf.attack",

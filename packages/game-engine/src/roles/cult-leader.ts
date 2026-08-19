@@ -5,6 +5,7 @@ export const cultLeader: RoleDefinition = {
   startingFaction: "cult",
   createState: () => ({}),
   composition: { minimumPlayers: 9 },
+  channels: ["cult"],
   actions: [
     {
       id: "cult.convert",

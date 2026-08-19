@@ -4,4 +4,6 @@ export const cub: RoleDefinition = {
   startingFaction: "wolves",
   createState: () => ({}),
   composition: { minimumPlayers: 7, replacesWolf: true },
+  channels: ["wolves"],
+  packMember: true,
 };
