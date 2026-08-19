@@ -99,3 +99,7 @@ export const GameVisibilitySchema = z.enum(GAME_VISIBILITIES);
 export const CONVERSION_CAUSES = ["cursed", "alpha_wolf", "cult", "alpha_dead"] as const;
 export type ConversionCause = (typeof CONVERSION_CAUSES)[number];
 export const ConversionCauseSchema = z.enum(CONVERSION_CAUSES);
+
+export const PRESET_IDS = ["classic", "chaos", "cult"] as const;
+export type PresetId = (typeof PRESET_IDS)[number];
+export const PresetIdSchema = z.enum(PRESET_IDS);

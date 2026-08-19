@@ -10,6 +10,7 @@ import type {
   GameStatus,
   PhaseId,
   PlayerController,
+  PresetId,
   RoleId,
   UserId,
   VictoryReason,
@@ -21,6 +22,8 @@ export interface GameSettings {
   nightDurationMs: number;
   visibility?: "public" | "private";
   spectatingEnabled?: boolean;
+  /** The composition preset the host picked. Omitted means "classic". */
+  preset?: PresetId;
 }
 
 export type StoredVote = { type: "player"; targetId: UserId } | { type: "abstain" };

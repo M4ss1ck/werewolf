@@ -119,7 +119,14 @@ function makeLobby(count: number): GameState {
     day: 0,
     phase: null,
     players: players as GameState["players"],
-    settings: { discussionDurationMs: 10, votingDurationMs: 20, nightDurationMs: 30 },
+    // Written against the full role pool, which is now the "chaos" preset; the
+    // default ("classic") never deals a Sorcerer.
+    settings: {
+      discussionDurationMs: 10,
+      votingDurationMs: 20,
+      nightDurationMs: 30,
+      preset: "chaos",
+    },
     balanceVersion: 1,
     nightsWithoutElimination: 0,
     winner: null,

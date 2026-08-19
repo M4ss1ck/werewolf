@@ -88,6 +88,7 @@ export function projectSnapshot(
       settings: {
         visibility: state.settings.visibility ?? "public",
         spectatingEnabled: state.settings.spectatingEnabled ?? true,
+        ...(state.settings.preset ? { preset: state.settings.preset } : {}),
         durations: {
           discussion: state.settings.discussionDurationMs / 1000,
           voting: state.settings.votingDurationMs / 1000,

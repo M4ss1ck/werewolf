@@ -124,6 +124,20 @@ export const en = {
     cult: "The Cult",
     lone_wolf: "The Lone Wolf",
   },
+  presets: {
+    classic: {
+      name: "Classic",
+      description: "The classic village: the familiar roster, no surprises.",
+    },
+    chaos: {
+      name: "Chaos",
+      description: "Every role in the game is in play. Anything can happen.",
+    },
+    cult: {
+      name: "Cult",
+      description: "A cult leader is among you, and the village has the tools to fight back.",
+    },
+  },
   phases: {
     discussion: "Discussion",
     voting: "Voting",

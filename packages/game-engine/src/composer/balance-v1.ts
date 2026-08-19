@@ -1,4 +1,4 @@
-import type { RoleId } from "@werewolf/protocol";
+import type { PresetId, RoleId } from "@werewolf/protocol";
 
 export const BALANCE_V1 = 1 as const;
 
@@ -107,3 +107,53 @@ export const availableSpecialRoles: readonly RoleId[] = [
   "detective",
   "cult_leader",
 ];
+
+export interface Preset {
+  /** The pool this preset draws its special roles from. */
+  readonly specialRoles: readonly RoleId[];
+  /** Roles that MUST appear. A themed preset whose theme may not show up is
+   * not a theme. */
+  readonly guaranteed: readonly RoleId[];
+}
+
+export const presets: Readonly<Record<PresetId, Preset>> = {
+  // The roster as it was before the roster expansion: a new player's first
+  // game is the village they expect rather than a random draw from twenty.
+  classic: {
+    specialRoles: [
+      "seer",
+      "harlot",
+      "princess",
+      "hunter",
+      "cursed",
+      "mason",
+      "veteran",
+      "serial_killer",
+      "alpha_wolf",
+    ],
+    guaranteed: [],
+  },
+  // Every role the composer may ever deal.
+  chaos: {
+    specialRoles: availableSpecialRoles,
+    guaranteed: [],
+  },
+  // The cult leader plus a village able to fight back; the werewolf side
+  // stays as the composer decides.
+  cult: {
+    specialRoles: [
+      "cult_leader",
+      "seer",
+      "priest",
+      "guardian",
+      "detective",
+      "hunter",
+      "mason",
+      "princess",
+      "drunk",
+      "mayor",
+      "cupid",
+    ],
+    guaranteed: ["cult_leader"],
+  },
+};

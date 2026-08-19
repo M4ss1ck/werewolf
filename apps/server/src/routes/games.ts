@@ -1,4 +1,5 @@
 import type { GameId, UserId } from "@werewolf/protocol";
+import { PresetIdSchema } from "@werewolf/protocol";
 import type { Context } from "hono";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -16,6 +17,7 @@ const gameBody = z.object({
       votingDurationMs: z.number().int().nonnegative().default(60_000),
       nightDurationMs: z.number().int().nonnegative().default(60_000),
       spectatingEnabled: z.boolean().default(true),
+      preset: PresetIdSchema.optional(),
     })
     .default({
       discussionDurationMs: 60_000,

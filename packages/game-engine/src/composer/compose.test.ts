@@ -18,9 +18,10 @@ function findCompositionWith(
   playerCount: number,
   role: RoleId,
   exclude: readonly RoleId[] = [],
+  preset: "classic" | "chaos" | "cult" = "classic",
 ): RoleId[] {
   for (let seed = 0; seed < 2000; seed += 1) {
-    const roles = composeBalancedGame({ playerCount, seed: `find-${seed}` });
+    const roles = composeBalancedGame({ playerCount, seed: `find-${seed}`, preset });
     if (roles.includes(role) && !exclude.some((excluded) => roles.includes(excluded))) return roles;
   }
   throw new Error(`no composition with ${role} for ${playerCount} players`);
@@ -109,13 +110,14 @@ describe("balance-v1 role composer", () => {
   });
 
   test("a composition containing cub has one fewer plain werewolf", () => {
-    const roles = findCompositionWith(10, "cub", ["alpha_wolf"]);
+    // Cub is a roster-expansion role, so it only appears under the chaos preset.
+    const roles = findCompositionWith(10, "cub", ["alpha_wolf"], "chaos");
     expect(roles.filter((role) => role === "werewolf")).toHaveLength(getStartingWolfCount(10) - 1);
   });
 
   test("a composition containing both alpha_wolf and cub has two fewer plain werewolves", () => {
     for (let seed = 0; seed < 2000; seed += 1) {
-      const roles = composeBalancedGame({ playerCount: 10, seed: `find-${seed}` });
+      const roles = composeBalancedGame({ playerCount: 10, seed: `find-${seed}`, preset: "chaos" });
       if (roles.includes("alpha_wolf") && roles.includes("cub")) {
         expect(roles.filter((role) => role === "werewolf")).toHaveLength(
           getStartingWolfCount(10) - 2,

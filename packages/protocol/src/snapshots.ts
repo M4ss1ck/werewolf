@@ -12,6 +12,7 @@ import type {
   GamePlayerStatus,
   GameStatus,
   GameVisibility,
+  PresetId,
   RoleId,
 } from "./enums.ts";
 import {
@@ -21,6 +22,7 @@ import {
   GamePlayerStatusSchema,
   GameStatusSchema,
   GameVisibilitySchema,
+  PresetIdSchema,
   RoleIdSchema,
 } from "./enums.ts";
 import type { VictoryReason } from "./events.ts";
@@ -32,6 +34,8 @@ export interface ViewerGameSettings {
   visibility: GameVisibility;
   /** Whether spectators are allowed after the game starts. */
   spectatingEnabled: boolean;
+  /** The composition preset the host picked. Omitted means "classic". */
+  preset?: PresetId;
   /** Phase durations in seconds. */
   durations: {
     discussion: number;
@@ -147,6 +151,7 @@ export const ViewerGameSnapshotSchema = z.object({
     settings: z.object({
       visibility: GameVisibilitySchema,
       spectatingEnabled: z.boolean(),
+      preset: PresetIdSchema.optional(),
       durations: z.object({
         discussion: z.number(),
         voting: z.number(),

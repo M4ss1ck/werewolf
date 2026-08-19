@@ -122,6 +122,21 @@ export const es: TranslationResource = {
     cult: "El Culto",
     lone_wolf: "El Lobo Solitario",
   },
+  presets: {
+    classic: {
+      name: "Clásico",
+      description: "La aldea clásica: los roles de siempre, sin sorpresas.",
+    },
+    chaos: {
+      name: "Caos",
+      description: "Todos los roles del juego están en juego. Puede pasar cualquier cosa.",
+    },
+    cult: {
+      name: "Culto",
+      description:
+        "Un líder de culto se oculta entre vosotros y la aldea tiene con qué defenderse.",
+    },
+  },
   phases: {
     discussion: "Discusión",
     voting: "Votación",

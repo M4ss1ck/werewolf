@@ -33,6 +33,7 @@ export function startGame(state: GameState, context: PhaseContext): DomainResult
     playerCount: players.length,
     seed: context.seed,
     balanceVersion: state.balanceVersion,
+    ...(state.settings.preset ? { preset: state.settings.preset } : {}),
   });
   const shuffledRoles = shuffle(roles, new SeededRng(context.seed).derive("assignment"));
   const drunkRng = new SeededRng(context.seed).derive("assignment:drunk:perceived");
