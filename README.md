@@ -229,3 +229,44 @@ One container, one replica, built from the committed `Dockerfile` and
 `docker-compose.yml`. No Nixpacks, no Redis, no local DB container, no sidecars.
 The single replica is a hard constraint while the game hub, the per-game locks
 and event fanout live in-process.
+
+## Releasing
+
+Releases are cut locally with `scripts/release.sh`. The root `package.json` is
+the single source of truth for the version; the script keeps every other version
+file in sync so a Tauri build never rewrites `Cargo.lock` mid-CI.
+
+```bash
+# Preview what would happen (no changes made)
+./scripts/release.sh 0.1.1 --dry-run
+
+# Cut the release
+./scripts/release.sh 0.1.1
+```
+
+What it does:
+
+1. Ensures you are on a `release/v<version>` branch, creating it if needed.
+2. Bumps the version via `scripts/bump-version.sh` across `package.json`,
+   `apps/client/src-tauri/tauri.conf.json`, `apps/client/src-tauri/Cargo.toml`
+   and the `app` entry in `apps/client/src-tauri/Cargo.lock`. Workspace members
+   (`apps/client/package.json`, `packages/*/package.json`) are private and stay
+   at `0.0.0`.
+3. Generates a `CHANGELOG.md` section for the commits since the last tag.
+4. Commits the bump + changelog, creates the `v<version>` tag, and (after a
+   confirmation) pushes the branch and the tag.
+
+There is no git remote yet, so the push step is skipped with a warning and the
+local commit and tag are left intact.
+
+### AI-assisted changelog (optional)
+
+The changelog can be written by an AI model. This is entirely optional — with no
+configuration the script falls back to a grouped list of commit messages and
+never errors out. Configure it via a local `.env` file (git-ignored; copy
+`.env.example` to get started). The release script reuses the existing bot
+provider (`BOT_AI_BASE_URL` and `BOT_AI_API_KEY`); the only new variable is
+`CHANGELOG_AI_MODEL`, the model id to use. Leave it empty to fall back to the
+grouped commit list.
+
+Use `--dry-run` to preview the generated changelog before committing anything.
