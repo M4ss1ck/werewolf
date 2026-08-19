@@ -5,4 +5,5 @@ export const priest: RoleDefinition<{ lastProtectedId: UserId | null }> = {
   id: "priest",
   startingFaction: "village",
   createState: () => ({ lastProtectedId: null }),
+  composition: { minimumPlayers: 7, drunkMayBelieve: true },
 };

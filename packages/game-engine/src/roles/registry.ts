@@ -1,9 +1,6 @@
-import type { AvailableAction, FactionId, RoleId, UserId } from "@werewolf/protocol";
+import type { FactionId, RoleId, UserId } from "@werewolf/protocol";
+import type { RoleComposition } from "./composition.ts";
 
-export interface RoleActionContext<State = unknown> {
-  playerId: UserId;
-  state: State;
-}
 export interface DaySelectionContext<State = unknown> {
   playerId: UserId;
   state: State;
@@ -19,7 +16,9 @@ export interface RoleDefinition<State = unknown> {
   id: RoleId;
   startingFaction: FactionId;
   createState(): State;
-  getAvailableActions?(ctx: RoleActionContext<State>): AvailableAction[];
+  /** How the composer may deal this role. Absent means never dealt: a fill
+   * role, or one reached only by conversion. */
+  composition?: RoleComposition;
   onDaySelected?(ctx: DaySelectionContext<State>): RoleEffect[];
 }
 

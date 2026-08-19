@@ -1,4 +1,6 @@
 import type { RoleId } from "@werewolf/protocol";
+import { ROLE_IDS } from "@werewolf/protocol";
+import { maximumCopies, NEVER_DEALT } from "../roles/composition.ts";
 import {
   forbiddenCombinations,
   minimumVanillaVillagers,
@@ -11,30 +13,13 @@ export function hasRole(roles: readonly RoleId[], role: RoleId): boolean {
 }
 
 export function hasValidSpecialCardinality(roles: readonly RoleId[]): boolean {
-  const masons = roles.filter((role) => role === "mason").length;
-  if (masons !== 0 && masons !== 2) return false;
-  return (
-    [
-      "seer",
-      "harlot",
-      "princess",
-      "hunter",
-      "cursed",
-      "veteran",
-      "serial_killer",
-      "alpha_wolf",
-      "drunk",
-      "mayor",
-      "cupid",
-      "priest",
-      "guardian",
-      "cub",
-      "sorcerer",
-      "detective",
-      "cult_leader",
-      "lone_wolf",
-    ] as const
-  ).every((role) => roles.filter((candidate) => candidate === role).length <= 1);
+  return ROLE_IDS.every((role) => {
+    const dealt = roles.filter((candidate) => candidate === role).length;
+    if (NEVER_DEALT.has(role)) return true;
+    const allowed = maximumCopies(role);
+    // A role dealt in pairs is dealt as a full pair or not at all.
+    return dealt === 0 || dealt === allowed;
+  });
 }
 
 export function hasAvailableRoles(roles: readonly RoleId[], playerCount: number): boolean {

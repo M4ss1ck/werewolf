@@ -7,6 +7,7 @@ export const cupid: RoleDefinition<{ linked: [UserId, UserId] | null }> = {
   id: "cupid",
   startingFaction: "village",
   createState: () => ({ linked: null }),
+  composition: { minimumPlayers: 8, drunkMayBelieve: true },
 };
 
 function isCupidUnlinked(value: unknown): boolean {

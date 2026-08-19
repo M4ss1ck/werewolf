@@ -5,4 +5,5 @@ export const drunk: RoleDefinition<{ perceivedRole: RoleId | null }> = {
   id: "drunk",
   startingFaction: "village",
   createState: () => ({ perceivedRole: null }),
+  composition: { minimumPlayers: 7 },
 };

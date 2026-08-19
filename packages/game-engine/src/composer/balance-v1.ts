@@ -1,4 +1,13 @@
 import type { PresetId, RoleId } from "@werewolf/protocol";
+import { availableSpecialRoles, WOLF_REPLACING_ROLES } from "../roles/composition.ts";
+
+export {
+  availableSpecialRoles,
+  DRUNK_FAKE_ROLES,
+  requiredCombinations,
+  roleAvailabilityMinimums,
+  WOLF_REPLACING_ROLES,
+} from "../roles/composition.ts";
 
 export const BALANCE_V1 = 1 as const;
 
@@ -27,51 +36,12 @@ export const specialSlotWeights = [
   { maximumPlayers: Number.POSITIVE_INFINITY, weights: { 2: 1, 3: 2, 4: 3, 5: 3, 6: 2, 7: 1 } },
 ] as const;
 
-export const roleAvailabilityMinimums: Partial<Record<RoleId, number>> = {
-  cursed: 6,
-  hunter: 7,
-  drunk: 7,
-  mason: 8,
-  alpha_wolf: 10,
-  mayor: 8,
-  cupid: 8,
-  priest: 7,
-  guardian: 7,
-  cub: 7,
-  sorcerer: 8,
-  detective: 7,
-  cult_leader: 9,
-  lone_wolf: 10,
-};
-
-/** Roles a Drunk may believe they are. Restricted to roles whose output is
- * PRIVATE information only: a publicly observable power (revealing, linking)
- * would out the Drunk the first time they used it. More are added as those
- * roles land. */
-export const DRUNK_FAKE_ROLES: readonly RoleId[] = [
-  "seer",
-  "cupid",
-  "priest",
-  "guardian",
-  "detective",
-];
-
 export const forbiddenCombinations: readonly (readonly RoleId[])[] = [["seer", "princess"]];
-
-/** Roles that cannot be dealt unless their prerequisite is also dealt. */
-export const requiredCombinations: readonly (readonly [RoleId, RoleId])[] = [
-  ["lone_wolf", "alpha_wolf"],
-];
 
 export function getStartingWolfCount(players: number): number {
   if (players < 5) throw new Error("Minimum 5 players");
   return Math.max(1, Math.floor((players + 1) / 4));
 }
-
-/** Specials that replace a plain wolf in the pack: each one present subtracts
- * one from the starting wolf count, so an extra body with no ability cannot
- * buff the strongest faction. */
-export const WOLF_REPLACING_ROLES = ["alpha_wolf", "cub"] as const;
 
 export function wolfCountForComposition(playerCount: number, specials: readonly RoleId[]): number {
   if (playerCount === 5 && specials.includes("serial_killer")) return 0;
@@ -86,28 +56,6 @@ export function minimumVanillaVillagers(playerCount: number): number {
 export function getSpecialSlotWeights(playerCount: number): Readonly<Record<number, number>> {
   return specialSlotWeights.find((entry) => playerCount <= entry.maximumPlayers)!.weights;
 }
-
-export const availableSpecialRoles: readonly RoleId[] = [
-  "seer",
-  "harlot",
-  "princess",
-  "hunter",
-  "cursed",
-  "mason",
-  "veteran",
-  "serial_killer",
-  "alpha_wolf",
-  "drunk",
-  "mayor",
-  "cupid",
-  "priest",
-  "guardian",
-  "cub",
-  "sorcerer",
-  "detective",
-  "cult_leader",
-  "lone_wolf",
-];
 
 export interface Preset {
   /** The pool this preset draws its special roles from. */

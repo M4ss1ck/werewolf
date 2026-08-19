@@ -5,4 +5,5 @@ export const guardian: RoleDefinition<{ protegeeId: UserId | null }> = {
   id: "guardian",
   startingFaction: "village",
   createState: () => ({ protegeeId: null }),
+  composition: { minimumPlayers: 7, drunkMayBelieve: true },
 };

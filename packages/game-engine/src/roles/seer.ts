@@ -3,4 +3,5 @@ export const seer: RoleDefinition = {
   id: "seer",
   startingFaction: "village",
   createState: () => ({}),
+  composition: { drunkMayBelieve: true },
 };

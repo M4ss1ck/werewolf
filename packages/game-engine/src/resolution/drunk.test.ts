@@ -255,9 +255,13 @@ describe("determinism", () => {
 
   test("a game seeded identically produces the same role shuffle as before this change", () => {
     // Seed 9 at 8 players composes to a fixed role list; pinning it here
-    // catches a reordered or reused `assignment` derive call. The pool gained
-    // the Detective since this was last pinned, so the composition for seed 9
-    // moved ("veteran" became "serial_killer"); the shuffle itself is stable.
+    // catches a reordered or reused `assignment` derive call. The composition
+    // for seed 9 moves whenever the special-role pool changes, because the
+    // pool's ORDER decides which candidate a draw lands on: it gained the
+    // Detective once ("veteran" became "serial_killer"), and now that
+    // availableSpecialRoles derives from ROLE_IDS rather than a hand-written
+    // list it has moved back. Only that one seat differs; the shuffle itself
+    // is stable, which is the property this test exists to protect.
     const result = startGame(makeLobby(8), { now: 100, seed: 9 });
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.code);
@@ -267,7 +271,7 @@ describe("determinism", () => {
       "werewolf",
       "villager",
       "werewolf",
-      "serial_killer",
+      "veteran",
       "villager",
       "villager",
       "villager",

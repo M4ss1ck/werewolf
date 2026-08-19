@@ -3,4 +3,5 @@ export const harlot: RoleDefinition = {
   id: "harlot",
   startingFaction: "village",
   createState: () => ({}),
+  composition: {},
 };

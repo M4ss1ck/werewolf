@@ -6,6 +6,7 @@ export const princess: RoleDefinition<PrincessState> = {
   id: "princess",
   startingFaction: "village",
   createState: () => ({ lynchProtectionUsed: false }),
+  composition: {},
   onDaySelected: ({ state }) =>
     state.lynchProtectionUsed
       ? []

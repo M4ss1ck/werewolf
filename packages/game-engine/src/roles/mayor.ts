@@ -9,4 +9,5 @@ export const mayor: RoleDefinition<{
   id: "mayor",
   startingFaction: "village",
   createState: () => ({ used: false, overrideDay: null, overrideTarget: null }),
+  composition: { minimumPlayers: 8 },
 };

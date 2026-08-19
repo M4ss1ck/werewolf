@@ -19,5 +19,6 @@ export * from "./resolution/phase.ts";
 export * from "./resolution/victory.ts";
 export * from "./resolution/vote.ts";
 export * from "./rng/rng.ts";
+export * from "./roles/composition.ts";
 export * from "./roles/registry.ts";
 export * from "./state.ts";
