@@ -189,7 +189,6 @@ test("a game that finishes while it is open swaps to the game-over screen", asyn
     me: { userId: "wren" as UserId, status: "alive", role: "villager" },
     availableActions: [],
     availableChannels: ["public"],
-    progress: { acted: 0, eligible: 4 },
     cursor: 0 as EventId,
     serverNow: 5000,
   };
@@ -222,7 +221,6 @@ test("a game that finishes while it is open swaps to the game-over screen", asyn
     me: { userId: "wren" as UserId, status: "alive", role: "villager" },
     availableActions: [],
     availableChannels: ["public"],
-    progress: { acted: 4, eligible: 4 },
     cursor: 1 as EventId,
     serverNow: 6000,
   };

@@ -200,7 +200,7 @@ export class BotManager {
         this.pool.run(() => this.options.agent.decide(input)),
         this.pause(decisionId),
       ]);
-      await this.submit(gameId, playerId, phaseId, decisionId, decision, input, startedAt);
+      await this.submit(gameId, playerId, phaseId, decisionId, decision, input, startedAt, turn);
     } finally {
       record.inFlight.delete(playerId);
     }
@@ -250,6 +250,7 @@ export class BotManager {
     decision: BotDecision,
     input: BotDecisionInput,
     startedAt: number,
+    turn: number,
   ): Promise<void> {
     // A model call can outlive the phase it was made for. Re-read the
     // authoritative state before touching the command path: a late night
@@ -279,6 +280,25 @@ export class BotManager {
         ...action,
         commandId: `${decisionId}:action`,
       } as GameplayCommand);
+    // Readying is a mechanical consequence of having decided, not a strategic
+    // choice the model weighs. It is sent after the action so the action is
+    // stored before the ready can end the phase.
+    //
+    // Only on the bot's LAST turn of the phase, though: readying after every
+    // decision would end the phase at its floor the moment every bot had spoken
+    // once, and no bot would ever earn the reply turn that makes a discussion a
+    // discussion. A bot with budget left holds the phase to its hard deadline,
+    // which is exactly the old behaviour.
+    const moreTurnsPossible =
+      (input.phase === "discussion" || input.phase === "voting") &&
+      turn + 1 < this.options.config.BOT_CHAT_TURNS;
+    if (!moreTurnsPossible)
+      await this.send(decisionId, gameId, playerId, {
+        commandId: `${decisionId}:ready`,
+        phaseId,
+        type: "phase.ready",
+        payload: { ready: true },
+      });
     this.log("acted", {
       decisionId,
       gameId,

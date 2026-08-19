@@ -1,4 +1,6 @@
 import type { GameplayCommand, UserId } from "@werewolf/protocol";
+import { PHASE_MINIMUM_FRACTION } from "../composer/balance-v1.ts";
+import { phaseDurationMs } from "../resolution/phase.ts";
 import type { DomainResult, GameState } from "../state.ts";
 import { type CommandContext, validateCommand } from "./validate.ts";
 
@@ -30,9 +32,13 @@ export function applyCommand(
   }
   if (command.type === "night.action.set" || command.type === "night.action.clear") {
     const player = state.players[actorId]!;
-    const stored =
-      player.phaseState.phaseId === command.phaseId ? (player.phaseState.actions ?? {}) : {};
-    const actions = { ...stored };
+    // Merge into the existing phase state so a vote or ready stored for this
+    // phase survives; start from a fresh object when the phase changed.
+    const base =
+      player.phaseState.phaseId === command.phaseId
+        ? player.phaseState
+        : { phaseId: command.phaseId };
+    const actions = { ...(base.actions ?? {}) };
     if (command.type === "night.action.clear") {
       delete actions[command.payload.action];
     } else {
@@ -49,7 +55,7 @@ export function applyCommand(
         playerPatches: [
           {
             playerId: actorId,
-            changes: { phaseState: { phaseId: command.phaseId, actions } },
+            changes: { phaseState: { ...base, actions } },
           },
         ],
         events: [],
@@ -57,8 +63,45 @@ export function applyCommand(
       },
     };
   }
+  if (command.type === "phase.ready") {
+    const player = state.players[actorId]!;
+    const base =
+      player.phaseState.phaseId === command.phaseId
+        ? player.phaseState
+        : { phaseId: command.phaseId };
+    const phaseState = { ...base, ready: command.payload.ready };
+    const phase = state.phase!;
+    const duration = phaseDurationMs(phase.type, state.settings);
+    const fullEndsAt = phase.startedAt + duration;
+    const floorEndsAt = phase.startedAt + Math.round(duration * PHASE_MINIMUM_FRACTION);
+    // Project the state with this command applied: the actor's new ready value
+    // must count, or the last player to ready could never end the phase.
+    const everyoneReady = Object.values(state.players)
+      .filter((player) => player.status === "alive")
+      .every((player) => {
+        const projected = player.id === actorId ? phaseState : player.phaseState;
+        return projected.phaseId === phase.id && projected.ready === true;
+      });
+    const endsAt = everyoneReady
+      ? Math.min(fullEndsAt, Math.max(context.now, floorEndsAt))
+      : fullEndsAt;
+    return {
+      ok: true,
+      transition: {
+        gamePatch: { phase: { ...phase, endsAt } },
+        playerPatches: [{ playerId: actorId, changes: { phaseState } }],
+        events: [],
+        ephemeral: [],
+      },
+    };
+  }
   if (command.type !== "vote.set" && command.type !== "vote.abstain")
     return { ok: false, error: { code: "ACTION_NOT_AVAILABLE" } };
+  const player = state.players[actorId]!;
+  const base =
+    player.phaseState.phaseId === command.phaseId
+      ? player.phaseState
+      : { phaseId: command.phaseId };
   return {
     ok: true,
     transition: {
@@ -67,7 +110,7 @@ export function applyCommand(
           playerId: actorId,
           changes: {
             phaseState: {
-              phaseId: command.phaseId,
+              ...base,
               vote:
                 command.type === "vote.set"
                   ? { type: "player", targetId: command.payload.targetId }

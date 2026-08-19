@@ -67,7 +67,6 @@ function makeSnapshot(cursor: number): ViewerGameSnapshot {
     players: [],
     availableActions: [],
     availableChannels: ["public"],
-    progress: { acted: 0, eligible: 0 },
     cursor: cursor as EventId,
     serverNow: 1000,
   };

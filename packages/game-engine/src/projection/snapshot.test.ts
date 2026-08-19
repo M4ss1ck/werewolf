@@ -243,3 +243,36 @@ describe("voting tallies", () => {
     expect(snapshot).not.toHaveProperty("voteTallies");
   });
 });
+
+describe("readiness projection", () => {
+  test("the snapshot no longer carries progress", () => {
+    const snapshot = projectSnapshot(makeState(), id("seer"));
+    expect(snapshot).not.toHaveProperty("progress");
+  });
+
+  test("me.ready reflects the viewer's own flag and others' readiness appears nowhere", () => {
+    const state = makeState();
+    state.players[id("seer")]!.phaseState = { phaseId: 1 as never, ready: true };
+    state.players[id("wolf")]!.phaseState = { phaseId: 1 as never, ready: true };
+    const snapshot = projectSnapshot(state, id("seer"));
+    expect(snapshot.me?.ready).toBe(true);
+    // No other player's object may carry a ready flag.
+    for (const player of snapshot.players) {
+      expect(player).not.toHaveProperty("ready");
+    }
+  });
+
+  test("me.ready is absent when the viewer is not ready", () => {
+    const state = makeState();
+    state.players[id("seer")]!.phaseState = { phaseId: 1 as never, ready: false };
+    const snapshot = projectSnapshot(state, id("seer"));
+    expect(snapshot.me).not.toHaveProperty("ready");
+  });
+
+  test("me.ready is absent when the viewer's phaseState is stale", () => {
+    const state = makeState();
+    state.players[id("seer")]!.phaseState = { phaseId: 0 as never, ready: true };
+    const snapshot = projectSnapshot(state, id("seer"));
+    expect(snapshot.me).not.toHaveProperty("ready");
+  });
+});

@@ -259,7 +259,11 @@ export const es: TranslationResource = {
     messageLabel: "Mensaje",
     messagePlaceholder: "Di algo",
     chatEmpty: "Aún no hay mensajes: la noche está en calma. Rompe el silencio.",
-    votingProgress: "Progreso de la votación",
+    ready: "Listo",
+    readyState: {
+      ready: "Listo",
+      notReady: "No listo",
+    },
     reconnecting: "Reconectando…",
     spectating: "Estás espectando esta partida.",
     language: "Idioma",

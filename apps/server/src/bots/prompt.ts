@@ -32,6 +32,7 @@ function describeAction(input: BotDecisionInput, action: LegalAction): string {
   if (command.type === "vote.set") return `vote to hang ${nameOf(input, command.payload.targetId)}`;
   if (command.type === "night.action.clear") return "clear your night action";
   if (command.type === "chat.send") return "speak";
+  if (command.type === "phase.ready") return "declare yourself ready";
   const payload = command.payload;
   if (payload.action === "harlot.stay") return "stay home tonight";
   const target = nameOf(input, payload.targetId);

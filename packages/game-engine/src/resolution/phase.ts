@@ -2,7 +2,7 @@ import type { GamePhase, UserId } from "@werewolf/protocol";
 import { composeBalancedGame } from "../composer/compose.ts";
 import { SeededRng } from "../rng/rng.ts";
 import { getRoleDefinition } from "../roles/registry.ts";
-import type { DomainResult, DomainTransition, GameState } from "../state.ts";
+import type { DomainResult, DomainTransition, GameSettings, GameState } from "../state.ts";
 import { resolveNight } from "./night.ts";
 import { resolveDayVote } from "./vote.ts";
 
@@ -10,6 +10,12 @@ export interface PhaseContext {
   now: number;
   seed: string | number;
   rng?: SeededRng;
+}
+
+export function phaseDurationMs(type: GamePhase, settings: GameSettings): number {
+  if (type === "discussion") return settings.discussionDurationMs;
+  if (type === "voting") return settings.votingDurationMs;
+  return settings.nightDurationMs;
 }
 
 const MIN_PLAYERS = 5;

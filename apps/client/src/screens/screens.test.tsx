@@ -111,7 +111,6 @@ function makeGameSnapshot(
     me: { userId: "wren" as UserId, status: "alive", role: "villager" },
     availableActions: [],
     availableChannels: ["public"],
-    progress: { acted: 0, eligible: 4 },
     cursor: 0 as EventId,
     serverNow: 5000,
   };
@@ -349,7 +348,6 @@ test("voting sends vote.set on lock", () => {
   const snapshot = makeGameSnapshot({
     game: { phase: { id: 7 as PhaseId, type: "voting", startedAt: 1000, endsAt: 10_000 } },
     voteTallies: [{ targetId: "odile" as UserId, count: 1 }],
-    progress: { acted: 1, eligible: 4 },
   });
   renderWithI18n(<Act events={[]} send={send} snapshot={snapshot} />);
 
@@ -374,7 +372,6 @@ test("the lock button reports a Locked state once the shown vote is registered",
       currentIntent: { vote: { type: "player", targetId: "mattias" as UserId } },
     },
     voteTallies: [{ targetId: "mattias" as UserId, count: 1 }],
-    progress: { acted: 1, eligible: 4 },
   });
   renderWithI18n(<Act events={[]} send={send} snapshot={snapshot} />);
 
@@ -393,7 +390,6 @@ test("a different local pick than the registered vote keeps the lock enabled", (
       currentIntent: { vote: { type: "player", targetId: "mattias" as UserId } },
     },
     voteTallies: [{ targetId: "mattias" as UserId, count: 1 }],
-    progress: { acted: 1, eligible: 4 },
   });
   renderWithI18n(<Act events={[]} send={vi.fn()} snapshot={snapshot} />);
 
@@ -411,7 +407,6 @@ test("an already-registered abstention locks the button too", () => {
       role: "villager",
       currentIntent: { vote: { type: "abstain" } },
     },
-    progress: { acted: 1, eligible: 4 },
   });
   renderWithI18n(<Act events={[]} send={vi.fn()} snapshot={snapshot} />);
 
@@ -879,7 +874,6 @@ test("the voting screen renders no voter identity", () => {
       { targetId: "odile" as UserId, count: 3 },
       { targetId: "mattias" as UserId, count: 1 },
     ],
-    progress: { acted: 4, eligible: 4 },
   });
   renderWithI18n(<Act events={[]} send={send} snapshot={snapshot} />);
 
@@ -980,4 +974,73 @@ test("game over: a veteran win and a serial killer win each render their own tit
   );
   expect(screen.getByRole("heading", { name: "The last one standing" })).toBeInTheDocument();
   expect(screen.getByText("The serial killer outlived everyone.")).toBeInTheDocument();
+});
+
+test("the ready control appears for a living player in a running game and is absent for a dead player", () => {
+  const alive = renderWithI18n(
+    <GameScreen
+      initial={makeGameSnapshot({
+        game: { phase: { id: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 } },
+      })}
+      onUpdate={noopUpdate}
+    />,
+  );
+  expect(screen.getByRole("button", { name: "Ready" })).toBeInTheDocument();
+  alive.unmount();
+
+  renderWithI18n(
+    <GameScreen
+      initial={makeGameSnapshot({
+        game: { phase: { id: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 } },
+        me: { userId: "wren" as UserId, status: "dead", role: "villager" },
+      })}
+      onUpdate={noopUpdate}
+    />,
+  );
+  expect(screen.queryByRole("button", { name: "Ready" })).not.toBeInTheDocument();
+});
+
+test("pressing the ready control posts phase.ready, toggling between ready and not ready", () => {
+  vi.spyOn(api, "postCommand").mockResolvedValue(undefined);
+  const notReady = renderWithI18n(
+    <GameScreen
+      initial={makeGameSnapshot({
+        game: { phase: { id: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 } },
+      })}
+      onUpdate={noopUpdate}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Ready" }));
+  expect(api.postCommand).toHaveBeenCalledWith("g1", {
+    type: "phase.ready",
+    phaseId: 1,
+    payload: { ready: true },
+  });
+  notReady.unmount();
+
+  // Already ready: pressing again posts ready: false.
+  renderWithI18n(
+    <GameScreen
+      initial={makeGameSnapshot({
+        game: { phase: { id: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 } },
+        me: { userId: "wren" as UserId, status: "alive", role: "villager", ready: true },
+      })}
+      onUpdate={noopUpdate}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Ready" }));
+  expect(api.postCommand).toHaveBeenCalledWith("g1", {
+    type: "phase.ready",
+    phaseId: 1,
+    payload: { ready: false },
+  });
+});
+
+test("the vote screen renders no acted/eligible readout", () => {
+  const snapshot = makeGameSnapshot({
+    game: { phase: { id: 7 as PhaseId, type: "voting", startedAt: 1000, endsAt: 10_000 } },
+  });
+  renderWithI18n(<Act events={[]} send={vi.fn()} snapshot={snapshot} />);
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  expect(screen.queryByText(/voted/)).not.toBeInTheDocument();
 });

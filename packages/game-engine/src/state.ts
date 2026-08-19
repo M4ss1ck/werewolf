@@ -27,6 +27,7 @@ export interface StoredPhaseState {
   phaseId: PhaseId;
   vote?: StoredVote;
   actions?: Record<string, { targetId?: UserId }>;
+  ready?: boolean;
 }
 
 export interface PlayerState {

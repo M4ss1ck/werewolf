@@ -57,7 +57,6 @@ function VotingBranch({
   send: Send;
 }) {
   const { t } = useTranslation();
-  const progress = snapshot.progress ?? { acted: 0, eligible: 0 };
   const tallies = new Map(
     (snapshot.voteTallies ?? []).map((tally) => [tally.targetId, tally.count]),
   );
@@ -77,6 +76,9 @@ function VotingBranch({
   const rows = snapshot.players.filter(
     (player) => player.status === "alive" || player.status === "dead",
   );
+  // The tally bar's denominator is the number of living players, which is
+  // public; the old `progress.eligible` told every viewer how many had acted.
+  const eligible = snapshot.players.filter((player) => player.status === "alive").length;
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="screen__scroll flex flex-col gap-4 px-[18px] pb-5">
@@ -84,13 +86,6 @@ function VotingBranch({
           <h2 className="text-2xl font-semibold tracking-[-0.025em] text-paper">
             {t("ui.vote.title")}
           </h2>
-          <span
-            aria-label={t("ui.votingProgress")}
-            className="font-mono text-[13px] text-fog"
-            role="status"
-          >
-            {t("ui.vote.progress", { acted: progress.acted, eligible: progress.eligible })}
-          </span>
         </div>
         <ul className="flex flex-col gap-2.5">
           {rows.map((player) => {
@@ -99,8 +94,7 @@ function VotingBranch({
             const dead = player.status === "dead";
             const count = tallies.get(player.userId) ?? 0;
             const selected = shown?.type === "player" && shown.targetId === player.userId;
-            const width =
-              progress.eligible > 0 ? Math.min(100, (count / progress.eligible) * 100) : 0;
+            const width = eligible > 0 ? Math.min(100, (count / eligible) * 100) : 0;
             return (
               <li key={player.userId}>
                 <button

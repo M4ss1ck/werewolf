@@ -901,6 +901,19 @@ body {
   border: 2px solid rgba(233, 229, 218, 0.3);
 }
 
+.phase-header__ready {
+  @apply inline-flex min-h-10 items-center justify-center gap-1.5 self-start rounded-full border px-4 text-sm font-medium transition-colors;
+  border-color: rgba(233, 229, 218, 0.16);
+  background-color: transparent;
+  color: var(--color-paper-dim);
+}
+
+.phase-header__ready[aria-pressed="true"] {
+  background-color: var(--color-paper);
+  border-color: transparent;
+  color: var(--color-night);
+}
+
 .phase-ticks {
   display: flex;
   gap: 5px;

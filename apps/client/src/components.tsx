@@ -1,4 +1,4 @@
-import type { GamePhase, ViewerGameSnapshot } from "@werewolf/protocol";
+import type { GamePhase, GameplayCommand, ViewerGameSnapshot } from "@werewolf/protocol";
 import type { LucideIcon } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -315,10 +315,21 @@ export function PhaseTicks({ current }: { current: GamePhase }) {
   );
 }
 
-export function PhaseHeader({ snapshot }: { snapshot: ViewerGameSnapshot }) {
+export function PhaseHeader({
+  snapshot,
+  send,
+}: {
+  snapshot: ViewerGameSnapshot;
+  send: (command: Omit<GameplayCommand, "commandId">) => Promise<void>;
+}) {
   const { t } = useTranslation();
   const phase = snapshot.game.phase;
   if (!phase) return null;
+  const me = snapshot.me;
+  // The ready toggle shows only the viewer's own readiness, and only while the
+  // game is live and they are alive. Who else has readied is deliberately
+  // hidden — it is meant to be a matter of suspicion.
+  const showReady = snapshot.game.status === "running" && me?.status === "alive";
   return (
     <div className="phase-header">
       <div className="phase-header__row">
@@ -331,6 +342,23 @@ export function PhaseHeader({ snapshot }: { snapshot: ViewerGameSnapshot }) {
         </span>
         <Countdown endsAt={phase.endsAt} serverNow={snapshot.serverNow} />
       </div>
+      {showReady && (
+        <button
+          aria-label={t("ui.ready")}
+          aria-pressed={me.ready === true}
+          className="phase-header__ready"
+          onClick={() =>
+            void send({
+              type: "phase.ready",
+              phaseId: phase.id,
+              payload: { ready: !me.ready },
+            }).catch(() => undefined)
+          }
+          type="button"
+        >
+          {me.ready ? t("ui.readyState.ready") : t("ui.readyState.notReady")}
+        </button>
+      )}
       <PhaseTicks current={phase.type} />
     </div>
   );

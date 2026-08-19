@@ -259,7 +259,11 @@ export const en = {
     messageLabel: "Message",
     messagePlaceholder: "Say something",
     chatEmpty: "No messages yet — the night is quiet. Break the silence.",
-    votingProgress: "Voting progress",
+    ready: "Ready",
+    readyState: {
+      ready: "Ready",
+      notReady: "Not ready",
+    },
     reconnecting: "Reconnecting…",
     spectating: "You are spectating this game.",
     language: "Language",

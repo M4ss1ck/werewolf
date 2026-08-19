@@ -78,11 +78,20 @@ export const ChatSendCommandSchema = z.object({
 });
 export type ChatSendCommand = z.infer<typeof ChatSendCommandSchema>;
 
+export const PhaseReadyCommandSchema = z.object({
+  commandId: z.string().min(1),
+  phaseId: PhaseIdSchema,
+  type: z.literal("phase.ready"),
+  payload: z.object({ ready: z.boolean() }),
+});
+export type PhaseReadyCommand = z.infer<typeof PhaseReadyCommandSchema>;
+
 export const GameplayCommandSchema = z.discriminatedUnion("type", [
   VoteSetCommandSchema,
   VoteAbstainCommandSchema,
   NightActionSetCommandSchema,
   NightActionClearCommandSchema,
   ChatSendCommandSchema,
+  PhaseReadyCommandSchema,
 ]);
 export type GameplayCommand = z.infer<typeof GameplayCommandSchema>;

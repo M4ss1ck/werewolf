@@ -52,17 +52,6 @@ function voteTallies(state: GameState): { targetId: UserId; count: number }[] | 
     );
 }
 
-function eligiblePlayers(state: GameState): PlayerState[] {
-  return Object.values(state.players).filter((player) => player.status === "alive");
-}
-
-function hasActed(player: PlayerState, state: GameState): boolean {
-  if (!state.phase || player.phaseState.phaseId !== state.phase.id) return false;
-  if (state.phase.type === "voting") return player.phaseState.vote !== undefined;
-  if (state.phase.type === "night") return Object.keys(player.phaseState.actions ?? {}).length > 0;
-  return false;
-}
-
 function availableChannels(player: PlayerState | undefined): ChatChannel[] {
   return player && (player.faction === "wolves" || player.wolfSinceEventId !== undefined)
     ? ["public", "wolves"]
@@ -77,7 +66,6 @@ export function projectSnapshot(
 ): ViewerGameSnapshot {
   const userId = typeof viewer === "string" ? viewer : viewer.userId;
   const member = state.players[userId];
-  const eligible = eligiblePlayers(state);
   const actions = member?.status === "alive" ? getAvailableActions(state, userId) : [];
   const tallies = voteTallies(state);
   const snapshot: ViewerGameSnapshot = {
@@ -106,10 +94,6 @@ export function projectSnapshot(
     ...(tallies ? { voteTallies: tallies } : {}),
     availableActions: actions,
     availableChannels: availableChannels(member),
-    progress: {
-      acted: eligible.filter((player) => hasActed(player, state)).length,
-      eligible: eligible.length,
-    },
     cursor: (cursor ??
       (typeof viewer === "string" ? 0 : (viewer.cursor ?? 0))) as ViewerGameSnapshot["cursor"],
     serverNow: serverNow ?? (typeof viewer === "string" ? 0 : (viewer.serverNow ?? 0)),
@@ -124,6 +108,11 @@ export function projectSnapshot(
       ...(member.faction ? { faction: member.faction } : {}),
       ...(member.roleState !== undefined ? { roleState: member.roleState } : {}),
       ...(intent !== undefined ? { currentIntent: intent } : {}),
+      ...(state.phase &&
+      member.phaseState.phaseId === state.phase.id &&
+      member.phaseState.ready === true
+        ? { ready: true }
+        : {}),
     };
   }
   return snapshot;

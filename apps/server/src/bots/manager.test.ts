@@ -32,6 +32,75 @@ describe("bot command path", () => {
     for (const voter of voters) expect(voter.phaseState.phaseId).toBe(state.phase!.id);
   });
 
+  test("a bot readies once its last turn of the phase is spent", async () => {
+    // One turn per phase, so the bot's first decision is also its last and it
+    // readies immediately.
+    const agent = new RecordingBotAgent(voteFirst);
+    const harness = await setupBots({ agent, config: testBotConfig({ BOT_CHAT_TURNS: "1" }) });
+    const gameId = await harness.startBotGame(5);
+    await harness.advancePhase(gameId); // discussion -> voting
+
+    const state = await harness.state(gameId);
+    const living = Object.values(state.players).filter((player) => player.status === "alive");
+    expect(living.length).toBeGreaterThan(0);
+    // Every living bot readied for the current phase, even though the vote was
+    // the only thing the model was asked to choose.
+    for (const player of living) {
+      expect(player.phaseState.phaseId).toBe(state.phase!.id);
+      expect(player.phaseState.ready).toBe(true);
+    }
+  });
+
+  test("a bot with a reply turn still owed does not ready yet", async () => {
+    // Two turns per phase: after the first decision the bot may still be asked
+    // to reply, so readying now would end the phase before it ever could.
+    // Holding back is what keeps a discussion a discussion.
+    const agent = new RecordingBotAgent(voteFirst);
+    const harness = await setupBots({ agent, config: testBotConfig({ BOT_CHAT_TURNS: "2" }) });
+    const gameId = await harness.startBotGame(5);
+    await harness.advancePhase(gameId); // discussion -> voting
+
+    const state = await harness.state(gameId);
+    const living = Object.values(state.players).filter((player) => player.status === "alive");
+    expect(living.length).toBeGreaterThan(0);
+    expect(living.every((player) => player.phaseState.ready === true)).toBe(false);
+  });
+
+  test("a bot whose response is stale does NOT send a ready", async () => {
+    const agent = new GatedBotAgent(
+      (input) => input.phase === "night",
+      (input) => ({ actionId: input.legalActions[0]?.id ?? null, say: null, channel: null }),
+    );
+    const harness = await setupBots({ agent });
+    const gameId = await harness.startBotGame(6);
+    await harness.advancePhase(gameId); // -> voting
+    const voting = await harness.state(gameId);
+    harness.clock.now = voting.phase!.endsAt;
+    await harness.coordinator.resolvePhase(gameId);
+    await waitFor(() => agent.gated.length > 0, "a night decision to start");
+
+    const night = await harness.state(gameId);
+    const nightPhaseId = night.phase!.id;
+    expect(night.phase!.type).toBe("night");
+
+    // The night runs out and resolves while the model is still thinking.
+    harness.clock.now = night.phase!.endsAt;
+    await harness.coordinator.resolvePhase(gameId);
+    const after = await harness.state(gameId);
+    expect(after.phase!.id).not.toBe(nightPhaseId);
+
+    // Now the answers come back, stale.
+    agent.releaseAll();
+    await harness.bots.whenIdle();
+
+    // No ready was written for the phase that has already been resolved.
+    const settled = await harness.state(gameId);
+    for (const player of Object.values(settled.players))
+      expect(player.phaseState.phaseId === nightPhaseId && player.phaseState.ready === true).toBe(
+        false,
+      );
+  });
+
   test("a bot seat has no privileged route into the engine", async () => {
     const harness = await setupBots({ agent: new RecordingBotAgent() });
     const gameId = await harness.startBotGame(5);

@@ -111,9 +111,21 @@ and wait — do not quietly implement something else.
   role scripting DSL. Adding one runs in a fixed order across five workspaces and
   carries traps that surface only at runtime — resolution order, rng scoping, wolf
   chat, seeded fixtures: [docs/adding-a-role.md](./docs/adding-a-role.md).
-- **Phases end on the clock, not on completion.** A phase does not finish early
-  because everyone acted, players may change their intent until the deadline, and
-  missing a vote or action carries no penalty.
+- **Phases end on completion, with the clock as a hard limit.** Every living
+  player carries a `ready` flag for the current phase; when all of them are ready
+  the phase ends early, and the deadline ends it regardless. A per-phase minimum
+  duration (`PHASE_MINIMUM_FRACTION`) is the floor, so a phase can never collapse
+  the moment the last player acts — without it the wolves lose their deliberation
+  window and "who readied last" becomes a timing tell. Readying is separate from
+  voting: a player may ready with no vote recorded, so silence stays a legal move
+  and missing a vote or action still carries no penalty. Intent stays mutable —
+  un-readying restores the full deadline. A disconnected player is simply not
+  ready and holds the phase to its hard limit; connection state must never be
+  authoritative over game flow.
+- **Who is ready is hidden.** A viewer learns only their own readiness, from
+  `me.ready`. No count, no fraction, no list, in any projection or event. The
+  viewer snapshot deliberately carries no phase-progress field: the old one
+  leaked how many living players hold a night action.
 - **One replica.** The game hub, per-game locks and event fanout are in-process.
   Anything that assumes horizontal scaling is out of scope.
 - **The scheduler is timers over authoritative DB columns.** `scheduled_at` and

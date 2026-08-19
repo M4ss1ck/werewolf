@@ -28,6 +28,7 @@ export function validateCommand(
     return null;
   }
   if (player.status !== "alive") return { code: "NOT_ALIVE" };
+  if (command.type === "phase.ready") return null;
   if (command.type === "vote.set" || command.type === "vote.abstain") {
     if (state.phase.type !== "voting") return { code: "ACTION_NOT_AVAILABLE" };
     if (command.type === "vote.set") {

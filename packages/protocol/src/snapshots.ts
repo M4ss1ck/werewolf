@@ -92,13 +92,11 @@ export interface ViewerGameSnapshot {
     faction?: FactionId;
     roleState?: unknown;
     currentIntent?: ViewerIntent;
+    /** The viewer's own readiness for the current phase. Never anyone else's. */
+    ready?: boolean;
   };
   availableActions: AvailableAction[];
   availableChannels: ChatChannel[];
-  progress?: {
-    acted: number;
-    eligible: number;
-  };
   cursor: EventId;
   serverNow: number;
 }
@@ -165,11 +163,11 @@ export const ViewerGameSnapshotSchema = z.object({
       faction: FactionIdSchema.optional(),
       roleState: z.unknown().optional(),
       currentIntent: ViewerIntentSchema.optional(),
+      ready: z.boolean().optional(),
     })
     .optional(),
   availableActions: z.array(AvailableActionSchema),
   availableChannels: z.array(ChatChannelSchema),
-  progress: z.object({ acted: z.number(), eligible: z.number() }).optional(),
   cursor: EventIdSchema,
   serverNow: z.number(),
 });

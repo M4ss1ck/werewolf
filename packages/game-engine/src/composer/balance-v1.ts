@@ -8,6 +8,11 @@ export const ALPHA_CONVERSION_CHANCE = 0.1;
 /** Consecutive night resolutions with no elimination that end the game in a draw. */
 export const STALEMATE_NIGHTS = 5;
 
+/** Fraction of a phase's full duration that must elapse before every-player
+ * readiness may end it early. Without a floor the wolves' deliberation window
+ * collapses and "who readied last" becomes a timing tell. */
+export const PHASE_MINIMUM_FRACTION = 0.4;
+
 export const specialSlotWeights = [
   { maximumPlayers: 5, weights: { 0: 3, 1: 5, 2: 2 } },
   { maximumPlayers: 6, weights: { 0: 2, 1: 5, 2: 3 } },

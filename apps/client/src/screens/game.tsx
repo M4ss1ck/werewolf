@@ -168,7 +168,7 @@ export function GameScreen({
           </p>
         )}
         <ErrorMessage error={shownCommandError} />
-        <PhaseHeader snapshot={snapshot} />
+        <PhaseHeader send={send} snapshot={snapshot} />
       </div>
       {/* Each tab owns its own scrolling so it can hold a footer — the vote
        * lock, the composer — against the tab bar. This wrapper keeps the tab
