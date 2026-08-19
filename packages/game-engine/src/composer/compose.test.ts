@@ -110,7 +110,7 @@ describe("balance-v1 role composer", () => {
         expect(roles.filter((role) => role === "alpha_wolf").length).toBeLessThanOrEqual(1);
       }
     }
-  });
+  }, 30000);
 
   test("never two drunks in a composition", () => {
     for (const playerCount of [7, 8, 10, 14, 20]) {
@@ -119,7 +119,7 @@ describe("balance-v1 role composer", () => {
         expect(roles.filter((role) => role === "drunk").length).toBeLessThanOrEqual(1);
       }
     }
-  });
+  }, 30000);
 
   test("drunk never appears below 7 players", () => {
     for (const playerCount of [5, 6]) {

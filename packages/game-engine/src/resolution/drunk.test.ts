@@ -160,7 +160,7 @@ describe("the Drunk's perceived role", () => {
     );
     expect(event).toBeDefined();
     const role = (event!.payload as EventPayloads["role.assigned"]).role;
-    expect(role).toBe("seer");
+    expect(role).toBe("cupid");
     expect(role).not.toBe("drunk");
   });
 });
@@ -243,8 +243,7 @@ describe("determinism", () => {
   });
 
   test("a game seeded identically produces the same role shuffle as before this change", () => {
-    // Seed 9 at 8 players composes to the same role list with or without the
-    // Drunk in the pool, so its shuffle is the pre-change one. Pinning it here
+    // Seed 9 at 8 players composes to a fixed role list; pinning it here
     // catches a reordered or reused `assignment` derive call.
     const result = startGame(makeLobby(8), { now: 100, seed: 9 });
     expect(result.ok).toBe(true);
@@ -255,7 +254,7 @@ describe("determinism", () => {
       "werewolf",
       "villager",
       "werewolf",
-      "hunter",
+      "cursed",
       "villager",
       "villager",
       "villager",

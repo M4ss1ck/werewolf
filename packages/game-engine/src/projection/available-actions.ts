@@ -95,6 +95,35 @@ export function getAvailableActions(state: GameState, playerId: UserId): Availab
           : {}),
       });
     }
+    if (perceivedRole === "priest") {
+      const lastProtectedId = priestLastProtectedId(player.roleState);
+      const all = Object.values(state.players);
+      available.push({
+        id: "priest.protect",
+        type: "target",
+        targets: all.map((target) => ({
+          userId: target.id,
+          enabled: target.status === "alive" && target.id !== lastProtectedId,
+        })),
+        ...(stored["priest.protect"]?.targetId
+          ? { selectedTargetId: stored["priest.protect"]!.targetId }
+          : {}),
+      });
+    }
+    if (perceivedRole === "guardian" && state.day === 1 && !isGuardianBonded(player.roleState)) {
+      const all = Object.values(state.players);
+      available.push({
+        id: "guardian.bond",
+        type: "target",
+        targets: all.map((target) => ({
+          userId: target.id,
+          enabled: target.status === "alive" && target.id !== player.id,
+        })),
+        ...(stored["guardian.bond"]?.targetId
+          ? { selectedTargetId: stored["guardian.bond"]!.targetId }
+          : {}),
+      });
+    }
     return available;
   }
   if (state.phase.type === "discussion" || state.phase.type === "voting") {
@@ -122,5 +151,19 @@ function isMayorState(value: unknown): value is { used: boolean } {
     value !== null &&
     "used" in value &&
     typeof (value as { used: unknown }).used === "boolean"
+  );
+}
+
+function priestLastProtectedId(value: unknown): UserId | null {
+  if (typeof value !== "object" || value === null || !("lastProtectedId" in value)) return null;
+  return (value as { lastProtectedId: UserId | null }).lastProtectedId ?? null;
+}
+
+function isGuardianBonded(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "protegeeId" in value &&
+    (value as { protegeeId: unknown }).protegeeId !== null
   );
 }

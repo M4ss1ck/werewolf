@@ -92,6 +92,23 @@ export function validateCommand(
         }
         return null;
       }
+      case "priest.protect": {
+        if (perceivedRole !== "priest") return { code: "ACTION_NOT_AVAILABLE" };
+        if (!target || target.status !== "alive") return { code: "INVALID_TARGET" };
+        // The priest may protect themselves, but never the same player on two
+        // consecutive nights.
+        if (target.id === priestLastProtectedId(player.roleState))
+          return { code: "INVALID_TARGET" };
+        return null;
+      }
+      case "guardian.bond": {
+        if (perceivedRole !== "guardian") return { code: "ACTION_NOT_AVAILABLE" };
+        if (state.day !== 1) return { code: "ACTION_NOT_AVAILABLE" };
+        if (isGuardianBonded(player.roleState)) return { code: "ACTION_NOT_AVAILABLE" };
+        if (!target || target.status !== "alive" || target.id === actorId)
+          return { code: "INVALID_TARGET" };
+        return null;
+      }
     }
   }
   if (command.type === "day.action.set") {
@@ -116,5 +133,19 @@ function isMayorState(value: unknown): value is { used: boolean } {
     value !== null &&
     "used" in value &&
     typeof (value as { used: unknown }).used === "boolean"
+  );
+}
+
+function priestLastProtectedId(value: unknown): UserId | null {
+  if (typeof value !== "object" || value === null || !("lastProtectedId" in value)) return null;
+  return (value as { lastProtectedId: UserId | null }).lastProtectedId ?? null;
+}
+
+function isGuardianBonded(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "protegeeId" in value &&
+    (value as { protegeeId: unknown }).protegeeId !== null
   );
 }

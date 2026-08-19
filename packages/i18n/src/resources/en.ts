@@ -76,6 +76,16 @@ export const en = {
       description:
         "On the first night, links two players' lives. If one dies, the other dies with them, and they win together.",
     },
+    priest: {
+      name: "Priest",
+      description:
+        "Each night, shields one player from every attack. You may not shield the same player on two nights running.",
+    },
+    guardian: {
+      name: "Guardian",
+      description:
+        "On the first night, bonds to one player. If they are ever attacked, you die in their place.",
+    },
   },
   factions: {
     village: "Village",
@@ -141,6 +151,14 @@ export const en = {
     "cupid.link": {
       label: "Link",
       prompt: "Choose two players whose lives will be bound together.",
+    },
+    "priest.protect": {
+      label: "Protect",
+      prompt: "Choose a player to shield from every attack tonight.",
+    },
+    "guardian.bond": {
+      label: "Bond",
+      prompt: "Choose a player to bond with. If they are attacked, you die in their place.",
     },
   },
   errors: {

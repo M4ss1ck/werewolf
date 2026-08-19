@@ -32,6 +32,8 @@ type FrozenNight = {
     | null;
   cupidLink: { playerId: UserId; targetIds: [UserId, UserId] } | null;
   drunkCupidSelfLink: { playerId: UserId; partnerId: UserId } | null;
+  priestProtect: { playerId: UserId; targetId: UserId } | null;
+  guardianBond: { playerId: UserId; targetId: UserId } | null;
 };
 
 type NightOutcome = {
@@ -49,7 +51,11 @@ export function resolveNight(state: GameState, context: NightResolutionContext):
   const outcome = resolveHouseAttacks(state, frozen, targetId, locations, context.rng, state.day);
   applyLoverLinkDeaths(state, outcome.deaths);
   const link = formLink(state, frozen);
-  const playerPatches = [...commitNight(outcome), ...link.patches];
+  const playerPatches = [
+    ...commitNight(outcome),
+    ...link.patches,
+    ...roleStatePatches(state, frozen),
+  ];
   const nextNightsWithoutElimination =
     outcome.deaths.size > 0 ? 0 : state.nightsWithoutElimination + 1;
   const projected = {
@@ -186,6 +192,18 @@ function freezeNightIntents(state: GameState, rng: SeededRng, day: number): Froz
           ? { playerId: drunkCupid!.id, partnerId: drunkCupidAction.targetIds[0]! }
           : null
       : null;
+  const priest = living.find((player) => player.role === "priest");
+  const priestAction = priest ? currentAction(priest, phaseId, "priest.protect") : undefined;
+  const priestProtect =
+    priestAction?.targetId && isLivingTarget(state, priestAction.targetId)
+      ? { playerId: priest!.id, targetId: priestAction.targetId }
+      : null;
+  const guardian = living.find((player) => player.role === "guardian");
+  const guardianAction = guardian ? currentAction(guardian, phaseId, "guardian.bond") : undefined;
+  const guardianBond =
+    guardianAction?.targetId && isLivingTarget(state, guardianAction.targetId)
+      ? { playerId: guardian!.id, targetId: guardianAction.targetId }
+      : null;
   return {
     wolfVotes,
     seerInspection,
@@ -194,6 +212,8 @@ function freezeNightIntents(state: GameState, rng: SeededRng, day: number): Froz
     serialKillerAction,
     cupidLink,
     drunkCupidSelfLink,
+    priestProtect,
+    guardianBond,
   };
 }
 
@@ -251,8 +271,20 @@ function occupantsOf(
 
 /** Resolve the night's attacks house by house. There are at most two attacks —
  * the pack on the balloted target's house and the serial killer on its visit
- * target — resolved in this exact order: hunter retaliation, serial-killer /
- * wolf clash, then the kills themselves. */
+ * target — resolved in this exact order:
+ *
+ *   1. Freeze intents            (freezeNightIntents, before this function)
+ *   2. Place everyone in houses  (resolveNightLocations, before this function)
+ *   3. Clashes: hunter retaliation, then serial-killer / wolf clash
+ *   4. Compute raw hits
+ *   5. Priest shield cancels a hit entirely
+ *   6. Guardian substitution for any hit that survived the shield
+ *   7. Conversions on the hits that remain: Cursed first, then Alpha
+ *   8. Harlot exposure
+ *
+ * Later roles slot into a named stage instead of being wedged in wherever they
+ * fit. Stages 5 and 6 are the only new ones; everything else behaves exactly
+ * as it always has. */
 function resolveHouseAttacks(
   state: GameState,
   frozen: FrozenNight,
@@ -269,9 +301,9 @@ function resolveHouseAttacks(
   if (frozen.serialKillerAction?.type === "visit")
     attacks.push({ attacker: "serial_killer", houseId: frozen.serialKillerAction.targetId });
 
-  // (a) Hunter retaliation: one independent roll per attacker. A successful
-  // roll repels the whole attack — nobody in that house dies — and costs the
-  // attacker a life.
+  // Stage 3: clashes. Hunter retaliation: one independent roll per attacker. A
+  // successful roll repels the whole attack — nobody in that house dies — and
+  // costs the attacker a life.
   const repelled = new Set<"wolves" | "serial_killer">();
   for (const attack of attacks) {
     const owner = state.players[attack.houseId];
@@ -294,8 +326,9 @@ function resolveHouseAttacks(
     }
   }
 
-  // (b) Serial killer / wolf clash: a visiting serial killer that finds a wolf
-  // in the same house fights it. The loser dies; the attacks still land.
+  // Stage 3 (cont.): serial killer / wolf clash: a visiting serial killer that
+  // finds a wolf in the same house fights it. The loser dies; the attacks
+  // still land.
   if (frozen.serialKillerAction?.type === "visit") {
     const sk = frozen.serialKillerAction.playerId;
     const wolfOccupants = occupantsOf(state, locations, frozen.serialKillerAction.targetId).filter(
@@ -314,7 +347,8 @@ function resolveHouseAttacks(
     }
   }
 
-  // (c) Kills: each non-repelled attack hits the occupants of its house.
+  // Stage 4: compute raw hits. Each non-repelled attack hits the occupants of
+  // its house.
   const hits = new Map<UserId, Set<"wolves" | "serial_killer">>();
   for (const attack of attacks) {
     if (repelled.has(attack.attacker)) continue;
@@ -327,7 +361,7 @@ function resolveHouseAttacks(
           continue;
       } else {
         if (occupant.id === frozen.serialKillerAction!.playerId) continue;
-        // Wolves' fate is the clash in step (b).
+        // Wolves' fate is the clash in stage 3.
         if (occupant.faction === "wolves") continue;
       }
       const attackers = hits.get(occupant.id) ?? new Set<"wolves" | "serial_killer">();
@@ -335,11 +369,34 @@ function resolveHouseAttacks(
       hits.set(occupant.id, attackers);
     }
   }
+
+  // Stage 5: priest shield. A real priest's protection cancels every hit on
+  // that player this night, from any attacker, and any conversion it would
+  // have caused. "The night did not happen to you."
+  const priest = livingPlayers(state).find((player) => player.role === "priest");
+  const protectedId = priest ? (frozen.priestProtect?.targetId ?? null) : null;
+  if (protectedId !== null) hits.delete(protectedId);
+
+  // Stage 6: guardian substitution. For any hit that survived the shield, if
+  // the victim is a real guardian's protegee, the guardian dies instead and
+  // the hit is absorbed — so no conversion fires either. One death, one
+  // protegee walking away. A dead guardian protects nobody.
+  const guardian = livingPlayers(state).find((player) => player.role === "guardian");
+  const protegeeId = guardian
+    ? ((guardian.roleState as { protegeeId?: UserId | null } | null)?.protegeeId ??
+      frozen.guardianBond?.targetId ??
+      null)
+    : null;
+  if (protegeeId !== null && hits.has(protegeeId)) {
+    deaths.set(guardian!.id, "guardian_substitution");
+    hits.delete(protegeeId);
+  }
+
+  // Stage 7: conversions on the hits that remain. The Cursed converts at 100%
+  // and must not consume the alpha roll, so it is checked first and unchanged.
   for (const [victimId, attackers] of hits) {
     if (deaths.has(victimId)) continue;
     const victim = state.players[victimId]!;
-    // The Cursed converts at 100% and must not consume the alpha roll, so it
-    // is checked first and unchanged.
     if (victim.role === "cursed" && attackers.has("wolves") && !attackers.has("serial_killer")) {
       conversions.push({ playerId: victimId, cause: "cursed" });
       continue;
@@ -370,9 +427,11 @@ function resolveHouseAttacks(
     else deaths.set(victimId, cause);
   }
 
-  // A harlot who visits a wolf's own house while that wolf is home dies from
-  // exposure: the wolf is in, the encounter is fatal. When the pack has a
-  // target the wolf is out hunting and the house is empty, so she survives.
+  // Stage 8: harlot exposure. A harlot who visits a wolf's own house while
+  // that wolf is home dies from exposure: the wolf is in, the encounter is
+  // fatal. When the pack has a target the wolf is out hunting and the house is
+  // empty, so she survives. This is the Harlot dying away from home, not a hit
+  // on a house, so neither the shield nor the substitution applies to it.
   if (frozen.harlotAction?.type === "visit") {
     const harlot = frozen.harlotAction.playerId;
     const houseId = frozen.harlotAction.targetId;
@@ -393,6 +452,29 @@ function commitNight(outcome: NightOutcome): PlayerPatch[] {
   for (const [playerId] of outcome.deaths) patches.push({ playerId, changes: { status: "dead" } });
   for (const { playerId } of outcome.conversions)
     patches.push({ playerId, changes: { role: "werewolf", faction: "wolves" } });
+  return patches;
+}
+
+/** Roll the priest's and guardian's role state forward. The priest's
+ * `lastProtectedId` becomes whoever they protected this night (null if they
+ * protected nobody), so the no-repeat rule carries into the next night. The
+ * guardian's `protegeeId` is fixed on night 1 when they bond and never changes
+ * again. Both key on the TRUE role, so a Drunk-Priest or Drunk-Guardian is
+ * never patched. */
+function roleStatePatches(state: GameState, frozen: FrozenNight): PlayerPatch[] {
+  const patches: PlayerPatch[] = [];
+  const priest = livingPlayers(state).find((player) => player.role === "priest");
+  if (priest)
+    patches.push({
+      playerId: priest.id,
+      changes: { roleState: { lastProtectedId: frozen.priestProtect?.targetId ?? null } },
+    });
+  const guardian = livingPlayers(state).find((player) => player.role === "guardian");
+  if (guardian && frozen.guardianBond)
+    patches.push({
+      playerId: guardian.id,
+      changes: { roleState: { protegeeId: frozen.guardianBond.targetId } },
+    });
   return patches;
 }
 

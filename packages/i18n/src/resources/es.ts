@@ -74,6 +74,16 @@ export const es: TranslationResource = {
       description:
         "En la primera noche, une las vidas de dos jugadores. Si uno muere, el otro muere con él, y ganan juntos.",
     },
+    priest: {
+      name: "Sacerdote",
+      description:
+        "Cada noche, protege a un jugador de todos los ataques. No puedes proteger al mismo jugador dos noches seguidas.",
+    },
+    guardian: {
+      name: "Guardián",
+      description:
+        "En la primera noche, se une a un jugador. Si alguna vez lo atacan, mueres en su lugar.",
+    },
   },
   factions: {
     village: "La aldea",
@@ -139,6 +149,14 @@ export const es: TranslationResource = {
     "cupid.link": {
       label: "Unir",
       prompt: "Elige a dos jugadores cuyas vidas quedarán unidas.",
+    },
+    "priest.protect": {
+      label: "Proteger",
+      prompt: "Elige a un jugador al que proteger de todos los ataques esta noche.",
+    },
+    "guardian.bond": {
+      label: "Unirse",
+      prompt: "Elige a un jugador con quien unirte. Si lo atacan, mueres en su lugar.",
     },
   },
   errors: {

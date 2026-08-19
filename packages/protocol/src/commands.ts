@@ -50,6 +50,14 @@ export const NightActionSetPayloadSchema = z.discriminatedUnion("action", [
     action: z.literal("cupid.link"),
     targetIds: z.array(UserIdSchema).length(2),
   }),
+  z.object({
+    action: z.literal("priest.protect"),
+    targetId: UserIdSchema,
+  }),
+  z.object({
+    action: z.literal("guardian.bond"),
+    targetId: UserIdSchema,
+  }),
 ]);
 export type NightActionSetPayload = z.infer<typeof NightActionSetPayloadSchema>;
 

@@ -63,7 +63,8 @@ export type NightDeathCause =
   | "hunter_retaliation"
   | "harlot_exposure"
   | "serial_killer_attack"
-  | "lover_link";
+  | "lover_link"
+  | "guardian_substitution";
 
 export type VictoryReason =
   | "wolves_eliminated"
@@ -174,6 +175,7 @@ export const NightDeathCauseSchema = z.enum([
   "harlot_exposure",
   "serial_killer_attack",
   "lover_link",
+  "guardian_substitution",
 ]);
 export const VictoryReasonSchema = z.enum([
   "wolves_eliminated",

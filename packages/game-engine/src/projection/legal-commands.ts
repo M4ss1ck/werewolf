@@ -84,7 +84,11 @@ export function getLegalCommands(state: GameState, playerId: UserId, now: number
             ? ({ action: "wolf.attack", targetId: target.userId } as const)
             : action.id === "seer.inspect"
               ? ({ action: "seer.inspect", targetId: target.userId } as const)
-              : ({ action: "harlot.visit", targetId: target.userId } as const);
+              : action.id === "priest.protect"
+                ? ({ action: "priest.protect", targetId: target.userId } as const)
+                : action.id === "guardian.bond"
+                  ? ({ action: "guardian.bond", targetId: target.userId } as const)
+                  : ({ action: "harlot.visit", targetId: target.userId } as const);
         candidates.push({ type: "night.action.set", phaseId: phase.id, payload });
       }
     }

@@ -5,9 +5,9 @@ import { SeededRng } from "../rng/rng.ts";
 import type { DomainTransition, GameState, PlayerState } from "../state.ts";
 import { resolveNight } from "./night.ts";
 
-const id = (value: string) => value as PlayerState["id"];
+export const id = (value: string) => value as PlayerState["id"];
 
-function makeState(
+export function makeState(
   roles: PlayerState["role"][],
   actions: Record<string, Record<string, unknown>> = {},
   phaseId = 1,
@@ -52,25 +52,25 @@ function makeState(
   } as unknown as GameState;
 }
 
-function resolve(state: GameState, seed = "seed") {
+export function resolve(state: GameState, seed = "seed") {
   const result = resolveNight(state, { now: 100, rng: new SeededRng(seed) });
   expect(result.ok).toBe(true);
   if (!result.ok) throw new Error(result.error.code);
   return result.transition;
 }
 
-function action(target: string) {
+export function action(target: string) {
   return { "wolf.attack": { targetId: id(target) } };
 }
 
-function deadPlayerIds(transition: DomainTransition): string[] {
+export function deadPlayerIds(transition: DomainTransition): string[] {
   return transition.playerPatches
     .filter((patch) => patch.changes.status === "dead")
     .map((patch) => String(patch.playerId))
     .sort();
 }
 
-function auditDeaths(transition: DomainTransition): EventPayloads["audit.night"]["deaths"] {
+export function auditDeaths(transition: DomainTransition): EventPayloads["audit.night"]["deaths"] {
   const event = transition.events.find((candidate) => candidate.kind === "audit.night");
   if (!event) return [];
   return (event.payload as EventPayloads["audit.night"]).deaths;
