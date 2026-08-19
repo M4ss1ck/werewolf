@@ -41,6 +41,7 @@ function describeAction(input: BotDecisionInput, action: LegalAction): string {
   }
   const payload = command.payload;
   if (payload.action === "harlot.stay") return "stay home tonight";
+  if (payload.action === "serial_killer.stay") return "stay home tonight";
   if (payload.action === "cupid.link")
     return `link ${nameOf(input, payload.targetIds[0]!)} and ${nameOf(input, payload.targetIds[1]!)} tonight`;
   const target = nameOf(input, payload.targetId);
@@ -49,6 +50,7 @@ function describeAction(input: BotDecisionInput, action: LegalAction): string {
   if (payload.action === "sorcerer.divine") return `divine whether ${target} is a wolf tonight`;
   if (payload.action === "priest.protect") return `shield ${target} from every attack tonight`;
   if (payload.action === "guardian.bond") return `bond with ${target} tonight`;
+  if (payload.action === "serial_killer.visit") return `visit ${target} tonight, and kill`;
   return `visit ${target} tonight`;
 }
 

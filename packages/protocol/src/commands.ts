@@ -62,6 +62,15 @@ export const NightActionSetPayloadSchema = z.discriminatedUnion("action", [
     action: z.literal("guardian.bond"),
     targetId: UserIdSchema,
   }),
+  z.object({
+    action: z.literal("serial_killer.visit"),
+    targetId: UserIdSchema,
+  }),
+  z
+    .object({
+      action: z.literal("serial_killer.stay"),
+    })
+    .strict(),
 ]);
 export type NightActionSetPayload = z.infer<typeof NightActionSetPayloadSchema>;
 
