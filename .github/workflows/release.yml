@@ -63,6 +63,23 @@ jobs:
             exit 1
           fi
 
+          # Workspace members do not affect the built artifacts, but a release is
+          # one version across the repo, so drift here is still a failed release.
+          MISMATCHED=0
+          for manifest in apps/*/package.json packages/*/package.json; do
+            [ -f "$manifest" ] || continue
+            WS_VERSION=$(grep -Po '"version":\s*"\K[^"]+' "$manifest" | head -1)
+            echo "$manifest version: $WS_VERSION"
+            if [[ "$WS_VERSION" != "$PKG_VERSION" ]]; then
+              echo "Error: $manifest is $WS_VERSION, expected $PKG_VERSION"
+              MISMATCHED=1
+            fi
+          done
+          if [[ "$MISMATCHED" != "0" ]]; then
+            echo "Run './scripts/bump-version.sh $PKG_VERSION' to sync versions."
+            exit 1
+          fi
+
   quality:
     needs: prepare
     runs-on: ubuntu-latest

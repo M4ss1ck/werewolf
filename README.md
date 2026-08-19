@@ -248,10 +248,12 @@ What it does:
 
 1. Ensures you are on a `release/v<version>` branch, creating it if needed.
 2. Bumps the version via `scripts/bump-version.sh` across `package.json`,
-   `apps/client/src-tauri/tauri.conf.json`, `apps/client/src-tauri/Cargo.toml`
-   and the `app` entry in `apps/client/src-tauri/Cargo.lock`. Workspace members
-   (`apps/client/package.json`, `packages/*/package.json`) are private and stay
-   at `0.0.0`.
+   `apps/client/src-tauri/tauri.conf.json`, `apps/client/src-tauri/Cargo.toml`,
+   the `app` entry in `apps/client/src-tauri/Cargo.lock`, and every workspace
+   member under `apps/*` and `packages/*`. The workspace members are private and
+   unpublished, so their version changes nothing at build time; they move so one
+   release is one version across the repo rather than a release number on the
+   client and a permanent `0.0.0` on the engine that built it.
 3. Generates a `CHANGELOG.md` section for the commits since the last tag.
 4. Commits the bump + changelog, creates the `v<version>` tag, and (after a
    confirmation) pushes the branch and the tag.
