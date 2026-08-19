@@ -20,6 +20,20 @@ never paste output you did not actually see.
 `bun test <dir>` exits 0 when the filter matches no files. When you name a test
 command, name a concrete path so an empty run cannot pass silently.
 
+## Running the app
+
+The app runs in Docker. Start the dev stack (`README.md`, "With Docker") and
+point Reticle at it on :1420. A host `bun run dev` is not a substitute.
+
+That stack writes `apps/client/node_modules/.vite` and `data/` as root, by
+design. A host run then dies on `EACCES` in the Vite dep cache or
+`SQLITE_READONLY` on the database. Those two errors mean the wrong runner, so
+the fix is to start the stack; renaming, chowning or pointing the server at a
+scratch database buries the signal and hands the next person a broken tree.
+
+The gate is the exception — `bun run format` and `bun run check` are pure
+build steps that touch neither path, so run them on the host as usual.
+
 ## How to write code
 
 **Test first.** Write a failing test, watch it fail for the reason you expect,
