@@ -270,3 +270,38 @@ provider (`BOT_AI_BASE_URL` and `BOT_AI_API_KEY`); the only new variable is
 grouped commit list.
 
 Use `--dry-run` to preview the generated changelog before committing anything.
+
+## Android
+
+The Android build is a Tauri target, driven by three package scripts:
+
+```bash
+bun run android:init   # (re)generate the Gradle project under apps/client/src-tauri/gen/android
+bun run android:dev    # run the app on a connected device/emulator
+bun run build:android  # build and sign the release APKs
+```
+
+The Gradle project under `apps/client/src-tauri/gen/android` is committed on
+purpose: CI cannot build an APK without it. `gen/schemas` stays ignored — it is
+regenerated on every build.
+
+`build:android` produces two per-ABI signed APKs (`arm64-v8a` and `x86_64`)
+rather than one universal APK, roughly halving the download. Each APK carries
+only its own native libraries, and the script verifies that with `aapt` so a
+build can never ship extra libs.
+
+The first local run generates a keystore under
+`~/.config/werewolf/android-signing`. Back it up — losing it means never being
+able to update the app under the same identity. CI needs the three
+`ANDROID_*` secrets (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`,
+`ANDROID_KEY_ALIAS`) to restore that same signing material. `ANDROID_KEY_ALIAS`
+must be exactly `werewolf`: the script refuses credentials naming another alias,
+so that a mismatched key can never silently sign a release.
+
+`VITE_SERVER_ORIGIN` must be set at build time or the APK has no server to
+reach: the client reads it at build time to know where the server is, and a
+packaged app has no origin of its own. The script warns rather than fails, so a
+throwaway local build still works. In CI it comes from the `VITE_SERVER_ORIGIN`
+repository variable. The server must also list the app's origin in
+`BETTER_AUTH_TRUSTED_ORIGINS`, which gates both CORS and the WebSocket
+handshake.

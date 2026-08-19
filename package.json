@@ -22,6 +22,9 @@
     "check": "bun run lint && bun run check:boundaries && bun run typecheck && bun run test",
     "version:bump": "./scripts/bump-version.sh",
     "release": "./scripts/release.sh",
+    "build:android": "bash scripts/build-android-release.sh",
+    "android:init": "bun run --cwd apps/client tauri android init",
+    "android:dev": "bun run --cwd apps/client tauri android dev",
     "bots:match": "bun run --cwd apps/server bots:match"
   },
   "devDependencies": {
