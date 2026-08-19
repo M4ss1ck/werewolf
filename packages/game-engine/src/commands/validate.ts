@@ -1,8 +1,8 @@
 import type { ActionId, GameplayCommand, UserId } from "@werewolf/protocol";
-import { isUnlinkedCupid } from "../roles/cupid.ts";
-import { getPerceivedRole } from "../roles/perceived.ts";
-import { CULT_CHAT_ROLES, isPackMember, WOLF_CHAT_ROLES } from "../roles/registry.ts";
-import type { DomainError, GameState } from "../state.ts";
+import { getActionSpecsFor } from "../roles/action-spec.ts";
+import { CULT_CHAT_ROLES, WOLF_CHAT_ROLES } from "../roles/registry.ts";
+import { resolveTargets } from "../roles/targets.ts";
+import type { DomainError, GameState, PlayerState } from "../state.ts";
 
 export interface CommandContext {
   now: number;
@@ -56,125 +56,46 @@ export function validateCommand(
   if (command.type === "night.action.set" || command.type === "night.action.clear") {
     if (state.phase.type !== "night") return { code: "ACTION_NOT_AVAILABLE" };
     if (command.type === "night.action.clear") return null;
-    const target = "targetId" in command.payload ? state.players[command.payload.targetId] : null;
-    const perceivedRole = getPerceivedRole(player);
-    // The payload type only covers the original four actions; the serial
-    // killer's actions are part of the ActionId vocabulary, so widen the
-    // discriminant to accept them.
-    switch (command.payload.action as ActionId) {
-      case "wolf.attack":
-        if (!isPackMember(player)) return { code: "ACTION_NOT_AVAILABLE" };
-        if (!target || target.status !== "alive" || isPackMember(target))
-          return { code: "INVALID_TARGET" };
-        return null;
-      case "seer.inspect":
-        if (perceivedRole !== "seer") return { code: "ACTION_NOT_AVAILABLE" };
-        if (!target || target.status !== "alive" || target.id === actorId)
-          return { code: "INVALID_TARGET" };
-        return null;
-      case "sorcerer.divine":
-        if (perceivedRole !== "sorcerer") return { code: "ACTION_NOT_AVAILABLE" };
-        if (!target || target.status !== "alive" || target.id === actorId)
-          return { code: "INVALID_TARGET" };
-        return null;
-      case "detective.investigate":
-        if (perceivedRole !== "detective") return { code: "ACTION_NOT_AVAILABLE" };
-        if (!target || target.status !== "alive" || target.id === actorId)
-          return { code: "INVALID_TARGET" };
-        return null;
-      case "lone_wolf.search":
-        if (perceivedRole !== "lone_wolf") return { code: "ACTION_NOT_AVAILABLE" };
-        if (!target || target.status !== "alive" || target.id === actorId)
-          return { code: "INVALID_TARGET" };
-        return null;
-      case "harlot.visit":
-        if (perceivedRole !== "harlot") return { code: "ACTION_NOT_AVAILABLE" };
-        if (!target || target.status !== "alive" || target.id === actorId)
-          return { code: "INVALID_TARGET" };
-        return null;
-      case "harlot.stay":
-        if (perceivedRole !== "harlot") return { code: "ACTION_NOT_AVAILABLE" };
-        return null;
-      case "serial_killer.visit":
-        if (perceivedRole !== "serial_killer") return { code: "ACTION_NOT_AVAILABLE" };
-        if (!target || target.status !== "alive" || target.id === actorId)
-          return { code: "INVALID_TARGET" };
-        return null;
-      case "serial_killer.stay":
-        if (perceivedRole !== "serial_killer") return { code: "ACTION_NOT_AVAILABLE" };
-        return null;
-      case "cupid.link": {
-        if (state.day !== 1) return { code: "ACTION_NOT_AVAILABLE" };
-        if (!isUnlinkedCupid(player)) return { code: "ACTION_NOT_AVAILABLE" };
-        if (!("targetIds" in command.payload)) return { code: "INVALID_TARGET" };
-        const [first, second] = command.payload.targetIds;
-        if (!first || !second || first === second) return { code: "INVALID_TARGET" };
-        for (const targetId of command.payload.targetIds) {
-          const target = state.players[targetId];
-          if (!target || target.status !== "alive") return { code: "INVALID_TARGET" };
-        }
-        return null;
-      }
-      case "priest.protect": {
-        if (perceivedRole !== "priest") return { code: "ACTION_NOT_AVAILABLE" };
-        if (!target || target.status !== "alive") return { code: "INVALID_TARGET" };
-        // The priest may protect themselves, but never the same player on two
-        // consecutive nights.
-        if (target.id === priestLastProtectedId(player.roleState))
-          return { code: "INVALID_TARGET" };
-        return null;
-      }
-      case "guardian.bond": {
-        if (perceivedRole !== "guardian") return { code: "ACTION_NOT_AVAILABLE" };
-        if (state.day !== 1) return { code: "ACTION_NOT_AVAILABLE" };
-        if (isGuardianBonded(player.roleState)) return { code: "ACTION_NOT_AVAILABLE" };
-        if (!target || target.status !== "alive" || target.id === actorId)
-          return { code: "INVALID_TARGET" };
-        return null;
-      }
-      case "cult.convert": {
-        if (perceivedRole !== "cult_leader") return { code: "ACTION_NOT_AVAILABLE" };
-        if (!target || target.status !== "alive" || target.id === actorId)
-          return { code: "INVALID_TARGET" };
-        return null;
-      }
-    }
+    return validateActionPayload(state, player, command.payload);
   }
   if (command.type === "day.action.set") {
     if (state.phase.type !== "discussion" && state.phase.type !== "voting")
       return { code: "ACTION_NOT_AVAILABLE" };
-    const perceivedRole = getPerceivedRole(player);
-    if (perceivedRole !== "mayor") return { code: "ACTION_NOT_AVAILABLE" };
-    if (!isMayorState(player.roleState) || player.roleState.used)
-      return { code: "ACTION_NOT_AVAILABLE" };
-    if (command.payload.action === "mayor.reveal") {
-      const target = state.players[command.payload.targetId];
-      if (!target || target.status !== "alive") return { code: "INVALID_TARGET" };
-    }
-    return null;
+    return validateActionPayload(state, player, command.payload);
   }
   return { code: "ACTION_NOT_AVAILABLE" };
 }
 
-function isMayorState(value: unknown): value is { used: boolean } {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "used" in value &&
-    typeof (value as { used: unknown }).used === "boolean"
-  );
-}
+function validateActionPayload(
+  state: GameState,
+  player: PlayerState,
+  payload: { action: string; targetId?: UserId; targetIds?: UserId[] },
+): DomainError | null {
+  const actionId = payload.action as ActionId;
+  // Availability is exactly what the projection offers: one model, so a
+  // client cannot render a control the server would reject, and a bot
+  // cannot pick a move that is not really legal.
+  const spec = getActionSpecsFor(state, player).find((candidate) => candidate.id === actionId);
+  if (!spec) return { code: "ACTION_NOT_AVAILABLE" };
 
-function priestLastProtectedId(value: unknown): UserId | null {
-  if (typeof value !== "object" || value === null || !("lastProtectedId" in value)) return null;
-  return (value as { lastProtectedId: UserId | null }).lastProtectedId ?? null;
-}
+  if (spec.target === null) return null;
 
-function isGuardianBonded(value: unknown): boolean {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "protegeeId" in value &&
-    (value as { protegeeId: unknown }).protegeeId !== null
+  const eligible = new Set(
+    resolveTargets(spec, player, state)
+      .filter((target) => target.enabled)
+      .map((target) => target.userId),
   );
+
+  if (spec.target.kind === "pair") {
+    if (!("targetIds" in payload) || payload.targetIds === undefined)
+      return { code: "INVALID_TARGET" };
+    const [first, second] = payload.targetIds;
+    if (!first || !second || first === second) return { code: "INVALID_TARGET" };
+    for (const targetId of payload.targetIds)
+      if (!eligible.has(targetId)) return { code: "INVALID_TARGET" };
+    return null;
+  }
+
+  if (!("targetId" in payload) || payload.targetId === undefined) return { code: "INVALID_TARGET" };
+  return eligible.has(payload.targetId) ? null : { code: "INVALID_TARGET" };
 }
