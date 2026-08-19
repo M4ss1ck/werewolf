@@ -10,7 +10,6 @@ export const sorcerer: RoleDefinition = {
       id: "sorcerer.divine",
       phase: "night",
       target: { kind: "one", pool: "others", excludeSelf: true },
-      emitsResult: "sorcerer.result",
     },
   ],
 };

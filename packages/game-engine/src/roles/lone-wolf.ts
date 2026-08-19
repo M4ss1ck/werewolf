@@ -11,7 +11,6 @@ export const loneWolf: RoleDefinition = {
       phase: "night",
       target: { kind: "one", pool: "others", excludeSelf: true },
       travelsToTarget: true,
-      emitsResult: "lone_wolf.result",
     },
   ],
 };

@@ -11,13 +11,11 @@ export const harlot: RoleDefinition = {
       phase: "night",
       target: { kind: "one", pool: "others", excludeSelf: true },
       travelsToTarget: true,
-      emitsResult: "harlot.result",
     },
     {
       id: "harlot.stay",
       phase: "night",
       target: null,
-      emitsResult: "harlot.result",
     },
   ],
 };

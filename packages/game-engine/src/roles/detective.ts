@@ -11,7 +11,6 @@ export const detective: RoleDefinition = {
       phase: "night",
       target: { kind: "one", pool: "others", excludeSelf: true },
       travelsToTarget: true,
-      emitsResult: "detective.result",
     },
   ],
 };

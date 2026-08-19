@@ -10,7 +10,6 @@ export const seer: RoleDefinition = {
       id: "seer.inspect",
       phase: "night",
       target: { kind: "one", pool: "others", excludeSelf: true },
-      emitsResult: "seer.result",
     },
   ],
 };

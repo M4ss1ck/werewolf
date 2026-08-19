@@ -1,4 +1,4 @@
-import type { ActionId, EventKind } from "@werewolf/protocol";
+import type { ActionId } from "@werewolf/protocol";
 import type { GameState, PlayerState } from "../state.ts";
 import { getPerceivedRole } from "./perceived.ts";
 import { isPackMember, roleRegistry } from "./registry.ts";
@@ -15,7 +15,6 @@ export interface ActionSpec {
   available?: (ctx: { player: PlayerState; state: GameState }) => boolean;
   eligible?: (ctx: { player: PlayerState; target: PlayerState; state: GameState }) => boolean;
   travelsToTarget?: boolean;
-  emitsResult?: EventKind;
 }
 
 /** The spec for an action id, or undefined if no role declares it. */
