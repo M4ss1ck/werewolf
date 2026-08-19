@@ -9,10 +9,25 @@ import { authSchema } from "./schema.ts";
 export type ViewerContext = { userId: string; username: string | null };
 
 export function createAuth(db: Db, env: Env) {
+  // A deployment is genuinely cross-site when any trusted origin lives on a
+  // different HOSTNAME than BETTER_AUTH_URL. Compare hostname, not origin: in
+  // development BETTER_AUTH_URL is http://localhost:3000 and the trusted
+  // origin is http://localhost:1420 — a different origin but the same site —
+  // and dev must keep working exactly as it does today. Only a real cross-site
+  // deployment needs SameSite=None + Secure cookies.
+  const crossSite = env.BETTER_AUTH_TRUSTED_ORIGINS.some((origin) => {
+    try {
+      return new URL(origin).hostname !== new URL(env.BETTER_AUTH_URL).hostname;
+    } catch {
+      return false;
+    }
+  });
+
   return betterAuth({
     database: drizzleAdapter(db, { provider: "sqlite", schema: authSchema }),
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,
+    trustedOrigins: env.BETTER_AUTH_TRUSTED_ORIGINS,
     socialProviders: {
       google: { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET },
     },
@@ -25,6 +40,9 @@ export function createAuth(db: Db, env: Env) {
       // the proxy's. Without this every request shares one rate-limit bucket
       // and one abusive client throttles everybody.
       ipAddress: { ipAddressHeaders: ["x-forwarded-for", "x-real-ip"] },
+      ...(crossSite
+        ? { defaultCookieAttributes: { sameSite: "none" as const, secure: true } }
+        : {}),
     },
   });
 }

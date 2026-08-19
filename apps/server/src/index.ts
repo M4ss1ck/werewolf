@@ -71,6 +71,7 @@ const app = createApp({
   bots: { roster: botRoster, catalog: botCatalog, config: botConfig },
   auth,
   sessionResolver: (request) => resolveAuthSession(auth, request),
+  trustedOrigins: env.BETTER_AUTH_TRUSTED_ORIGINS,
 });
 
 const server = Bun.serve({

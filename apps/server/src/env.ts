@@ -10,6 +10,15 @@ const envSchema = z.object({
 
   BETTER_AUTH_SECRET: z.string().min(1),
   BETTER_AUTH_URL: z.string().url(),
+  BETTER_AUTH_TRUSTED_ORIGINS: z
+    .string()
+    .optional()
+    .transform((value) =>
+      (value ?? "")
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0),
+    ),
 
   GOOGLE_CLIENT_ID: z.string().min(1),
   GOOGLE_CLIENT_SECRET: z.string().min(1),

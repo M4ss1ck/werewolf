@@ -8,6 +8,7 @@ import type {
 import { ServerFrameSchema, SubscribeFrameSchema } from "@werewolf/protocol";
 
 import { api } from "./client.ts";
+import { wsUrl } from "./origin.ts";
 
 export type LiveStatus = "connecting" | "connected" | "reconnecting" | "closed";
 export interface LiveHandlers {
@@ -39,8 +40,7 @@ export class LiveGameConnection {
   connect() {
     this.closed = false;
     this.setStatus(this.retry ? "reconnecting" : "connecting");
-    const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    this.socket = new WebSocket(`${protocol}//${location.host}/api/games/${this.gameId}/live`);
+    this.socket = new WebSocket(wsUrl(`/api/games/${this.gameId}/live`));
     this.socket.onopen = () => {
       this.retry = 0;
       this.setStatus("connected");

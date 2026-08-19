@@ -1,6 +1,7 @@
 import { type Db, GameRepository, type GlobalChatRepository } from "@werewolf/db";
-import { Hono } from "hono";
+import { Hono, type MiddlewareHandler } from "hono";
 import { upgradeWebSocket } from "hono/bun";
+import { cors } from "hono/cors";
 import {
   type createAuth,
   requireViewer,
@@ -37,12 +38,46 @@ export type AppOptions = {
   globalChat?: { repository: GlobalChatRepository; hub: GlobalChatHub; now?: () => number };
   /** Present when this deployment seats bots; absent leaves the route off. */
   bots?: BotRoutesOptions;
+  /** Browser origins allowed to call the API cross-site. Empty means
+   * same-origin: no CORS is registered at all. */
+  trustedOrigins?: string[];
 };
 
 export function createApp(options: AppOptions = {}) {
   const app = new Hono();
 
   app.get("/health", (c) => c.json({ status: "ok" }));
+
+  // Cross-site deployments need CORS on the API. A same-origin deployment
+  // (empty trustedOrigins) registers none and emits no CORS headers. Must be
+  // registered before the auth handler and the other /api routes.
+  if (options.trustedOrigins && options.trustedOrigins.length > 0) {
+    app.use(
+      "/api/*",
+      cors({
+        origin: options.trustedOrigins,
+        credentials: true,
+        allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+        allowHeaders: ["content-type"],
+      }),
+    );
+  }
+
+  // A WebSocket handshake is not subject to CORS, and the browser attaches
+  // cookies to it regardless. A cross-site deployment needs SameSite=None, which
+  // removes the only thing that was stopping a hostile page from opening an
+  // authenticated socket and receiving the victim's own viewer projection — their
+  // secret role. So gate the upgrade on Origin whenever trusted origins are
+  // declared. A same-origin deployment declares none, keeps SameSite=Lax, and is
+  // unaffected.
+  const requireTrustedOrigin: MiddlewareHandler = async (c, next) => {
+    const allowed = options.trustedOrigins ?? [];
+    if (allowed.length === 0) return next();
+    const origin = c.req.header("origin");
+    if (!origin || !allowed.includes(origin))
+      return c.json({ error: { code: "ORIGIN_NOT_ALLOWED" } }, 403);
+    await next();
+  };
 
   if (options.auth) app.on(["GET", "POST"], "/api/auth/*", (c) => options.auth!.handler(c.req.raw));
 
@@ -67,6 +102,7 @@ export function createApp(options: AppOptions = {}) {
     if (options.gameHub)
       app.get(
         "/api/games/:id/live",
+        requireTrustedOrigin,
         upgradeWebSocket((c) => {
           const viewer = c.get("viewer") as ViewerContext;
           let connection: ReturnType<GameHub["connect"]> | undefined;
@@ -92,6 +128,7 @@ export function createApp(options: AppOptions = {}) {
       app.route("/api", chatRoutes(repository, hub, now));
       app.get(
         "/api/chat/live",
+        requireTrustedOrigin,
         upgradeWebSocket((c) => {
           const viewer = c.get("viewer") as ViewerContext;
           let connection: ReturnType<GlobalChatHub["connect"]> | undefined;

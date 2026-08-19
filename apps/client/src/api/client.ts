@@ -10,6 +10,8 @@ import type {
   ViewerGameSnapshot,
 } from "@werewolf/protocol";
 
+import { apiUrl } from "./origin.ts";
+
 export class ApiError extends Error {
   readonly code: string;
 
@@ -33,7 +35,7 @@ export interface CreateGameInput {
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(path, {
+  const response = await fetch(apiUrl(path), {
     ...init,
     credentials: "include",
     headers: { "content-type": "application/json", ...init.headers },

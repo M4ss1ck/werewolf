@@ -1,3 +1,5 @@
+import { apiUrl } from "../api/origin.ts";
+
 export interface SessionUser {
   id: string;
   name?: string;
@@ -12,7 +14,7 @@ export interface Session {
 
 export async function getSession(): Promise<Session | null> {
   try {
-    const response = await fetch("/api/auth/get-session", { credentials: "include" });
+    const response = await fetch(apiUrl("/api/auth/get-session"), { credentials: "include" });
     if (!response.ok) return null;
     return (await response.json()) as Session | null;
   } catch {
@@ -21,7 +23,7 @@ export async function getSession(): Promise<Session | null> {
 }
 
 export async function signInWithGoogle() {
-  const response = await fetch("/api/auth/sign-in/social", {
+  const response = await fetch(apiUrl("/api/auth/sign-in/social"), {
     method: "POST",
     credentials: "include",
     headers: { "content-type": "application/json" },
@@ -34,5 +36,5 @@ export async function signInWithGoogle() {
 }
 
 export function signOut() {
-  return fetch("/api/auth/sign-out", { method: "POST", credentials: "include" });
+  return fetch(apiUrl("/api/auth/sign-out"), { method: "POST", credentials: "include" });
 }

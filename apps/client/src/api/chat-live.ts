@@ -1,6 +1,8 @@
 import type { ChatMessage, ChatMessageId, ChatServerFrame } from "@werewolf/protocol";
 import { ChatServerFrameSchema, ChatSubscribeFrameSchema } from "@werewolf/protocol";
 
+import { wsUrl } from "./origin.ts";
+
 export interface ChatHandlers {
   onHistory?: (messages: ChatMessage[], cursor: ChatMessageId) => void;
   onMessage?: (message: ChatMessage) => void;
@@ -23,8 +25,7 @@ export class GlobalChatConnection {
 
   connect() {
     this.closed = false;
-    const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    this.socket = new WebSocket(`${protocol}//${location.host}/api/chat/live`);
+    this.socket = new WebSocket(wsUrl("/api/chat/live"));
     this.socket.onopen = () => {
       this.retry = 0;
       const frame = ChatSubscribeFrameSchema.parse({
