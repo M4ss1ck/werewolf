@@ -1,4 +1,5 @@
 import type { FactionId, RoleId, UserId } from "@werewolf/protocol";
+import type { ActionSpec } from "./action-spec.ts";
 import type { RoleComposition } from "./composition.ts";
 
 export interface DaySelectionContext<State = unknown> {
@@ -19,6 +20,10 @@ export interface RoleDefinition<State = unknown> {
   /** How the composer may deal this role. Absent means never dealt: a fill
    * role, or one reached only by conversion. */
   composition?: RoleComposition;
+  /** The actions this role may take, keyed by perceived role. The pack's
+   * attack is declared on `werewolf` and located via pack membership, not
+   * here. */
+  actions?: readonly ActionSpec[];
   onDaySelected?(ctx: DaySelectionContext<State>): RoleEffect[];
 }
 

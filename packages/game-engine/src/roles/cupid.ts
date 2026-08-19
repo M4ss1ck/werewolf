@@ -8,6 +8,15 @@ export const cupid: RoleDefinition<{ linked: [UserId, UserId] | null }> = {
   startingFaction: "village",
   createState: () => ({ linked: null }),
   composition: { minimumPlayers: 8, drunkMayBelieve: true },
+  actions: [
+    {
+      id: "cupid.link",
+      phase: "night",
+      // The cupid may link any two living players, including themselves.
+      target: { kind: "pair", pool: "all", excludeSelf: false },
+      available: ({ player, state }) => state.day === 1 && isUnlinkedCupid(player),
+    },
+  ],
 };
 
 function isCupidUnlinked(value: unknown): boolean {
