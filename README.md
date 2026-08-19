@@ -259,6 +259,11 @@ What it does:
 There is no git remote yet, so the push step is skipped with a warning and the
 local commit and tag are left intact.
 
+An Arch Linux package is also produced. It is built from the already-built Linux
+binary rather than from source: `makepkg` runs inside an Arch container, so it
+works from any distro and needs Docker locally. `bun run build:arch` does both
+steps — the Tauri Linux build and the package.
+
 ### AI-assisted changelog (optional)
 
 The changelog can be written by an AI model. This is entirely optional — with no

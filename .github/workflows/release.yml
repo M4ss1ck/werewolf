@@ -132,6 +132,16 @@ jobs:
           prerelease: false
           args: --target x86_64-unknown-linux-gnu
 
+      - name: Upload Linux artifacts for Arch build
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-build-artifacts
+          path: |
+            apps/client/src-tauri/target/x86_64-unknown-linux-gnu/release/werewolf
+            apps/client/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/
+            apps/client/src-tauri/icons/128x128.png
+          retention-days: 1
+
   # Build for Windows using GNU toolchain, cross-compiled from Linux
   build-windows:
     needs: [prepare, quality]
@@ -318,3 +328,58 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # Build Arch Linux package using Docker
+  build-arch:
+    needs: [prepare, quality, build-linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: linux-build-artifacts
+          path: ./artifacts
+
+      - name: Prepare artifacts for Arch build
+        run: |
+          # Debug: Show what was downloaded
+          echo "=== Downloaded artifacts structure ==="
+          find ./artifacts -type f
+
+          # Create the expected directory structure
+          mkdir -p apps/client/src-tauri/target/release/bundle/deb
+          mkdir -p apps/client/src-tauri/icons
+
+          # Move artifacts to expected locations
+          cp ./artifacts/apps/client/src-tauri/target/x86_64-unknown-linux-gnu/release/werewolf apps/client/src-tauri/target/release/werewolf
+          cp -r ./artifacts/apps/client/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/* apps/client/src-tauri/target/release/bundle/deb/
+          cp ./artifacts/apps/client/src-tauri/icons/128x128.png apps/client/src-tauri/icons/
+
+          # Make binary executable
+          chmod +x apps/client/src-tauri/target/release/werewolf
+
+          # List what we have
+          echo "=== Prepared artifacts ==="
+          find apps/client/src-tauri/target/release -type f | head -20
+          ls -la apps/client/src-tauri/icons/
+
+      - name: Build Arch Linux package
+        run: |
+          chmod +x ./scripts/build-arch-package.sh
+          ./scripts/build-arch-package.sh
+
+      - name: Upload Arch package to release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: apps/client/src-tauri/target/release/bundle/arch/*.pkg.tar.zst
+          tag_name: v${{ needs.prepare.outputs.version }}
+          draft: true
+          body: ${{ needs.prepare.outputs.changelog }}
+          generate_release_notes: ${{ needs.prepare.outputs.changelog == '' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
