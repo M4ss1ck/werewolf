@@ -96,7 +96,7 @@ pkgver=$VERSION
 pkgrel=1
 pkgdesc="Server-authoritative live social deduction game"
 arch=('x86_64')
-url="https://github.com/massick/werewolf"
+url="https://github.com/M4ss1ck/werewolf"
 license=('MIT')
 # Tauri v2 dependencies
 depends=('webkit2gtk-4.1' 'gtk3' 'libappindicator-gtk3')
