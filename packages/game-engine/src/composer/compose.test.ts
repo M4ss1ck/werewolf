@@ -165,7 +165,9 @@ describe("balance-v1 role composer", () => {
         expect(roles.filter((role) => role === "alpha_wolf").length).toBeLessThanOrEqual(1);
       }
     }
-  }, 30000);
+    // The candidate pool grows with every special role, and these loops sample
+    // 6000 compositions; 30s is no longer a safe budget.
+  }, 60000);
 
   test("never two drunks in a composition", () => {
     for (const playerCount of [7, 8, 10, 14, 20]) {

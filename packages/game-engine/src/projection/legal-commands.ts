@@ -92,7 +92,9 @@ export function getLegalCommands(state: GameState, playerId: UserId, now: number
                     ? ({ action: "priest.protect", targetId: target.userId } as const)
                     : action.id === "guardian.bond"
                       ? ({ action: "guardian.bond", targetId: target.userId } as const)
-                      : ({ action: "harlot.visit", targetId: target.userId } as const);
+                      : action.id === "cult.convert"
+                        ? ({ action: "cult.convert", targetId: target.userId } as const)
+                        : ({ action: "harlot.visit", targetId: target.userId } as const);
         candidates.push({ type: "night.action.set", phaseId: phase.id, payload });
       }
     }

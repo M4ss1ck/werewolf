@@ -47,6 +47,22 @@ const state = {
       role: "seer",
       faction: "wolves",
     }),
+    cultLeader: player("cultLeader", {
+      originalRole: "cult_leader",
+      role: "cult_leader",
+      faction: "cult",
+    }),
+    convertedCultist: player("convertedCultist", {
+      originalRole: "villager",
+      role: "cultist",
+      faction: "cult",
+      channelSince: { cult: 50 as GameEvent["id"] },
+    }),
+    convertedCultistWithoutMarker: player("convertedCultistWithoutMarker", {
+      originalRole: "villager",
+      role: "cultist",
+      faction: "cult",
+    }),
   },
 } as unknown as GameState;
 
@@ -66,6 +82,16 @@ const graveEvent = (id: number) =>
     kind: "chat.message",
     scope: "faction",
     scopeId: "grave",
+    createdAt: 0,
+    payload: {},
+  }) as unknown as GameEvent;
+
+const cultEvent = (id: number) =>
+  ({
+    id,
+    kind: "chat.message",
+    scope: "faction",
+    scopeId: "cult",
     createdAt: 0,
     payload: {},
   }) as unknown as GameEvent;
@@ -91,6 +117,35 @@ test("a converted player with no conversion marker is denied rather than trusted
   // missing the player must see nothing, not everything.
   expect(canViewEvent(wolfEvent(1), "convertedWithoutMarker" as UserId, state)).toBe(false);
   expect(canViewEvent(wolfEvent(9999), "convertedWithoutMarker" as UserId, state)).toBe(false);
+});
+
+describe("cult chat visibility", () => {
+  test("the cult leader reads the whole cult history", () => {
+    expect(canViewEvent(cultEvent(1), "cultLeader" as UserId, state)).toBe(true);
+    expect(canViewEvent(cultEvent(9999), "cultLeader" as UserId, state)).toBe(true);
+  });
+
+  test("a convert reads only from their marker onward, and nothing before", () => {
+    expect(canViewEvent(cultEvent(49), "convertedCultist" as UserId, state)).toBe(false);
+    expect(canViewEvent(cultEvent(50), "convertedCultist" as UserId, state)).toBe(true);
+  });
+
+  test("a convert with no marker sees nothing (fail closed)", () => {
+    expect(canViewEvent(cultEvent(1), "convertedCultistWithoutMarker" as UserId, state)).toBe(
+      false,
+    );
+    expect(canViewEvent(cultEvent(9999), "convertedCultistWithoutMarker" as UserId, state)).toBe(
+      false,
+    );
+  });
+
+  test("nobody outside CULT_CHAT_ROLES sees cult events", () => {
+    // A living villager and a wolf both see nothing.
+    expect(canViewEvent(cultEvent(1), "villager" as UserId, state)).toBe(false);
+    expect(canViewEvent(cultEvent(1), "startingWolf" as UserId, state)).toBe(false);
+    // A wolf-faction player whose role is not a cult-chat role sees nothing.
+    expect(canViewEvent(cultEvent(1), "wolfFactionNonWolfRole" as UserId, state)).toBe(false);
+  });
 });
 
 describe("grave channel visibility", () => {

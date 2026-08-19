@@ -25,6 +25,8 @@ export interface RoleDefinition<State = unknown> {
 
 import { alphaWolf } from "./alpha-wolf.ts";
 import { cub } from "./cub.ts";
+import { cultLeader } from "./cult-leader.ts";
+import { cultist } from "./cultist.ts";
 import { cupid } from "./cupid.ts";
 import { cursed } from "./cursed.ts";
 import { detective } from "./detective.ts";
@@ -65,6 +67,8 @@ export const roleRegistry: Readonly<Record<RoleId, RoleDefinition>> = {
   cub,
   sorcerer,
   detective,
+  cult_leader: cultLeader,
+  cultist,
 };
 
 export function getRoleDefinition(role: RoleId): RoleDefinition {
@@ -84,4 +88,14 @@ export const WOLF_CHAT_ROLES: ReadonlySet<RoleId> = new Set<RoleId>([
  * wolf-faction but never one of the pack. */
 export function isPackMember(player: { role: RoleId | null }): boolean {
   return player.role !== null && WOLF_CHAT_ROLES.has(player.role);
+}
+
+/** Roles that may read and write the cult chat channel. Membership is by ROLE,
+ * not faction: only the leader and converted cultists are in the cult. */
+export const CULT_CHAT_ROLES: ReadonlySet<RoleId> = new Set<RoleId>(["cult_leader", "cultist"]);
+
+/** True when the player is a member of the cult: a seat in the cult chat. The
+ * cult leader starts in it; everyone else got there by conversion. */
+export function isCultMember(player: { role: RoleId | null }): boolean {
+  return player.role !== null && CULT_CHAT_ROLES.has(player.role);
 }

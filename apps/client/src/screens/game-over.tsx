@@ -16,6 +16,7 @@ const REASON_KEYS: Record<VictoryReason, string> = {
   village_eliminated: "ui.over.reasonVillageEliminated",
   veteran_lynched: "ui.over.reasonVeteranLynched",
   serial_killer_survives: "ui.over.reasonSerialKillerSurvives",
+  cult_survives: "ui.over.reasonCultSurvives",
   stalemate: "ui.over.reasonStalemate",
   no_survivors: "ui.over.reasonNoSurvivors",
 };
@@ -47,7 +48,9 @@ export function GameOverScreen({
         ? "ui.over.villageWinsTitle"
         : winnerFaction === "veteran"
           ? "ui.over.veteranWinsTitle"
-          : "ui.over.serialKillerWinsTitle";
+          : winnerFaction === "cult"
+            ? "ui.over.cultWinsTitle"
+            : "ui.over.serialKillerWinsTitle";
   const factionWinKey = isDraw
     ? "ui.over.drawFaction"
     : winnerFaction === "wolves"
@@ -56,7 +59,9 @@ export function GameOverScreen({
         ? "ui.over.villageWins"
         : winnerFaction === "veteran"
           ? "ui.over.veteranWins"
-          : "ui.over.serialKillerWins";
+          : winnerFaction === "cult"
+            ? "ui.over.cultWins"
+            : "ui.over.serialKillerWins";
   const reasonKey = winner ? REASON_KEYS[winner.reason] : "ui.over.reasonSerialKillerSurvives";
   const publicEvents = loadedEvents.filter((event) => event.scope === "public");
   const names = new Map(snapshot.players.map((player) => [player.userId, player.displayName]));

@@ -25,6 +25,8 @@ export const ROLE_IDS = [
   "cub",
   "sorcerer",
   "detective",
+  "cult_leader",
+  "cultist",
 ] as const;
 export type RoleId = (typeof ROLE_IDS)[number];
 export const RoleIdSchema = z.enum(ROLE_IDS);
@@ -35,7 +37,7 @@ export const RoleIdSchema = z.enum(ROLE_IDS);
 export const WOLF_ROLE_IDS = ["werewolf", "alpha_wolf", "cub", "sorcerer"] as const;
 export type WolfRoleId = (typeof WOLF_ROLE_IDS)[number];
 
-export const FACTION_IDS = ["village", "wolves", "veteran", "serial_killer"] as const;
+export const FACTION_IDS = ["village", "wolves", "veteran", "serial_killer", "cult"] as const;
 export type FactionId = (typeof FACTION_IDS)[number];
 export const FactionIdSchema = z.enum(FACTION_IDS);
 
@@ -65,6 +67,7 @@ export const ACTION_IDS = [
   "guardian.bond",
   "sorcerer.divine",
   "detective.investigate",
+  "cult.convert",
 ] as const;
 export type ActionId = (typeof ACTION_IDS)[number];
 export const ActionIdSchema = z.enum(ACTION_IDS);
@@ -74,7 +77,7 @@ export type EventScope = (typeof EVENT_SCOPES)[number];
 export const EventScopeSchema = z.enum(EVENT_SCOPES);
 
 /** Chat channels a client may address; the server decides who may access them. */
-export const CHAT_CHANNELS = ["public", "wolves", "grave"] as const;
+export const CHAT_CHANNELS = ["public", "wolves", "grave", "cult"] as const;
 export type ChatChannel = (typeof CHAT_CHANNELS)[number];
 export const ChatChannelSchema = z.enum(CHAT_CHANNELS);
 
@@ -84,6 +87,6 @@ export const GAME_VISIBILITIES = ["public", "private"] as const;
 export type GameVisibility = (typeof GAME_VISIBILITIES)[number];
 export const GameVisibilitySchema = z.enum(GAME_VISIBILITIES);
 
-export const CONVERSION_CAUSES = ["cursed", "alpha_wolf"] as const;
+export const CONVERSION_CAUSES = ["cursed", "alpha_wolf", "cult"] as const;
 export type ConversionCause = (typeof CONVERSION_CAUSES)[number];
 export const ConversionCauseSchema = z.enum(CONVERSION_CAUSES);

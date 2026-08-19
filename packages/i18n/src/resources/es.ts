@@ -98,12 +98,23 @@ export const es: TranslationResource = {
       description:
         "Visita a un jugador cada noche para investigarlo. La mitad de las veces descubres su rol; si fallas, el resultado no es concluyente, nunca miente. El paseo es arriesgado: si los asesinos llegan a esa casa, mueres allí.",
     },
+    cult_leader: {
+      name: "Líder del Culto",
+      description:
+        "Cada noche, convierte a un jugador vivo en sectario. El culto gana siendo los únicos que quedan. Viajas a la casa de quien conviertes, así que el paseo puede ser mortal.",
+    },
+    cultist: {
+      name: "Sectario",
+      description:
+        "Un miembro convertido del culto. No tienes poder propio: el culto gana siendo los únicos que quedan.",
+    },
   },
   factions: {
     village: "La aldea",
     wolves: "Los lobos",
     veteran: "El Veterano",
     serial_killer: "El Asesino en Serie",
+    cult: "El Culto",
   },
   phases: {
     discussion: "Discusión",
@@ -181,6 +192,11 @@ export const es: TranslationResource = {
       prompt:
         "Elige a un jugador al que investigar esta noche. Visitas su casa: la mitad de las veces descubres su rol, pero si vienen los asesinos, mueres allí.",
     },
+    "cult.convert": {
+      label: "Convertir",
+      prompt:
+        "Elige a un jugador vivo para convertirlo en sectario esta noche. Caminas hasta su casa, así que la visita puede ser mortal.",
+    },
   },
   errors: {
     UNKNOWN_ERROR: "Algo salió mal. Inténtalo de nuevo.",
@@ -243,6 +259,7 @@ export const es: TranslationResource = {
       },
       "wolves.member_joined": "{{player}} se ha unido a los lobos.",
       "masons.member_joined": "{{player}} es masón.",
+      "cult.member_joined": "{{player}} se ha unido al culto.",
     },
   },
   ui: {
@@ -294,6 +311,7 @@ export const es: TranslationResource = {
     publicChat: "Chat público",
     wolfChat: "Chat de los lobos",
     graveChat: "Chat de los muertos",
+    cultChat: "Chat del culto",
     yourRole: "Tu rol",
     factionTeam: "Equipo de {{faction}}",
     vote: {
@@ -404,16 +422,19 @@ export const es: TranslationResource = {
       packWins: "la manada gana",
       veteranWins: "gana el veterano",
       serialKillerWins: "gana el asesino en serie",
+      cultWins: "gana el culto",
       drawFaction: "nadie",
       villageWinsTitle: "La manada está rota",
       wolvesWinTitle: "La aldea cae",
       veteranWinsTitle: "Exactamente según lo planeado",
       serialKillerWinsTitle: "El último en pie",
+      cultWinsTitle: "El culto se apodera de la aldea",
       drawTitle: "Empate",
       reasonWolvesEliminated: "Todos los lobos fueron eliminados.",
       reasonVillageEliminated: "Los lobos mataron a todos los demás.",
       reasonVeteranLynched: "La aldea ahorcó al veterano. Todos los demás pierden.",
       reasonSerialKillerSurvives: "El asesino en serie sobrevivió a todos.",
+      reasonCultSurvives: "El culto convirtió a todos los demás.",
       reasonStalemate: "Pasaron cinco noches sin que nadie fuera eliminado.",
       reasonNoSurvivors: "Nadie sobrevivió a la noche.",
       rolesRevealed: "Roles revelados",

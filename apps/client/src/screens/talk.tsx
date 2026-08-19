@@ -64,6 +64,16 @@ export function Talk({
               </Chip>
             </button>
           )}
+          {snapshot.availableChannels.includes("cult") && (
+            <button
+              aria-pressed={channel === "cult"}
+              className="rounded-full p-0.5"
+              onClick={() => setChannel("cult")}
+              type="button"
+            >
+              <Chip tone={channel === "cult" ? "active" : "running"}>{t("ui.cultChat")}</Chip>
+            </button>
+          )}
           {snapshot.availableChannels.includes("grave") && (
             <button
               aria-pressed={channel === "grave"}

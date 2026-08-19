@@ -52,6 +52,7 @@ function describeAction(input: BotDecisionInput, action: LegalAction): string {
   if (payload.action === "guardian.bond") return `bond with ${target} tonight`;
   if (payload.action === "detective.investigate") return `investigate ${target} tonight`;
   if (payload.action === "serial_killer.visit") return `visit ${target} tonight, and kill`;
+  if (payload.action === "cult.convert") return `convert ${target} into a cultist tonight`;
   return `visit ${target} tonight`;
 }
 
@@ -64,7 +65,12 @@ function describeEvent(input: BotDecisionInput, event: GameEvent): string | null
       return `— ${event.payload.type} begins —`;
     case "chat.message": {
       const speaker = event.actorUserId ? who(event.actorUserId) : "someone";
-      const room = event.payload.channel === "wolves" ? "wolf chat" : "village";
+      const room =
+        event.payload.channel === "wolves"
+          ? "wolf chat"
+          : event.payload.channel === "cult"
+            ? "cult chat"
+            : "village";
       return `[${room}] ${speaker}: ${event.payload.text}`;
     }
     case "vote.resolved":
@@ -84,13 +90,17 @@ function describeEvent(input: BotDecisionInput, event: GameEvent): string | null
     case "seer.result":
       return `Your inspection: ${who(event.payload.targetId)} is a ${event.payload.role}.`;
     case "player.converted":
-      return "You were bitten and are now a werewolf.";
+      return event.payload.cause === "cult"
+        ? "You were converted and are now a cultist."
+        : "You were bitten and are now a werewolf.";
     case "harlot.result":
       return `Your night visit ended: ${event.payload.outcome}.`;
     case "wolves.member_joined":
       return `${who(event.payload.playerId)} is in your wolf pack.`;
     case "masons.member_joined":
       return `${who(event.payload.playerId)} is a fellow mason.`;
+    case "cult.member_joined":
+      return `${who(event.payload.playerId)} is in your cult.`;
     case "game.finished":
       return `The game is over; ${event.payload.winningFactions.join(", ")} won.`;
     default:

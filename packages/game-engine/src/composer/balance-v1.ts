@@ -40,6 +40,7 @@ export const roleAvailabilityMinimums: Partial<Record<RoleId, number>> = {
   cub: 7,
   sorcerer: 8,
   detective: 7,
+  cult_leader: 9,
 };
 
 /** Roles a Drunk may believe they are. Restricted to roles whose output is
@@ -98,4 +99,5 @@ export const availableSpecialRoles: readonly RoleId[] = [
   "cub",
   "sorcerer",
   "detective",
+  "cult_leader",
 ];

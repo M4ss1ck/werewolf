@@ -71,7 +71,7 @@ export const BotDecisionSchema = z.object({
     .nullish()
     .transform((value) => value ?? null),
   channel: z
-    .enum(["public", "wolves"])
+    .enum(["public", "wolves", "cult"])
     .nullish()
     .transform((value) => value ?? null),
 });

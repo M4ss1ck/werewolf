@@ -46,6 +46,8 @@ export const EVENT_KINDS = [
   // Wolf faction
   "wolves.member_joined",
   "masons.member_joined",
+  // Cult faction
+  "cult.member_joined",
   // Scheduled game
   "game.start_deferred",
   // Server-only
@@ -73,6 +75,7 @@ export type VictoryReason =
   | "village_eliminated"
   | "veteran_lynched"
   | "serial_killer_survives"
+  | "cult_survives"
   | "stalemate"
   | "no_survivors";
 
@@ -126,6 +129,8 @@ export interface EventPayloads {
   // Wolf faction
   "wolves.member_joined": { playerId: UserId };
   "masons.member_joined": { playerId: UserId };
+  // Cult faction
+  "cult.member_joined": { playerId: UserId };
   "game.start_deferred": { joinedPlayers: number; minimumPlayers: number };
   // Server-only
   "audit.vote": {
@@ -188,6 +193,7 @@ export const VictoryReasonSchema = z.enum([
   "village_eliminated",
   "veteran_lynched",
   "serial_killer_survives",
+  "cult_survives",
   "stalemate",
   "no_survivors",
 ]);
@@ -373,6 +379,15 @@ export const GameEventSchema = z.discriminatedUnion("kind", [
   z.object({
     id: EventIdSchema,
     kind: z.literal("masons.member_joined"),
+    scope: EventScopeSchema,
+    scopeId: z.string().optional(),
+    actorUserId: UserIdSchema.optional(),
+    createdAt: z.number(),
+    payload: z.object({ playerId: UserIdSchema }),
+  }),
+  z.object({
+    id: EventIdSchema,
+    kind: z.literal("cult.member_joined"),
     scope: EventScopeSchema,
     scopeId: z.string().optional(),
     actorUserId: UserIdSchema.optional(),

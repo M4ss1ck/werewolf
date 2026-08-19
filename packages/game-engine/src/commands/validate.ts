@@ -1,7 +1,7 @@
 import type { ActionId, GameplayCommand, UserId } from "@werewolf/protocol";
 import { isUnlinkedCupid } from "../roles/cupid.ts";
 import { getPerceivedRole } from "../roles/perceived.ts";
-import { isPackMember, WOLF_CHAT_ROLES } from "../roles/registry.ts";
+import { CULT_CHAT_ROLES, isPackMember, WOLF_CHAT_ROLES } from "../roles/registry.ts";
 import type { DomainError, GameState } from "../state.ts";
 
 export interface CommandContext {
@@ -28,6 +28,14 @@ export function validateCommand(
       // The dead may speak in the graveyard in every phase, including night.
       // A spectator who never played is not dead and must not sit in it.
       if (player.status !== "dead") return { code: "CHANNEL_NOT_AVAILABLE" };
+      return null;
+    }
+    if (command.payload.channel === "cult") {
+      // The cult channel is for the cult: the leader and converted cultists,
+      // alive. Mirrors the wolves channel.
+      if (player.role === null || !CULT_CHAT_ROLES.has(player.role))
+        return { code: "CHANNEL_NOT_AVAILABLE" };
+      if (player.status !== "alive") return { code: "CHAT_READ_ONLY" };
       return null;
     }
     if (player.role === null || !WOLF_CHAT_ROLES.has(player.role))
@@ -115,6 +123,12 @@ export function validateCommand(
         if (perceivedRole !== "guardian") return { code: "ACTION_NOT_AVAILABLE" };
         if (state.day !== 1) return { code: "ACTION_NOT_AVAILABLE" };
         if (isGuardianBonded(player.roleState)) return { code: "ACTION_NOT_AVAILABLE" };
+        if (!target || target.status !== "alive" || target.id === actorId)
+          return { code: "INVALID_TARGET" };
+        return null;
+      }
+      case "cult.convert": {
+        if (perceivedRole !== "cult_leader") return { code: "ACTION_NOT_AVAILABLE" };
         if (!target || target.status !== "alive" || target.id === actorId)
           return { code: "INVALID_TARGET" };
         return null;

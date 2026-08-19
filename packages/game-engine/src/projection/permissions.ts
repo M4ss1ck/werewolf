@@ -1,5 +1,5 @@
 import type { GameEvent, UserId } from "@werewolf/protocol";
-import { WOLF_CHAT_ROLES } from "../roles/registry.ts";
+import { CULT_CHAT_ROLES, WOLF_CHAT_ROLES } from "../roles/registry.ts";
 import type { GameState } from "../state.ts";
 
 export function canViewEvent(event: GameEvent, viewer: UserId, state: GameState): boolean {
@@ -16,19 +16,35 @@ export function canViewEvent(event: GameEvent, viewer: UserId, state: GameState)
     return player.status === "dead";
   }
 
-  if (event.scopeId !== "wolves") return false;
+  if (event.scopeId === "wolves") {
+    if (player.role === null || !WOLF_CHAT_ROLES.has(player.role)) return false;
 
-  if (player.role === null || !WOLF_CHAT_ROLES.has(player.role)) return false;
+    // A starting wolf sees the whole faction history.
+    if (player.originalRole !== null && WOLF_CHAT_ROLES.has(player.originalRole)) return true;
 
-  // A starting wolf sees the whole faction history.
-  if (player.originalRole !== null && WOLF_CHAT_ROLES.has(player.originalRole)) return true;
+    // Anyone else in the wolf faction got there by conversion and may only read
+    // from that moment on. The marker is written when the conversion event is
+    // persisted, so treat a missing one as "not yet entitled" and fail closed:
+    // failing open would hand a freshly converted Cursed every earlier wolf
+    // message.
+    const since = player.channelSince?.wolves;
+    if (since === undefined) return false;
+    return event.id >= since;
+  }
 
-  // Anyone else in the wolf faction got there by conversion and may only read
-  // from that moment on. The marker is written when the conversion event is
-  // persisted, so treat a missing one as "not yet entitled" and fail closed:
-  // failing open would hand a freshly converted Cursed every earlier wolf
-  // message.
-  const since = player.channelSince?.wolves;
-  if (since === undefined) return false;
-  return event.id >= since;
+  if (event.scopeId === "cult") {
+    if (player.role === null || !CULT_CHAT_ROLES.has(player.role)) return false;
+
+    // A starting cult member (the leader) sees the whole faction history.
+    if (player.originalRole !== null && CULT_CHAT_ROLES.has(player.originalRole)) return true;
+
+    // Anyone else got there by conversion and may only read from that moment
+    // on. A missing marker fails closed: a freshly converted cultist must not
+    // read the cult's earlier messages.
+    const since = player.channelSince?.cult;
+    if (since === undefined) return false;
+    return event.id >= since;
+  }
+
+  return false;
 }

@@ -41,6 +41,9 @@ type FrozenNight = {
   /** A Drunk who believes they are the Detective. Same shape as the real
    * result: sometimes a uniformly random role, sometimes null. */
   drunkFakeDetective: { playerId: UserId; targetId: UserId; role: RoleId | null } | null;
+  /** The cult leader's conversion target. The leader travels to the target's
+   * house and converts them; the conversion is not a hit. */
+  cultConvert: { playerId: UserId; targetId: UserId } | null;
 };
 
 type NightOutcome = {
@@ -263,6 +266,17 @@ function freezeNightIntents(state: GameState, rng: SeededRng, day: number): Froz
               : null,
         }
       : null;
+  // The cult leader converts one living player each night. The action is
+  // frozen here so the conversion lands even if the leader is killed that
+  // same night — they got there and did it.
+  const cultLeader = living.find((player) => player.role === "cult_leader");
+  const cultConvertAction = cultLeader
+    ? currentAction(cultLeader, phaseId, "cult.convert")
+    : undefined;
+  const cultConvert =
+    cultConvertAction?.targetId && isLivingTarget(state, cultConvertAction.targetId)
+      ? { playerId: cultLeader!.id, targetId: cultConvertAction.targetId }
+      : null;
   return {
     wolfVotes,
     seerInspection,
@@ -276,6 +290,7 @@ function freezeNightIntents(state: GameState, rng: SeededRng, day: number): Froz
     sorcererDivine,
     detectiveInvestigation,
     drunkFakeDetective,
+    cultConvert,
   };
 }
 
@@ -302,10 +317,10 @@ function resolveWolfBallot(votes: FrozenNight["wolfVotes"]): UserId | null {
 /** Where every living player spends the night: a map from player id to the id
  * of the player whose house they are in. Everyone starts at home; the pack
  * gathers at the balloted target's house (or stay home on a tie or empty
- * ballot), and the harlot, serial killer and detective travel to their visit
- * targets. The detective walks to the house it investigates: that is the
- * price of the second information role. The seer never travels: scrying is
- * remote. The sorcerer neither: they are wolf-faction but not one of the
+ * ballot), and the harlot, serial killer, detective and cult leader travel to
+ * their visit targets. The detective walks to the house it investigates: that
+ * is the price of the second information role. The seer never travels: scrying
+ * is remote. The sorcerer neither: they are wolf-faction but not one of the
  * pack, so they do not gather with it.
  *
  * Travel keys on whoever STORED the action, not on who is really a detective:
@@ -332,6 +347,9 @@ function resolveNightLocations(
     locations.set(frozen.detectiveInvestigation.playerId, frozen.detectiveInvestigation.targetId);
   if (frozen.drunkFakeDetective)
     locations.set(frozen.drunkFakeDetective.playerId, frozen.drunkFakeDetective.targetId);
+  // The cult leader travels to the target's house, exactly as the Detective
+  // and Harlot do. They can be killed there.
+  if (frozen.cultConvert) locations.set(frozen.cultConvert.playerId, frozen.cultConvert.targetId);
   return locations;
 }
 
@@ -354,7 +372,8 @@ function occupantsOf(
  *   5. Priest shield cancels a hit entirely
  *   6. Guardian substitution for any hit that survived the shield
  *   7. Conversions on the hits that remain: Cursed first, then Alpha
- *   8. Harlot exposure
+ *   8. Cult conversion (not a hit; its own sub-step)
+ *   9. Harlot exposure
  *
  * Later roles slot into a named stage instead of being wedged in wherever they
  * fit. Stages 5 and 6 are the only new ones; everything else behaves exactly
@@ -501,6 +520,27 @@ function resolveHouseAttacks(
     else deaths.set(victimId, cause);
   }
 
+  // Stage 7 (cont.): the cult conversion. Not a hit — the leader walks to the
+  // target's house and converts them, so it is its own sub-step after the
+  // Cursed and Alpha checks. It lands even if the leader is killed that same
+  // night. The Guardian does NOT block a conversion: substitution is for a
+  // hit, and there is no hit here. The Priest's shield does block it — "the
+  // night did not happen to you" — and so does immunity: a wolf, a serial
+  // killer and a hunter are all immune. The Veteran is NOT immune: the Cult
+  // wins by converting, and denying it the Veteran would gut its core loop.
+  if (frozen.cultConvert) {
+    const target = state.players[frozen.cultConvert.targetId];
+    if (
+      target &&
+      target.status === "alive" &&
+      !deaths.has(target.id) &&
+      target.id !== protectedId &&
+      !isCultImmune(target)
+    ) {
+      conversions.push({ playerId: target.id, cause: "cult" });
+    }
+  }
+
   // Stage 8: harlot exposure. A harlot who visits a wolf's own house while
   // that wolf is home dies from exposure: the wolf is in, the encounter is
   // fatal. When the pack has a target the wolf is out hunting and the house is
@@ -521,11 +561,23 @@ function livingPlayers(state: GameState): PlayerState[] {
   return Object.values(state.players).filter((player) => player.status === "alive");
 }
 
+/** A player the cult cannot convert. Wolves, the serial killer and the hunter
+ * are immune; the Veteran is deliberately NOT — the cult wins by converting,
+ * and denying it the Veteran would gut its core loop. */
+function isCultImmune(player: PlayerState): boolean {
+  return player.faction === "wolves" || player.role === "serial_killer" || player.role === "hunter";
+}
+
 function commitNight(outcome: NightOutcome): PlayerPatch[] {
   const patches: PlayerPatch[] = [];
   for (const [playerId] of outcome.deaths) patches.push({ playerId, changes: { status: "dead" } });
-  for (const { playerId } of outcome.conversions)
-    patches.push({ playerId, changes: { role: "werewolf", faction: "wolves" } });
+  for (const { playerId, cause } of outcome.conversions) {
+    if (cause === "cult") {
+      patches.push({ playerId, changes: { role: "cultist", faction: "cult" } });
+    } else {
+      patches.push({ playerId, changes: { role: "werewolf", faction: "wolves" } });
+    }
+  }
   return patches;
 }
 
@@ -683,18 +735,33 @@ function makeNightEvents(
     });
   }
   for (const { playerId, cause } of outcome.conversions) {
-    events.push({
-      kind: "player.converted",
-      scope: "player",
-      scopeId: playerId,
-      payload: { role: "werewolf", faction: "wolves", cause },
-    });
-    events.push({
-      kind: "wolves.member_joined",
-      scope: "faction",
-      scopeId: "wolves",
-      payload: { playerId },
-    });
+    if (cause === "cult") {
+      events.push({
+        kind: "player.converted",
+        scope: "player",
+        scopeId: playerId,
+        payload: { role: "cultist", faction: "cult", cause },
+      });
+      events.push({
+        kind: "cult.member_joined",
+        scope: "faction",
+        scopeId: "cult",
+        payload: { playerId },
+      });
+    } else {
+      events.push({
+        kind: "player.converted",
+        scope: "player",
+        scopeId: playerId,
+        payload: { role: "werewolf", faction: "wolves", cause },
+      });
+      events.push({
+        kind: "wolves.member_joined",
+        scope: "faction",
+        scopeId: "wolves",
+        payload: { playerId },
+      });
+    }
   }
   events.push({
     kind: "audit.night",

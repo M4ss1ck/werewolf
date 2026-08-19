@@ -151,6 +151,19 @@ export function getAvailableActions(state: GameState, playerId: UserId): Availab
           : {}),
       });
     }
+    if (perceivedRole === "cult_leader") {
+      available.push({
+        id: "cult.convert",
+        type: "target",
+        targets: others.map((target) => ({
+          userId: target.id,
+          enabled: target.status === "alive" && target.id !== player.id,
+        })),
+        ...(stored["cult.convert"]?.targetId
+          ? { selectedTargetId: stored["cult.convert"]!.targetId }
+          : {}),
+      });
+    }
     return available;
   }
   if (state.phase.type === "discussion" || state.phase.type === "voting") {

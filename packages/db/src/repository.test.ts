@@ -788,4 +788,81 @@ describe("GameRepository", () => {
       wolves: joined.id,
     });
   });
+
+  test("cult.member_joined sets the converted player's channel_since_json cult marker to the event's own id", async () => {
+    const { db, repo } = await setup();
+    await createGame(repo);
+    const convert = USER_IDS[0]!;
+    await repo.addPlayer({
+      gameId: GAME_ID,
+      userId: convert,
+      displayName: "Convert",
+      joinedAt: 1_000,
+    });
+
+    const result = await repo.commitTransition(GAME_ID, 0, {
+      gamePatch: { status: "running" },
+      playerPatches: [
+        {
+          playerId: convert,
+          changes: { role: "cultist", faction: "cult", roleState: { converted: true } },
+        },
+      ],
+      events: [draft("cult.member_joined", "faction", { playerId: convert }, { scopeId: "cult" })],
+      ephemeral: [],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("transition should not be stale");
+
+    const joined = result.events.find((event) => event.kind === "cult.member_joined");
+    expect(joined).toBeDefined();
+    expect(joined!.id).toBeGreaterThan(0);
+
+    const rows = await db
+      .select()
+      .from(gamePlayers)
+      .where(and(eq(gamePlayers.gameId, GAME_ID), eq(gamePlayers.userId, convert)));
+    expect(rows).toHaveLength(1);
+    expect(JSON.parse(rows[0]!.channelSinceJson)).toEqual({ cult: joined!.id });
+  });
+
+  test("a cult.member_joined write merges rather than replacing an existing marker for a different channel", async () => {
+    const { db, repo } = await setup();
+    await createGame(repo);
+    const playerId = USER_IDS[0]!;
+    await repo.addPlayer({
+      gameId: GAME_ID,
+      userId: playerId,
+      displayName: "P0",
+      joinedAt: 1_000,
+    });
+
+    // Seed a wolves marker via a player patch.
+    await repo.commitTransition(GAME_ID, 0, {
+      gamePatch: { status: "running" },
+      playerPatches: [{ playerId, changes: { channelSince: { wolves: 3 as EventId } } }],
+      events: [],
+      ephemeral: [],
+    });
+
+    // A cult.member_joined write must merge, not overwrite, the wolves marker.
+    const result = await repo.commitTransition(GAME_ID, 1, {
+      gamePatch: {},
+      playerPatches: [],
+      events: [draft("cult.member_joined", "faction", { playerId }, { scopeId: "cult" })],
+      ephemeral: [],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("transition should not be stale");
+    const joined = result.events.find((event) => event.kind === "cult.member_joined")!;
+
+    const rows = await db
+      .select()
+      .from(gamePlayers)
+      .where(and(eq(gamePlayers.gameId, GAME_ID), eq(gamePlayers.userId, playerId)));
+    expect(JSON.parse(rows[0]!.channelSinceJson)).toEqual({
+      wolves: 3,
+      cult: joined.id,
+    });
+  });
 });

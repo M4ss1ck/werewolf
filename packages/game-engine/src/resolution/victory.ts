@@ -24,21 +24,30 @@ export function checkVictory(state: GameState): VictoryResult | null {
     const winners = Object.values(state.players).filter((player) => player.faction === "wolves");
     result = makeVictory("wolves", winners, "village_eliminated");
   }
-  // 4. No wolves and no serial killers remain, but at least one villager does.
+  // 4. Every living player is a cultist.
+  else if (living.every((player) => player.faction === "cult")) {
+    const winners = Object.values(state.players).filter((player) => player.faction === "cult");
+    result = makeVictory("cult", winners, "cult_survives");
+  }
+  // 5. No wolves, no serial killers and no cultists remain, but at least one
+  // villager does. The "no living cult" guard is essential: without it a
+  // village with one survivor and three cultists alive would report a village
+  // win.
   else if (
     !living.some((player) => player.faction === "wolves") &&
     !living.some((player) => player.faction === "serial_killer") &&
+    !living.some((player) => player.faction === "cult") &&
     living.some((player) => player.faction === "village")
   ) {
     const winners = Object.values(state.players).filter((player) => player.faction === "village");
     result = makeVictory("village", winners, "wolves_eliminated");
   }
-  // 5. Five consecutive nights with no elimination end the game in a draw.
+  // 6. Five consecutive nights with no elimination end the game in a draw.
   else if (state.nightsWithoutElimination >= STALEMATE_NIGHTS) {
     result = { winningFactions: [], winningPlayers: [], reason: "stalemate" };
   }
 
-  // 6. The game continues.
+  // 7. The game continues.
   if (result === null) return null;
 
   // Lover rider: whichever of an established pair is on a winning side carries

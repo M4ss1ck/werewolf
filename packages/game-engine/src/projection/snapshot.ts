@@ -6,7 +6,7 @@ import type {
   ViewerPlayer,
 } from "@werewolf/protocol";
 import { getPerceivedRole } from "../roles/perceived.ts";
-import { getRoleDefinition, isPackMember } from "../roles/registry.ts";
+import { getRoleDefinition, isCultMember, isPackMember } from "../roles/registry.ts";
 import type { GameState, PlayerState } from "../state.ts";
 import { getAvailableActions } from "./available-actions.ts";
 
@@ -60,6 +60,8 @@ function availableChannels(player: PlayerState | undefined): ChatChannel[] {
   // Wolf chat is for the pack and for converted players entitled by marker;
   // a wolf-faction role like the sorcerer must not see the tab it cannot use.
   if (isPackMember(player) || player.channelSince?.wolves !== undefined) channels.push("wolves");
+  // Cult chat is for the cult and for converted players entitled by marker.
+  if (isCultMember(player) || player.channelSince?.cult !== undefined) channels.push("cult");
   if (player.status === "dead") channels.push("grave");
   return channels;
 }

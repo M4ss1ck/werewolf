@@ -259,8 +259,13 @@ export class GameRepository {
               )[0]
             : undefined);
         if (row) inserted.push(mapEvent(row));
-        if (draft.kind === "wolves.member_joined" && row) {
+        // A faction-join event entitles the joined player to that channel from
+        // this event onward. The marker is merged into channel_since_json so
+        // one channel's marker can never erase another's. The read-merge-write
+        // keeps a player who joins two channels entitled to both.
+        if ((draft.kind === "wolves.member_joined" || draft.kind === "cult.member_joined") && row) {
           const playerId = (draft.payload as { playerId: UserId }).playerId;
+          const channel = draft.kind === "wolves.member_joined" ? "wolves" : "cult";
           const existing = await tx
             .select({ channelSinceJson: gamePlayers.channelSinceJson })
             .from(gamePlayers)
@@ -271,7 +276,7 @@ export class GameRepository {
             : {};
           await tx
             .update(gamePlayers)
-            .set({ channelSinceJson: JSON.stringify({ ...channelSince, wolves: row.id }) })
+            .set({ channelSinceJson: JSON.stringify({ ...channelSince, [channel]: row.id }) })
             .where(and(eq(gamePlayers.gameId, gameId), eq(gamePlayers.userId, playerId)));
         }
       }

@@ -100,12 +100,23 @@ export const en = {
       description:
         "Visits one player each night to investigate them. Half the time you learn their role; a miss is inconclusive, never a lie. The walk is risky — if the killers come to that house, you die there.",
     },
+    cult_leader: {
+      name: "Cult Leader",
+      description:
+        "Each night, converts one living player into a cultist. The cult wins by being the only ones left. You travel to the house you convert, so the walk can be deadly.",
+    },
+    cultist: {
+      name: "Cultist",
+      description:
+        "A converted member of the cult. You have no power of your own: the cult wins by being the only ones left.",
+    },
   },
   factions: {
     village: "Village",
     wolves: "Wolves",
     veteran: "The Veteran",
     serial_killer: "The Serial Killer",
+    cult: "The Cult",
   },
   phases: {
     discussion: "Discussion",
@@ -183,6 +194,11 @@ export const en = {
       prompt:
         "Choose a player to investigate tonight. You visit their house: half the time you learn their role, but if the killers come you die there.",
     },
+    "cult.convert": {
+      label: "Convert",
+      prompt:
+        "Choose a living player to convert into a cultist tonight. You walk to their house, so the visit can be deadly.",
+    },
   },
   errors: {
     UNKNOWN_ERROR: "Something went wrong. Please try again.",
@@ -245,6 +261,7 @@ export const en = {
       },
       "wolves.member_joined": "{{player}} has joined the wolves.",
       "masons.member_joined": "{{player}} is a mason.",
+      "cult.member_joined": "{{player}} has joined the cult.",
     },
   },
   ui: {
@@ -296,6 +313,7 @@ export const en = {
     publicChat: "Public chat",
     wolfChat: "Wolf chat",
     graveChat: "Grave chat",
+    cultChat: "Cult chat",
     yourRole: "Your role",
     factionTeam: "{{faction}} team",
     vote: {
@@ -404,16 +422,19 @@ export const en = {
       packWins: "the pack wins",
       veteranWins: "the veteran wins",
       serialKillerWins: "the serial killer wins",
+      cultWins: "the cult wins",
       drawFaction: "nobody",
       villageWinsTitle: "The pack is broken",
       wolvesWinTitle: "The village falls",
       veteranWinsTitle: "Exactly as planned",
       serialKillerWinsTitle: "The last one standing",
+      cultWinsTitle: "The cult takes the village",
       drawTitle: "A draw",
       reasonWolvesEliminated: "All the wolves were eliminated.",
       reasonVillageEliminated: "The wolves killed everyone else.",
       reasonVeteranLynched: "The village lynched the veteran. Everyone else loses.",
       reasonSerialKillerSurvives: "The serial killer outlived everyone.",
+      reasonCultSurvives: "The cult converted everyone else.",
       reasonStalemate: "Five nights passed with nobody eliminated.",
       reasonNoSurvivors: "Nobody survived the night.",
       rolesRevealed: "Roles revealed",

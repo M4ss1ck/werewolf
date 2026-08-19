@@ -20,7 +20,9 @@ function player(
           ? "serial_killer"
           : role === "veteran"
             ? "veteran"
-            : "village",
+            : role === "cult_leader" || role === "cultist"
+              ? "cult"
+              : "village",
     roleState: {},
     phaseState: { phaseId: 1 as never },
     ...overrides,
@@ -167,9 +169,46 @@ describe("victory checks", () => {
     });
   });
 
-  // Branch 4: no wolves, no serial killers, at least one living villager.
-  test("no wolves or serial killers alive with a living villager is a village win", () => {
-    const state = game([player("p0", "villager"), player("p1", "werewolf", { status: "dead" })]);
+  // Branch 4: every living player is a cultist.
+  test("all living players being cultists is a cult win", () => {
+    const state = game([
+      player("p0", "cult_leader"),
+      player("p1", "cultist"),
+      player("p2", "villager", { status: "dead" }),
+    ]);
+    expect(checkVictory(state)).toEqual({
+      winningFactions: ["cult"],
+      winningPlayers: ["p0" as PlayerState["id"], "p1" as PlayerState["id"]],
+      reason: "cult_survives",
+    });
+  });
+
+  // Branch 4 regression: a living villager plus living cultists is NOT a
+  // village win. Without the "no living cult" guard in branch 5, a village
+  // with one survivor and three cultists alive would report a village win.
+  test("one living villager plus living cultists is not a village win", () => {
+    const state = game([
+      player("p0", "villager"),
+      player("p1", "cultist"),
+      player("p2", "cultist"),
+      player("p3", "cultist"),
+    ]);
+    expect(checkVictory(state)).toBeNull();
+  });
+
+  // Branch 5: a cult and wolves both alive is not a win for anyone yet.
+  test("a cult and wolves both alive is not a win for anyone", () => {
+    const state = game([player("p0", "cult_leader"), player("p1", "werewolf")]);
+    expect(checkVictory(state)).toBeNull();
+  });
+
+  // Branch 5: no wolves, no serial killers, no cultists, at least one villager.
+  test("no wolves, serial killers or cultists alive with a living villager is a village win", () => {
+    const state = game([
+      player("p0", "villager"),
+      player("p1", "werewolf", { status: "dead" }),
+      player("p2", "cultist", { status: "dead" }),
+    ]);
     expect(checkVictory(state)).toEqual({
       winningFactions: ["village"],
       winningPlayers: ["p0" as PlayerState["id"]],
@@ -177,7 +216,7 @@ describe("victory checks", () => {
     });
   });
 
-  // Branch 4 regression: only a living veteran, no living villager.
+  // Branch 5 regression: only a living veteran, no living villager.
   test("the only living player being a veteran is not a village win", () => {
     const state = game([
       player("p0", "veteran"),
@@ -187,7 +226,7 @@ describe("victory checks", () => {
     expect(checkVictory(state)).toBeNull();
   });
 
-  // Branch 5: stalemate.
+  // Branch 6: stalemate.
   test("the stalemate branch fires at exactly STALEMATE_NIGHTS", () => {
     const state = game(
       [
@@ -233,33 +272,36 @@ describe("victory checks", () => {
       for (let w = 0; w <= 3; w += 1) {
         for (let vet = 0; vet <= 3; vet += 1) {
           for (let sk = 0; sk <= 3; sk += 1) {
-            const players: PlayerState[] = [];
-            let index = 0;
-            for (const [faction, count] of [
-              ["village", v],
-              ["wolves", w],
-              ["veteran", vet],
-              ["serial_killer", sk],
-            ] as const) {
-              for (let i = 0; i < count; i += 1) {
-                players.push({
-                  id: `p${index++}` as PlayerState["id"],
-                  status: "alive",
-                  originalRole: null,
-                  role: null,
-                  faction,
-                  roleState: {},
-                  phaseState: { phaseId: 1 as never },
-                });
+            for (let c = 0; c <= 3; c += 1) {
+              const players: PlayerState[] = [];
+              let index = 0;
+              for (const [faction, count] of [
+                ["village", v],
+                ["wolves", w],
+                ["veteran", vet],
+                ["serial_killer", sk],
+                ["cult", c],
+              ] as const) {
+                for (let i = 0; i < count; i += 1) {
+                  players.push({
+                    id: `p${index++}` as PlayerState["id"],
+                    status: "alive",
+                    originalRole: null,
+                    role: null,
+                    faction,
+                    roleState: {},
+                    phaseState: { phaseId: 1 as never },
+                  });
+                }
               }
-            }
-            const result = checkVictory(game(players));
-            if (result && result.winningFactions.length > 0) {
-              for (const faction of result.winningFactions) {
-                expect(
-                  players.some((p) => p.faction === faction),
-                  `faction ${faction} must have a living member for population v=${v} w=${w} vet=${vet} sk=${sk}`,
-                ).toBe(true);
+              const result = checkVictory(game(players));
+              if (result && result.winningFactions.length > 0) {
+                for (const faction of result.winningFactions) {
+                  expect(
+                    players.some((p) => p.faction === faction),
+                    `faction ${faction} must have a living member for population v=${v} w=${w} vet=${vet} sk=${sk} c=${c}`,
+                  ).toBe(true);
+                }
               }
             }
           }
