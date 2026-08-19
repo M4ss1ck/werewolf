@@ -79,7 +79,9 @@ describe("game start and phase orchestration", () => {
 
   test("teaches wolves and masons only their own groups", () => {
     let result: DomainTransition | undefined;
-    for (let seed = 0; seed < 100; seed += 1) {
+    // The composition pool includes the Sorcerer since this test was written, so
+    // a given seed window no longer guarantees two masons; search wider.
+    for (let seed = 0; seed < 2000; seed += 1) {
       const candidate = transition(startGame(makeState(8), { now: 100, seed }));
       if (candidate.playerPatches.filter((patch) => patch.changes.role === "mason").length === 2) {
         result = candidate;

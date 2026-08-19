@@ -90,6 +90,11 @@ export const en = {
       name: "Cub",
       description: "A young wolf with no special power: you hunt with the pack and win with it.",
     },
+    sorcerer: {
+      name: "Sorcerer",
+      description:
+        "You win with the wolves but are no part of the pack: no wolf chat, no hunt, and the pack may eat you. Each night you divine one player and learn only whether they are a wolf.",
+    },
   },
   factions: {
     village: "Village",
@@ -164,6 +169,10 @@ export const en = {
       label: "Bond",
       prompt: "Choose a player to bond with. If they are attacked, you die in their place.",
     },
+    "sorcerer.divine": {
+      label: "Divine",
+      prompt: "Choose a player and learn only whether they are a wolf.",
+    },
   },
   errors: {
     UNKNOWN_ERROR: "Something went wrong. Please try again.",
@@ -210,6 +219,10 @@ export const en = {
     player: {
       "role.assigned": "Your role is {{role}}.",
       "seer.result": "{{player}} is a {{role}}.",
+      "sorcerer.result": {
+        wolf: "{{player}} is a wolf.",
+        notWolf: "{{player}} is not a wolf.",
+      },
       "player.converted": "You were turned into a werewolf. Your new role is {{role}}.",
       "harlot.result": {
         safe: "You returned home safely.",

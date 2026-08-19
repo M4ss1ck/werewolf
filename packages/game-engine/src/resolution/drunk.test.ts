@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { EventPayloads } from "@werewolf/protocol";
 import { ROLE_IDS } from "@werewolf/protocol";
 import { validateCommand } from "../commands/validate.ts";
+import { DRUNK_FAKE_ROLES } from "../composer/balance-v1.ts";
 import { getAvailableActions } from "../projection/available-actions.ts";
 import { projectSnapshot } from "../projection/snapshot.ts";
 import { SeededRng } from "../rng/rng.ts";
@@ -160,7 +161,10 @@ describe("the Drunk's perceived role", () => {
     );
     expect(event).toBeDefined();
     const role = (event!.payload as EventPayloads["role.assigned"]).role;
-    expect(role).toBe("cupid");
+    // Which fake role is dealt is seed-dependent (the composer pool changed with
+    // the Sorcerer); the contract is that it is one of the fake roles, never the
+    // Drunk's true role.
+    expect(DRUNK_FAKE_ROLES).toContain(role);
     expect(role).not.toBe("drunk");
   });
 });

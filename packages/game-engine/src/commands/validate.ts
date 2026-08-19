@@ -1,7 +1,7 @@
 import type { ActionId, GameplayCommand, UserId } from "@werewolf/protocol";
 import { isUnlinkedCupid } from "../roles/cupid.ts";
 import { getPerceivedRole } from "../roles/perceived.ts";
-import { WOLF_CHAT_ROLES } from "../roles/registry.ts";
+import { isPackMember, WOLF_CHAT_ROLES } from "../roles/registry.ts";
 import type { DomainError, GameState } from "../state.ts";
 
 export interface CommandContext {
@@ -55,12 +55,17 @@ export function validateCommand(
     // discriminant to accept them.
     switch (command.payload.action as ActionId) {
       case "wolf.attack":
-        if (player.faction !== "wolves") return { code: "ACTION_NOT_AVAILABLE" };
-        if (!target || target.status !== "alive" || target.faction === "wolves")
+        if (!isPackMember(player)) return { code: "ACTION_NOT_AVAILABLE" };
+        if (!target || target.status !== "alive" || isPackMember(target))
           return { code: "INVALID_TARGET" };
         return null;
       case "seer.inspect":
         if (perceivedRole !== "seer") return { code: "ACTION_NOT_AVAILABLE" };
+        if (!target || target.status !== "alive" || target.id === actorId)
+          return { code: "INVALID_TARGET" };
+        return null;
+      case "sorcerer.divine":
+        if (perceivedRole !== "sorcerer") return { code: "ACTION_NOT_AVAILABLE" };
         if (!target || target.status !== "alive" || target.id === actorId)
           return { code: "INVALID_TARGET" };
         return null;

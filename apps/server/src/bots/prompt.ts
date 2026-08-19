@@ -46,6 +46,7 @@ function describeAction(input: BotDecisionInput, action: LegalAction): string {
   const target = nameOf(input, payload.targetId);
   if (payload.action === "wolf.attack") return `have the pack attack ${target} tonight`;
   if (payload.action === "seer.inspect") return `inspect ${target} tonight`;
+  if (payload.action === "sorcerer.divine") return `divine whether ${target} is a wolf tonight`;
   if (payload.action === "priest.protect") return `shield ${target} from every attack tonight`;
   if (payload.action === "guardian.bond") return `bond with ${target} tonight`;
   return `visit ${target} tonight`;

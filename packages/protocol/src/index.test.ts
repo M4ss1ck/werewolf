@@ -206,6 +206,7 @@ test("EVENT_KINDS covers the initial protocol vocabulary", () => {
     "chat.message",
     "role.assigned",
     "seer.result",
+    "sorcerer.result",
     "player.converted",
     "harlot.result",
     "player.linked",

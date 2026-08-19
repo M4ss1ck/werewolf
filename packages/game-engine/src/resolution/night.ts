@@ -3,6 +3,7 @@ import { ROLE_IDS } from "@werewolf/protocol";
 import { ALPHA_CONVERSION_CHANCE } from "../composer/balance-v1.ts";
 import type { SeededRng } from "../rng/rng.ts";
 import { getPerceivedRole } from "../roles/perceived.ts";
+import { isPackMember } from "../roles/registry.ts";
 import type {
   DomainResult,
   DomainTransition,
@@ -34,6 +35,7 @@ type FrozenNight = {
   drunkCupidSelfLink: { playerId: UserId; partnerId: UserId } | null;
   priestProtect: { playerId: UserId; targetId: UserId } | null;
   guardianBond: { playerId: UserId; targetId: UserId } | null;
+  sorcererDivine: { playerId: UserId; targetId: UserId; isWolf: boolean } | null;
 };
 
 type NightOutcome = {
@@ -115,7 +117,7 @@ function freezeNightIntents(state: GameState, rng: SeededRng, day: number): Froz
   const phaseId = state.phase!.id;
   const living = Object.values(state.players).filter((player) => player.status === "alive");
   const wolfVotes = living
-    .filter((player) => player.faction === "wolves")
+    .filter((player) => isPackMember(player))
     .map((player) => ({ player, action: currentAction(player, phaseId, "wolf.attack") }))
     .filter(({ action }) => action?.targetId && isLivingTarget(state, action.targetId))
     .map(({ player, action }) => ({ playerId: player.id, targetId: action!.targetId! }));
@@ -204,6 +206,18 @@ function freezeNightIntents(state: GameState, rng: SeededRng, day: number): Froz
     guardianAction?.targetId && isLivingTarget(state, guardianAction.targetId)
       ? { playerId: guardian!.id, targetId: guardianAction.targetId }
       : null;
+  // The Sorcerer scries from home, like the Seer. The result is a boolean —
+  // wolf-faction or not — never an exact role.
+  const sorcerer = living.find((player) => player.role === "sorcerer");
+  const sorcererAction = sorcerer ? currentAction(sorcerer, phaseId, "sorcerer.divine") : undefined;
+  const sorcererDivine =
+    sorcererAction?.targetId && isLivingTarget(state, sorcererAction.targetId)
+      ? {
+          playerId: sorcerer!.id,
+          targetId: sorcererAction.targetId,
+          isWolf: state.players[sorcererAction.targetId]!.faction === "wolves",
+        }
+      : null;
   return {
     wolfVotes,
     seerInspection,
@@ -214,6 +228,7 @@ function freezeNightIntents(state: GameState, rng: SeededRng, day: number): Froz
     drunkCupidSelfLink,
     priestProtect,
     guardianBond,
+    sorcererDivine,
   };
 }
 
@@ -238,10 +253,11 @@ function resolveWolfBallot(votes: FrozenNight["wolfVotes"]): UserId | null {
 }
 
 /** Where every living player spends the night: a map from player id to the id
- * of the player whose house they are in. Everyone starts at home; the wolves
- * gather at the balloted target's house (or stay home on a tie or empty
+ * of the player whose house they are in. Everyone starts at home; the pack
+ * gathers at the balloted target's house (or stay home on a tie or empty
  * ballot), and the harlot and serial killer travel to their visit targets.
- * The seer never travels: scrying is remote. */
+ * The seer never travels: scrying is remote. The sorcerer neither: they are
+ * wolf-faction but not one of the pack, so they do not gather with it. */
 function resolveNightLocations(
   state: GameState,
   frozen: FrozenNight,
@@ -251,7 +267,7 @@ function resolveNightLocations(
   for (const player of livingPlayers(state)) locations.set(player.id, player.id);
   if (wolfTargetId !== null) {
     for (const player of livingPlayers(state)) {
-      if (player.faction === "wolves") locations.set(player.id, wolfTargetId);
+      if (isPackMember(player)) locations.set(player.id, wolfTargetId);
     }
   }
   if (frozen.harlotAction?.type === "visit")
@@ -315,7 +331,7 @@ function resolveHouseAttacks(
     if (rng.derive(scope).float() < 0.5) {
       repelled.add(attack.attacker);
       if (attack.attacker === "wolves") {
-        const wolves = livingPlayers(state).filter((player) => player.faction === "wolves");
+        const wolves = livingPlayers(state).filter((player) => isPackMember(player));
         if (wolves.length > 0) {
           const wolf = wolves[rng.derive(`night:${day}:hunter:wolf-victim`).int(wolves.length)]!;
           deaths.set(wolf.id, "hunter_retaliation");
@@ -332,7 +348,7 @@ function resolveHouseAttacks(
   if (frozen.serialKillerAction?.type === "visit") {
     const sk = frozen.serialKillerAction.playerId;
     const wolfOccupants = occupantsOf(state, locations, frozen.serialKillerAction.targetId).filter(
-      (player) => player.faction === "wolves",
+      (player) => isPackMember(player),
     );
     if (wolfOccupants.length > 0) {
       if (rng.derive(`night:${day}:serial-killer:clash`).float() < 0.5) {
@@ -354,7 +370,7 @@ function resolveHouseAttacks(
     if (repelled.has(attack.attacker)) continue;
     for (const occupant of occupantsOf(state, locations, attack.houseId)) {
       if (attack.attacker === "wolves") {
-        if (occupant.faction === "wolves") continue;
+        if (isPackMember(occupant)) continue;
         // A visiting serial killer is out hunting, not standing in the house;
         // one attacked at home has no clash and dies normally here.
         if (occupant.role === "serial_killer" && locations.get(occupant.id) !== occupant.id)
@@ -362,7 +378,7 @@ function resolveHouseAttacks(
       } else {
         if (occupant.id === frozen.serialKillerAction!.playerId) continue;
         // Wolves' fate is the clash in stage 3.
-        if (occupant.faction === "wolves") continue;
+        if (isPackMember(occupant)) continue;
       }
       const attackers = hits.get(occupant.id) ?? new Set<"wolves" | "serial_killer">();
       attackers.add(attack.attacker);
@@ -556,6 +572,16 @@ function makeNightEvents(
       scope: "player",
       scopeId: seer.playerId,
       payload: { targetId: seer.targetId, role: seer.role },
+    });
+  if (frozen.sorcererDivine)
+    events.push({
+      kind: "sorcerer.result",
+      scope: "player",
+      scopeId: frozen.sorcererDivine.playerId,
+      payload: {
+        targetId: frozen.sorcererDivine.targetId,
+        isWolf: frozen.sorcererDivine.isWolf,
+      },
     });
   if (frozen.drunkFakeResult)
     events.push({

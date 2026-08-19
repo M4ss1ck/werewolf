@@ -37,6 +37,7 @@ import { priest } from "./priest.ts";
 import { princess } from "./princess.ts";
 import { seer } from "./seer.ts";
 import { serialKiller } from "./serial-killer.ts";
+import { sorcerer } from "./sorcerer.ts";
 import { veteran } from "./veteran.ts";
 import { villager } from "./villager.ts";
 import { werewolf } from "./werewolf.ts";
@@ -61,6 +62,7 @@ export const roleRegistry: Readonly<Record<RoleId, RoleDefinition>> = {
   priest,
   guardian,
   cub,
+  sorcerer,
 };
 
 export function getRoleDefinition(role: RoleId): RoleDefinition {
@@ -68,9 +70,16 @@ export function getRoleDefinition(role: RoleId): RoleDefinition {
 }
 
 /** Roles that may read and write the wolves chat channel. Membership is by
- * ROLE, not faction: a future wolf-faction role may be denied the channel. */
+ * ROLE, not faction: a wolf-faction role may be denied the channel. */
 export const WOLF_CHAT_ROLES: ReadonlySet<RoleId> = new Set<RoleId>([
   "werewolf",
   "alpha_wolf",
   "cub",
 ]);
+
+/** True when the player is one of the pack: a seat in the wolf ballot, wolf
+ * chat, the nightly hunt. Membership is by ROLE, not faction — the sorcerer is
+ * wolf-faction but never one of the pack. */
+export function isPackMember(player: { role: RoleId | null }): boolean {
+  return player.role !== null && WOLF_CHAT_ROLES.has(player.role);
+}

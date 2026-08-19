@@ -38,6 +38,7 @@ export const EVENT_KINDS = [
   // Player-private
   "role.assigned",
   "seer.result",
+  "sorcerer.result",
   "player.converted",
   "harlot.result",
   "player.linked",
@@ -114,6 +115,7 @@ export interface EventPayloads {
   // Player-private
   "role.assigned": { role: RoleId; faction: FactionId };
   "seer.result": { targetId: UserId; role: RoleId };
+  "sorcerer.result": { targetId: UserId; isWolf: boolean };
   "player.converted": { role: RoleId; faction: FactionId; cause: ConversionCause };
   "harlot.result": { outcome: "safe" | "killed" };
   "player.linked": { partnerId: UserId };
@@ -305,6 +307,15 @@ export const GameEventSchema = z.discriminatedUnion("kind", [
     actorUserId: UserIdSchema.optional(),
     createdAt: z.number(),
     payload: z.object({ targetId: UserIdSchema, role: RoleIdSchema }),
+  }),
+  z.object({
+    id: EventIdSchema,
+    kind: z.literal("sorcerer.result"),
+    scope: EventScopeSchema,
+    scopeId: z.string().optional(),
+    actorUserId: UserIdSchema.optional(),
+    createdAt: z.number(),
+    payload: z.object({ targetId: UserIdSchema, isWolf: z.boolean() }),
   }),
   z.object({
     id: EventIdSchema,

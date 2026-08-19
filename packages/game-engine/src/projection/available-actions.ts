@@ -6,6 +6,7 @@
 import type { AvailableAction, UserId } from "@werewolf/protocol";
 import { isUnlinkedCupid } from "../roles/cupid.ts";
 import { getPerceivedRole } from "../roles/perceived.ts";
+import { isPackMember } from "../roles/registry.ts";
 import type { GameState } from "../state.ts";
 
 export function getAvailableActions(state: GameState, playerId: UserId): AvailableAction[] {
@@ -18,13 +19,13 @@ export function getAvailableActions(state: GameState, playerId: UserId): Availab
   const perceivedRole = getPerceivedRole(player);
   const available: AvailableAction[] = [];
   if (state.phase.type === "night") {
-    if (player.faction === "wolves") {
+    if (isPackMember(player)) {
       available.push({
         id: "wolf.attack",
         type: "target",
         targets: others.map((target) => ({
           userId: target.id,
-          enabled: target.status === "alive" && target.faction !== "wolves",
+          enabled: target.status === "alive" && !isPackMember(target),
         })),
         ...(stored["wolf.attack"]?.targetId
           ? { selectedTargetId: stored["wolf.attack"]!.targetId }
@@ -41,6 +42,19 @@ export function getAvailableActions(state: GameState, playerId: UserId): Availab
         })),
         ...(stored["seer.inspect"]?.targetId
           ? { selectedTargetId: stored["seer.inspect"]!.targetId }
+          : {}),
+      });
+    }
+    if (perceivedRole === "sorcerer") {
+      available.push({
+        id: "sorcerer.divine",
+        type: "target",
+        targets: others.map((target) => ({
+          userId: target.id,
+          enabled: target.status === "alive",
+        })),
+        ...(stored["sorcerer.divine"]?.targetId
+          ? { selectedTargetId: stored["sorcerer.divine"]!.targetId }
           : {}),
       });
     }

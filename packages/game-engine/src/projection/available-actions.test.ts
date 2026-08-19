@@ -289,10 +289,19 @@ describe("available actions projection", () => {
       },
       {
         role: "alpha_wolf",
-        // The test helper seats alpha_wolf in the village faction, so no
-        // wolf.attack is offered; the point is that the night model is
-        // unchanged from before the day-action work.
-        expected: [],
+        // The offer now keys on pack membership (role), not faction: a real
+        // alpha is one of the pack, so the attack is offered even though this
+        // helper seats it in the village faction.
+        expected: [
+          {
+            id: "wolf.attack",
+            type: "target",
+            targets: [
+              { userId: uid("p1"), enabled: true },
+              { userId: uid("p2"), enabled: true },
+            ],
+          },
+        ],
       },
       {
         role: "drunk",

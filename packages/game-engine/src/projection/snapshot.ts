@@ -6,7 +6,7 @@ import type {
   ViewerPlayer,
 } from "@werewolf/protocol";
 import { getPerceivedRole } from "../roles/perceived.ts";
-import { getRoleDefinition } from "../roles/registry.ts";
+import { getRoleDefinition, isPackMember } from "../roles/registry.ts";
 import type { GameState, PlayerState } from "../state.ts";
 import { getAvailableActions } from "./available-actions.ts";
 
@@ -57,8 +57,9 @@ function voteTallies(state: GameState): { targetId: UserId; count: number }[] | 
 function availableChannels(player: PlayerState | undefined): ChatChannel[] {
   if (!player) return ["public"];
   const channels: ChatChannel[] = ["public"];
-  if (player.faction === "wolves" || player.channelSince?.wolves !== undefined)
-    channels.push("wolves");
+  // Wolf chat is for the pack and for converted players entitled by marker;
+  // a wolf-faction role like the sorcerer must not see the tab it cannot use.
+  if (isPackMember(player) || player.channelSince?.wolves !== undefined) channels.push("wolves");
   if (player.status === "dead") channels.push("grave");
   return channels;
 }

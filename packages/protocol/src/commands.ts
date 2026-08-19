@@ -38,6 +38,10 @@ export const NightActionSetPayloadSchema = z.discriminatedUnion("action", [
     targetId: UserIdSchema,
   }),
   z.object({
+    action: z.literal("sorcerer.divine"),
+    targetId: UserIdSchema,
+  }),
+  z.object({
     action: z.literal("harlot.visit"),
     targetId: UserIdSchema,
   }),

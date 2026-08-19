@@ -88,6 +88,11 @@ export const es: TranslationResource = {
       name: "Cachorro",
       description: "Un lobo joven sin poderes especiales: cazas con la manada y ganas con ella.",
     },
+    sorcerer: {
+      name: "Brujo",
+      description:
+        "Ganas con los lobos pero no eres parte de la manada: sin chat de lobos, sin cacería, y la manada puede devorarte. Cada noche adivinas a un jugador y solo aprendes si es lobo o no.",
+    },
   },
   factions: {
     village: "La aldea",
@@ -162,6 +167,10 @@ export const es: TranslationResource = {
       label: "Unirse",
       prompt: "Elige a un jugador con quien unirte. Si lo atacan, mueres en su lugar.",
     },
+    "sorcerer.divine": {
+      label: "Adivinar",
+      prompt: "Elige a un jugador y descubre solo si es lobo o no.",
+    },
   },
   errors: {
     UNKNOWN_ERROR: "Algo salió mal. Inténtalo de nuevo.",
@@ -208,6 +217,10 @@ export const es: TranslationResource = {
     player: {
       "role.assigned": "Tu rol es {{role}}.",
       "seer.result": "El rol de {{player}} es {{role}}.",
+      "sorcerer.result": {
+        wolf: "{{player}} es un lobo.",
+        notWolf: "{{player}} no es un lobo.",
+      },
       "player.converted": "Te has convertido en hombre lobo. Tu nuevo rol es {{role}}.",
       "harlot.result": {
         safe: "Volviste a casa sin problemas.",

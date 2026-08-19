@@ -3,7 +3,7 @@ import { DRUNK_FAKE_ROLES } from "../composer/balance-v1.ts";
 import { composeBalancedGame } from "../composer/compose.ts";
 import { SeededRng } from "../rng/rng.ts";
 import { getPerceivedRole } from "../roles/perceived.ts";
-import { getRoleDefinition } from "../roles/registry.ts";
+import { getRoleDefinition, isPackMember } from "../roles/registry.ts";
 import type { DomainResult, DomainTransition, GameSettings, GameState } from "../state.ts";
 import { resolveNight } from "./night.ts";
 import { resolveDayVote } from "./vote.ts";
@@ -175,7 +175,9 @@ function addKnowledgeEvents(
   events: DomainTransition["events"],
   patches: DomainTransition["playerPatches"],
 ): void {
-  const wolves = patches.filter((patch) => patch.changes.faction === "wolves");
+  // The pack is WOLF_CHAT_ROLES membership, not the wolves faction: a Sorcerer
+  // must learn nothing about the pack and the pack nothing about them.
+  const wolves = patches.filter((patch) => isPackMember({ role: patch.changes.role ?? null }));
   const masons = patches.filter((patch) => patch.changes.role === "mason");
   addPrivateGroupEvents(events, wolves, "wolves.member_joined");
   addPrivateGroupEvents(events, masons, "masons.member_joined");
