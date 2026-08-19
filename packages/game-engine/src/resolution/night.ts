@@ -1,8 +1,6 @@
-import type { ConversionCause, NightDeathCause, RoleId, UserId } from "@werewolf/protocol";
-import { ROLE_IDS } from "@werewolf/protocol";
-import { ALPHA_CONVERSION_CHANCE, DETECTIVE_SUCCESS_CHANCE } from "../composer/balance-v1.ts";
+import type { ConversionCause, NightDeathCause, UserId } from "@werewolf/protocol";
+import { ALPHA_CONVERSION_CHANCE } from "../composer/balance-v1.ts";
 import type { SeededRng } from "../rng/rng.ts";
-import { getPerceivedRole } from "../roles/perceived.ts";
 import { isPackMember } from "../roles/registry.ts";
 import type {
   DomainResult,
@@ -12,42 +10,22 @@ import type {
   PlayerState,
 } from "../state.ts";
 import { getLinkPair } from "./link.ts";
+import {
+  type FrozenIntents,
+  freezeNightIntents,
+  type Intent,
+  intentsFor,
+  mimickedIntent,
+  realIntent,
+} from "./night/freeze.ts";
+import { resolveNightLocations } from "./night/locations.ts";
+import { type NightRolls, rollNight } from "./night/rolls.ts";
 import { checkVictory } from "./victory.ts";
 
 export interface NightResolutionContext {
   now: number;
   rng: SeededRng;
 }
-
-type FrozenNight = {
-  wolfVotes: { playerId: UserId; targetId: UserId | null }[];
-  seerInspection: { playerId: UserId; targetId: UserId; role: RoleId } | null;
-  drunkFakeResult: { playerId: UserId; targetId: UserId; role: RoleId } | null;
-  harlotAction:
-    | { playerId: UserId; type: "stay" }
-    | { playerId: UserId; type: "visit"; targetId: UserId }
-    | null;
-  serialKillerAction:
-    | { playerId: UserId; type: "stay" }
-    | { playerId: UserId; type: "visit"; targetId: UserId }
-    | null;
-  cupidLink: { playerId: UserId; targetIds: [UserId, UserId] } | null;
-  drunkCupidSelfLink: { playerId: UserId; partnerId: UserId } | null;
-  priestProtect: { playerId: UserId; targetId: UserId } | null;
-  guardianBond: { playerId: UserId; targetId: UserId } | null;
-  sorcererDivine: { playerId: UserId; targetId: UserId; isWolf: boolean } | null;
-  /** The real Detective's investigation. `role: null` means inconclusive. */
-  detectiveInvestigation: { playerId: UserId; targetId: UserId; role: RoleId | null } | null;
-  /** A Drunk who believes they are the Detective. Same shape as the real
-   * result: sometimes a uniformly random role, sometimes null. */
-  drunkFakeDetective: { playerId: UserId; targetId: UserId; role: RoleId | null } | null;
-  /** The cult leader's conversion target. The leader travels to the target's
-   * house and converts them; the conversion is not a hit. */
-  cultConvert: { playerId: UserId; targetId: UserId } | null;
-  /** The Lone Wolf's nightly hunt: the house they searched for the Alpha. The
-   * Lone Wolf travels there. */
-  loneWolfSearch: { playerId: UserId; targetId: UserId } | null;
-};
 
 type NightOutcome = {
   deaths: Map<UserId, NightDeathCause>;
@@ -61,9 +39,9 @@ type NightOutcome = {
 export function resolveNight(state: GameState, context: NightResolutionContext): DomainResult {
   if (!state.phase || state.phase.type !== "night")
     return { ok: false, error: { code: "ACTION_NOT_AVAILABLE" } };
-  const frozen = freezeNightIntents(state, context.rng, state.day);
-  const seer = frozen.seerInspection;
-  const targetId = resolveWolfBallot(frozen.wolfVotes);
+  const frozen = freezeNightIntents(state);
+  const rolls = rollNight(state, frozen, context.rng, state.day);
+  const targetId = resolveWolfBallot(intentsFor(frozen, "wolf.attack"));
   const locations = resolveNightLocations(state, frozen, targetId);
   const outcome = resolveHouseAttacks(state, frozen, targetId, locations, context.rng, state.day);
   applyLoverLinkDeaths(state, outcome.deaths);
@@ -79,7 +57,7 @@ export function resolveNight(state: GameState, context: NightResolutionContext):
     ...applyPatches(state, playerPatches),
     nightsWithoutElimination: nextNightsWithoutElimination,
   };
-  const events = [...makeNightEvents(state, frozen, targetId, outcome, seer), ...link.events];
+  const events = [...makeNightEvents(state, frozen, targetId, outcome, rolls), ...link.events];
   const winner = checkVictory(projected);
   if (winner) {
     events.push({ kind: "game.finished", scope: "public", payload: winner });
@@ -128,252 +106,12 @@ export function resolveNight(state: GameState, context: NightResolutionContext):
   };
 }
 
-function freezeNightIntents(state: GameState, rng: SeededRng, day: number): FrozenNight {
-  const phaseId = state.phase!.id;
-  const living = Object.values(state.players).filter((player) => player.status === "alive");
-  const wolfVotes = living
-    .filter((player) => isPackMember(player))
-    .map((player) => ({ player, action: currentAction(player, phaseId, "wolf.attack") }))
-    .filter(({ action }) => action?.targetId && isLivingTarget(state, action.targetId))
-    .map(({ player, action }) => ({ playerId: player.id, targetId: action!.targetId! }));
-  const seer = living.find((player) => player.role === "seer");
-  const seerAction = seer ? currentAction(seer, phaseId, "seer.inspect") : undefined;
-  const seerInspection =
-    seerAction?.targetId && isLivingTarget(state, seerAction.targetId)
-      ? {
-          playerId: seer!.id,
-          targetId: seerAction.targetId,
-          role: state.players[seerAction.targetId]!.role!,
-        }
-      : null;
-  const drunk = living.find(
-    (player) => player.role === "drunk" && getPerceivedRole(player) === "seer",
-  );
-  const drunkAction = drunk ? currentAction(drunk, phaseId, "seer.inspect") : undefined;
-  const drunkFakeResult =
-    drunkAction?.targetId && isLivingTarget(state, drunkAction.targetId)
-      ? {
-          playerId: drunk!.id,
-          targetId: drunkAction.targetId,
-          role: ROLE_IDS[rng.derive(`night:${day}:drunk:fake-result`).int(ROLE_IDS.length)]!,
-        }
-      : null;
-  const harlot = living.find((player) => player.role === "harlot");
-  const visit = harlot ? currentAction(harlot, phaseId, "harlot.visit") : undefined;
-  const stay = harlot ? currentAction(harlot, phaseId, "harlot.stay") : undefined;
-  const harlotAction =
-    visit?.targetId && isLivingTarget(state, visit.targetId)
-      ? { playerId: harlot!.id, type: "visit" as const, targetId: visit.targetId }
-      : stay
-        ? { playerId: harlot!.id, type: "stay" as const }
-        : null;
-  const serialKiller = living.find((player) => player.role === "serial_killer");
-  const skVisit = serialKiller
-    ? currentAction(serialKiller, phaseId, "serial_killer.visit")
-    : undefined;
-  const skStay = serialKiller
-    ? currentAction(serialKiller, phaseId, "serial_killer.stay")
-    : undefined;
-  const serialKillerAction =
-    skVisit?.targetId && isLivingTarget(state, skVisit.targetId)
-      ? { playerId: serialKiller!.id, type: "visit" as const, targetId: skVisit.targetId }
-      : skStay
-        ? { playerId: serialKiller!.id, type: "stay" as const }
-        : null;
-  const cupid = living.find((player) => player.role === "cupid");
-  const cupidLinkAction = cupid ? currentAction(cupid, phaseId, "cupid.link") : undefined;
-  const cupidLink =
-    cupidLinkAction?.targetIds && cupidLinkAction.targetIds.length === 2
-      ? {
-          playerId: cupid!.id,
-          targetIds: [cupidLinkAction.targetIds[0]!, cupidLinkAction.targetIds[1]!] as [
-            UserId,
-            UserId,
-          ],
-        }
-      : null;
-  // A Drunk who believes they are Cupid forms no real link, but if they picked
-  // THEMSELVES they are told they are linked to the other pick — exactly what a
-  // real Cupid would be told, so the two are indistinguishable.
-  const drunkCupid = living.find(
-    (player) => player.role === "drunk" && getPerceivedRole(player) === "cupid",
-  );
-  const drunkCupidAction = drunkCupid
-    ? currentAction(drunkCupid, phaseId, "cupid.link")
-    : undefined;
-  const drunkCupidSelfLink =
-    drunkCupidAction?.targetIds && drunkCupidAction.targetIds.length === 2
-      ? drunkCupidAction.targetIds[0] === drunkCupid!.id
-        ? { playerId: drunkCupid!.id, partnerId: drunkCupidAction.targetIds[1]! }
-        : drunkCupidAction.targetIds[1] === drunkCupid!.id
-          ? { playerId: drunkCupid!.id, partnerId: drunkCupidAction.targetIds[0]! }
-          : null
-      : null;
-  const priest = living.find((player) => player.role === "priest");
-  const priestAction = priest ? currentAction(priest, phaseId, "priest.protect") : undefined;
-  const priestProtect =
-    priestAction?.targetId && isLivingTarget(state, priestAction.targetId)
-      ? { playerId: priest!.id, targetId: priestAction.targetId }
-      : null;
-  const guardian = living.find((player) => player.role === "guardian");
-  const guardianAction = guardian ? currentAction(guardian, phaseId, "guardian.bond") : undefined;
-  const guardianBond =
-    guardianAction?.targetId && isLivingTarget(state, guardianAction.targetId)
-      ? { playerId: guardian!.id, targetId: guardianAction.targetId }
-      : null;
-  // The Sorcerer scries from home, like the Seer. The result is a boolean —
-  // wolf-faction or not — never an exact role.
-  const sorcerer = living.find((player) => player.role === "sorcerer");
-  const sorcererAction = sorcerer ? currentAction(sorcerer, phaseId, "sorcerer.divine") : undefined;
-  const sorcererDivine =
-    sorcererAction?.targetId && isLivingTarget(state, sorcererAction.targetId)
-      ? {
-          playerId: sorcerer!.id,
-          targetId: sorcererAction.targetId,
-          isWolf: state.players[sorcererAction.targetId]!.faction === "wolves",
-        }
-      : null;
-  // The Detective investigates by walking to the target's house; the frozen
-  // record carries the resolved result so a night roll happens exactly once.
-  // A miss reports inconclusive (null), never a wrong role.
-  const detective = living.find((player) => player.role === "detective");
-  const detectiveAction = detective
-    ? currentAction(detective, phaseId, "detective.investigate")
-    : undefined;
-  const detectiveInvestigation =
-    detectiveAction?.targetId && isLivingTarget(state, detectiveAction.targetId)
-      ? {
-          playerId: detective!.id,
-          targetId: detectiveAction.targetId,
-          role:
-            rng.derive(`night:${day}:detective:investigation`).float() < DETECTIVE_SUCCESS_CHANCE
-              ? state.players[detectiveAction.targetId]!.role!
-              : null,
-        }
-      : null;
-  // A Drunk who believes they are the Detective is told the same shape of
-  // result as a real one would see: sometimes a uniformly random role,
-  // sometimes inconclusive. They walk to the target's house like the real
-  // one, because the risk has to be real.
-  const drunkDetective = living.find(
-    (player) => player.role === "drunk" && getPerceivedRole(player) === "detective",
-  );
-  const drunkDetectiveAction = drunkDetective
-    ? currentAction(drunkDetective, phaseId, "detective.investigate")
-    : undefined;
-  const drunkFakeDetectiveRng = rng.derive(`night:${day}:drunk:fake-detective`);
-  const drunkFakeDetective =
-    drunkDetectiveAction?.targetId && isLivingTarget(state, drunkDetectiveAction.targetId)
-      ? {
-          playerId: drunkDetective!.id,
-          targetId: drunkDetectiveAction.targetId,
-          role:
-            drunkFakeDetectiveRng.float() < DETECTIVE_SUCCESS_CHANCE
-              ? ROLE_IDS[drunkFakeDetectiveRng.int(ROLE_IDS.length)]!
-              : null,
-        }
-      : null;
-  // The cult leader converts one living player each night. The action is
-  // frozen here so the conversion lands even if the leader is killed that
-  // same night — they got there and did it.
-  const cultLeader = living.find((player) => player.role === "cult_leader");
-  const cultConvertAction = cultLeader
-    ? currentAction(cultLeader, phaseId, "cult.convert")
-    : undefined;
-  const cultConvert =
-    cultConvertAction?.targetId && isLivingTarget(state, cultConvertAction.targetId)
-      ? { playerId: cultLeader!.id, targetId: cultConvertAction.targetId }
-      : null;
-  // The Lone Wolf hunts the Alpha every night, searching one house. The action
-  // is frozen here so the search lands even if the Lone Wolf is killed that
-  // same night — they got there and looked.
-  const loneWolf = living.find((player) => player.role === "lone_wolf");
-  const loneWolfAction = loneWolf
-    ? currentAction(loneWolf, phaseId, "lone_wolf.search")
-    : undefined;
-  const loneWolfSearch =
-    loneWolfAction?.targetId && isLivingTarget(state, loneWolfAction.targetId)
-      ? { playerId: loneWolf!.id, targetId: loneWolfAction.targetId }
-      : null;
-  return {
-    wolfVotes,
-    seerInspection,
-    drunkFakeResult,
-    harlotAction,
-    serialKillerAction,
-    cupidLink,
-    drunkCupidSelfLink,
-    priestProtect,
-    guardianBond,
-    sorcererDivine,
-    detectiveInvestigation,
-    drunkFakeDetective,
-    cultConvert,
-    loneWolfSearch,
-  };
-}
-
-function currentAction(
-  player: PlayerState,
-  phaseId: NonNullable<GameState["phase"]>["id"],
-  actionId: string,
-) {
-  return player.phaseState.phaseId === phaseId ? player.phaseState.actions?.[actionId] : undefined;
-}
-
-function isLivingTarget(state: GameState, targetId: UserId): boolean {
-  return state.players[targetId]?.status === "alive";
-}
-
-function resolveWolfBallot(votes: FrozenNight["wolfVotes"]): UserId | null {
+function resolveWolfBallot(votes: readonly Intent[]): UserId | null {
   const tally = new Map<UserId, number>();
   for (const vote of votes) tally.set(vote.targetId!, (tally.get(vote.targetId!) ?? 0) + 1);
   const highest = Math.max(0, ...tally.values());
   const winners = [...tally.entries()].filter(([, count]) => count === highest && count > 0);
   return winners.length === 1 ? winners[0]![0] : null;
-}
-
-/** Where every living player spends the night: a map from player id to the id
- * of the player whose house they are in. Everyone starts at home; the pack
- * gathers at the balloted target's house (or stay home on a tie or empty
- * ballot), and the harlot, serial killer, detective and cult leader travel to
- * their visit targets. The detective walks to the house it investigates: that
- * is the price of the second information role. The seer never travels: scrying
- * is remote. The sorcerer neither: they are wolf-faction but not one of the
- * pack, so they do not gather with it.
- *
- * Travel keys on whoever STORED the action, not on who is really a detective:
- * a Drunk who believes they are the Detective genuinely walks to that house
- * and genuinely dies there. Locations are about where a body is, not about
- * whether a power is real. */
-function resolveNightLocations(
-  state: GameState,
-  frozen: FrozenNight,
-  wolfTargetId: UserId | null,
-): Map<UserId, UserId> {
-  const locations = new Map<UserId, UserId>();
-  for (const player of livingPlayers(state)) locations.set(player.id, player.id);
-  if (wolfTargetId !== null) {
-    for (const player of livingPlayers(state)) {
-      if (isPackMember(player)) locations.set(player.id, wolfTargetId);
-    }
-  }
-  if (frozen.harlotAction?.type === "visit")
-    locations.set(frozen.harlotAction.playerId, frozen.harlotAction.targetId);
-  if (frozen.serialKillerAction?.type === "visit")
-    locations.set(frozen.serialKillerAction.playerId, frozen.serialKillerAction.targetId);
-  if (frozen.detectiveInvestigation)
-    locations.set(frozen.detectiveInvestigation.playerId, frozen.detectiveInvestigation.targetId);
-  if (frozen.drunkFakeDetective)
-    locations.set(frozen.drunkFakeDetective.playerId, frozen.drunkFakeDetective.targetId);
-  // The cult leader travels to the target's house, exactly as the Detective
-  // and Harlot do. They can be killed there.
-  if (frozen.cultConvert) locations.set(frozen.cultConvert.playerId, frozen.cultConvert.targetId);
-  // The Lone Wolf travels to the house it searches for the Alpha. It can be
-  // killed there, and it is there that the duel with the Alpha happens.
-  if (frozen.loneWolfSearch)
-    locations.set(frozen.loneWolfSearch.playerId, frozen.loneWolfSearch.targetId);
-  return locations;
 }
 
 function occupantsOf(
@@ -403,7 +141,7 @@ function occupantsOf(
  * as it always has. */
 function resolveHouseAttacks(
   state: GameState,
-  frozen: FrozenNight,
+  frozen: FrozenIntents,
   wolfTargetId: UserId | null,
   locations: Map<UserId, UserId>,
   rng: SeededRng,
@@ -414,10 +152,14 @@ function resolveHouseAttacks(
   let ascension: { playerId: UserId } | null = null;
   let loneWolfResult: { playerId: UserId; targetId: UserId; found: boolean } | null = null;
 
+  const serialKillerVisit = realIntent(frozen, "serial_killer.visit");
+  const loneWolfSearch = realIntent(frozen, "lone_wolf.search");
+  const harlotVisit = realIntent(frozen, "harlot.visit");
+
   const attacks: { attacker: "wolves" | "serial_killer"; houseId: UserId }[] = [];
   if (wolfTargetId !== null) attacks.push({ attacker: "wolves", houseId: wolfTargetId });
-  if (frozen.serialKillerAction?.type === "visit")
-    attacks.push({ attacker: "serial_killer", houseId: frozen.serialKillerAction.targetId });
+  if (serialKillerVisit)
+    attacks.push({ attacker: "serial_killer", houseId: serialKillerVisit.targetId! });
 
   // Stage 3: clashes. Hunter retaliation: one independent roll per attacker. A
   // successful roll repels the whole attack — nobody in that house dies — and
@@ -439,7 +181,7 @@ function resolveHouseAttacks(
           deaths.set(wolf.id, "hunter_retaliation");
         }
       } else {
-        deaths.set(frozen.serialKillerAction!.playerId, "hunter_retaliation");
+        deaths.set(serialKillerVisit!.actorId, "hunter_retaliation");
       }
     }
   }
@@ -447,9 +189,9 @@ function resolveHouseAttacks(
   // Stage 3 (cont.): serial killer / wolf clash: a visiting serial killer that
   // finds a wolf in the same house fights it. The loser dies; the attacks
   // still land.
-  if (frozen.serialKillerAction?.type === "visit") {
-    const sk = frozen.serialKillerAction.playerId;
-    const wolfOccupants = occupantsOf(state, locations, frozen.serialKillerAction.targetId).filter(
+  if (serialKillerVisit) {
+    const sk = serialKillerVisit.actorId;
+    const wolfOccupants = occupantsOf(state, locations, serialKillerVisit.targetId!).filter(
       (player) => isPackMember(player),
     );
     if (wolfOccupants.length > 0) {
@@ -473,14 +215,14 @@ function resolveHouseAttacks(
   // everything else in that house, so neither duellist is later hit by the
   // pack's attack. The Priest's shield does not protect against a duel inside
   // a house. Hunter retaliation above resolves first, as it does for everyone.
-  if (frozen.loneWolfSearch) {
-    const lw = frozen.loneWolfSearch.playerId;
+  if (loneWolfSearch) {
+    const lw = loneWolfSearch.actorId;
     const alpha = livingPlayers(state).find((player) => player.role === "alpha_wolf");
     const clash =
       alpha !== undefined &&
       !deaths.has(alpha.id) &&
       !deaths.has(lw) &&
-      locations.get(alpha.id) === frozen.loneWolfSearch.targetId;
+      locations.get(alpha.id) === loneWolfSearch.targetId;
     if (clash) {
       if (rng.derive(`night:${day}:lone_wolf:challenge`).float() < 0.5) {
         // The Lone Wolf wins: the Alpha dies and the Lone Wolf ascends to take
@@ -491,7 +233,7 @@ function resolveHouseAttacks(
         deaths.set(lw, "lone_wolf_clash");
       }
     }
-    loneWolfResult = { playerId: lw, targetId: frozen.loneWolfSearch.targetId, found: clash };
+    loneWolfResult = { playerId: lw, targetId: loneWolfSearch.targetId!, found: clash };
   }
 
   // Stage 4: compute raw hits. Each non-repelled attack hits the occupants of
@@ -509,9 +251,9 @@ function resolveHouseAttacks(
         // The Lone Wolf's duel with the Alpha was settled in stage 3; when a
         // clash happened, the duellist is not also hit by the pack's attack on
         // that house. The Alpha is already skipped as a pack member.
-        if (loneWolfResult?.found && occupant.id === frozen.loneWolfSearch!.playerId) continue;
+        if (loneWolfResult?.found && occupant.id === loneWolfSearch!.actorId) continue;
       } else {
-        if (occupant.id === frozen.serialKillerAction!.playerId) continue;
+        if (occupant.id === serialKillerVisit!.actorId) continue;
         // Wolves' fate is the clash in stage 3.
         if (isPackMember(occupant)) continue;
       }
@@ -525,7 +267,8 @@ function resolveHouseAttacks(
   // that player this night, from any attacker, and any conversion it would
   // have caused. "The night did not happen to you."
   const priest = livingPlayers(state).find((player) => player.role === "priest");
-  const protectedId = priest ? (frozen.priestProtect?.targetId ?? null) : null;
+  const priestProtect = realIntent(frozen, "priest.protect");
+  const protectedId = priest ? (priestProtect?.targetId ?? null) : null;
   if (protectedId !== null) hits.delete(protectedId);
 
   // Stage 6: guardian substitution. For any hit that survived the shield, if
@@ -533,9 +276,10 @@ function resolveHouseAttacks(
   // the hit is absorbed — so no conversion fires either. One death, one
   // protegee walking away. A dead guardian protects nobody.
   const guardian = livingPlayers(state).find((player) => player.role === "guardian");
+  const guardianBond = realIntent(frozen, "guardian.bond");
   const protegeeId = guardian
     ? ((guardian.roleState as { protegeeId?: UserId | null } | null)?.protegeeId ??
-      frozen.guardianBond?.targetId ??
+      guardianBond?.targetId ??
       null)
     : null;
   if (protegeeId !== null && hits.has(protegeeId)) {
@@ -586,8 +330,9 @@ function resolveHouseAttacks(
   // night did not happen to you" — and so does immunity: a wolf, a serial
   // killer and a hunter are all immune. The Veteran is NOT immune: the Cult
   // wins by converting, and denying it the Veteran would gut its core loop.
-  if (frozen.cultConvert) {
-    const target = state.players[frozen.cultConvert.targetId];
+  const cultConvert = realIntent(frozen, "cult.convert");
+  if (cultConvert) {
+    const target = state.players[cultConvert.targetId!];
     if (
       target &&
       target.status === "alive" &&
@@ -604,9 +349,9 @@ function resolveHouseAttacks(
   // fatal. When the pack has a target the wolf is out hunting and the house is
   // empty, so she survives. This is the Harlot dying away from home, not a hit
   // on a house, so neither the shield nor the substitution applies to it.
-  if (frozen.harlotAction?.type === "visit") {
-    const harlot = frozen.harlotAction.playerId;
-    const houseId = frozen.harlotAction.targetId;
+  if (harlotVisit) {
+    const harlot = harlotVisit.actorId;
+    const houseId = harlotVisit.targetId!;
     const owner = state.players[houseId];
     if (owner?.faction === "wolves" && locations.get(houseId) === houseId && !deaths.has(harlot))
       deaths.set(harlot, "harlot_exposure");
@@ -665,19 +410,21 @@ function commitNight(outcome: NightOutcome): PlayerPatch[] {
  * guardian's `protegeeId` is fixed on night 1 when they bond and never changes
  * again. Both key on the TRUE role, so a Drunk-Priest or Drunk-Guardian is
  * never patched. */
-function roleStatePatches(state: GameState, frozen: FrozenNight): PlayerPatch[] {
+function roleStatePatches(state: GameState, frozen: FrozenIntents): PlayerPatch[] {
   const patches: PlayerPatch[] = [];
   const priest = livingPlayers(state).find((player) => player.role === "priest");
+  const priestProtect = realIntent(frozen, "priest.protect");
   if (priest)
     patches.push({
       playerId: priest.id,
-      changes: { roleState: { lastProtectedId: frozen.priestProtect?.targetId ?? null } },
+      changes: { roleState: { lastProtectedId: priestProtect?.targetId ?? null } },
     });
   const guardian = livingPlayers(state).find((player) => player.role === "guardian");
-  if (guardian && frozen.guardianBond)
+  const guardianBond = realIntent(frozen, "guardian.bond");
+  if (guardian && guardianBond)
     patches.push({
       playerId: guardian.id,
-      changes: { roleState: { protegeeId: frozen.guardianBond.targetId } },
+      changes: { roleState: { protegeeId: guardianBond.targetId! } },
     });
   return patches;
 }
@@ -699,14 +446,15 @@ function applyLoverLinkDeaths(state: GameState, deaths: Map<UserId, NightDeathCa
  * picked themselves is told they are linked, but no real pair is stored. */
 function formLink(
   state: GameState,
-  frozen: FrozenNight,
+  frozen: FrozenIntents,
 ): { patches: PlayerPatch[]; events: DomainTransition["events"] } {
   const patches: PlayerPatch[] = [];
   const events: DomainTransition["events"] = [];
-  if (frozen.cupidLink) {
-    const cupid = state.players[frozen.cupidLink.playerId];
+  const cupidLink = realIntent(frozen, "cupid.link");
+  if (cupidLink) {
+    const cupid = state.players[cupidLink.actorId];
     if (cupid && isCupidUnlinked(cupid.roleState)) {
-      const [a, b] = frozen.cupidLink.targetIds;
+      const [a, b] = cupidLink.targetIds!;
       patches.push({ playerId: cupid.id, changes: { roleState: { linked: [a, b] } } });
       events.push(
         { kind: "player.linked", scope: "player", scopeId: a, payload: { partnerId: b } },
@@ -714,12 +462,17 @@ function formLink(
       );
     }
   }
-  if (frozen.drunkCupidSelfLink) {
+  const drunkCupidSelfLink = intentsFor(frozen, "cupid.link").find(
+    (intent) => intent.mimicked && intent.targetIds!.includes(intent.actorId),
+  );
+  if (drunkCupidSelfLink) {
+    const [a, b] = drunkCupidSelfLink.targetIds!;
+    const partnerId = a === drunkCupidSelfLink.actorId ? b : a;
     events.push({
       kind: "player.linked",
       scope: "player",
-      scopeId: frozen.drunkCupidSelfLink.playerId,
-      payload: { partnerId: frozen.drunkCupidSelfLink.partnerId },
+      scopeId: drunkCupidSelfLink.actorId,
+      payload: { partnerId },
     });
   }
   return { patches, events };
@@ -736,10 +489,10 @@ function isCupidUnlinked(value: unknown): boolean {
 
 function makeNightEvents(
   state: GameState,
-  frozen: FrozenNight,
+  frozen: FrozenIntents,
   targetId: UserId | null,
   outcome: NightOutcome,
-  seer: FrozenNight["seerInspection"],
+  rolls: NightRolls,
 ): DomainTransition["events"] {
   const events: DomainTransition["events"] = [
     { kind: "night.resolved", scope: "public", payload: { deaths: [...outcome.deaths.keys()] } },
@@ -754,61 +507,69 @@ function makeNightEvents(
       payload: { playerId, role: player.role!, cause: "night" },
     });
   }
+  const seer = realIntent(frozen, "seer.inspect");
   if (seer)
     events.push({
       kind: "seer.result",
       scope: "player",
-      scopeId: seer.playerId,
-      payload: { targetId: seer.targetId, role: seer.role },
+      scopeId: seer.actorId,
+      payload: { targetId: seer.targetId!, role: state.players[seer.targetId!]!.role! },
     });
-  if (frozen.sorcererDivine)
+  const sorcerer = realIntent(frozen, "sorcerer.divine");
+  if (sorcerer)
     events.push({
       kind: "sorcerer.result",
       scope: "player",
-      scopeId: frozen.sorcererDivine.playerId,
+      scopeId: sorcerer.actorId,
       payload: {
-        targetId: frozen.sorcererDivine.targetId,
-        isWolf: frozen.sorcererDivine.isWolf,
+        targetId: sorcerer.targetId!,
+        isWolf: state.players[sorcerer.targetId!]!.faction === "wolves",
       },
     });
-  if (frozen.drunkFakeResult)
+  const drunkSeer = mimickedIntent(frozen, "seer.inspect");
+  if (drunkSeer)
     events.push({
       kind: "seer.result",
       scope: "player",
-      scopeId: frozen.drunkFakeResult.playerId,
+      scopeId: drunkSeer.actorId,
       payload: {
-        targetId: frozen.drunkFakeResult.targetId,
-        role: frozen.drunkFakeResult.role,
+        targetId: drunkSeer.targetId!,
+        role: rolls.fakeInspections.get(drunkSeer.actorId)!,
       },
     });
   // The result is emitted whether or not the investigator survives: they saw
   // what they saw before anything happened to them.
-  if (frozen.detectiveInvestigation)
+  const detective = realIntent(frozen, "detective.investigate");
+  if (detective)
     events.push({
       kind: "detective.result",
       scope: "player",
-      scopeId: frozen.detectiveInvestigation.playerId,
+      scopeId: detective.actorId,
       payload: {
-        targetId: frozen.detectiveInvestigation.targetId,
-        role: frozen.detectiveInvestigation.role,
+        targetId: detective.targetId!,
+        role: rolls.investigations.get(detective.actorId) ?? null,
       },
     });
-  if (frozen.drunkFakeDetective)
+  const drunkDetective = mimickedIntent(frozen, "detective.investigate");
+  if (drunkDetective)
     events.push({
       kind: "detective.result",
       scope: "player",
-      scopeId: frozen.drunkFakeDetective.playerId,
+      scopeId: drunkDetective.actorId,
       payload: {
-        targetId: frozen.drunkFakeDetective.targetId,
-        role: frozen.drunkFakeDetective.role,
+        targetId: drunkDetective.targetId!,
+        role: rolls.investigations.get(drunkDetective.actorId) ?? null,
       },
     });
-  if (frozen.harlotAction) {
-    const killed = [...outcome.deaths.keys()].includes(frozen.harlotAction.playerId);
+  const harlotVisit = realIntent(frozen, "harlot.visit");
+  const harlotStay = realIntent(frozen, "harlot.stay");
+  if (harlotVisit || harlotStay) {
+    const harlotId = (harlotVisit ?? harlotStay)!.actorId;
+    const killed = [...outcome.deaths.keys()].includes(harlotId);
     events.push({
       kind: "harlot.result",
       scope: "player",
-      scopeId: frozen.harlotAction.playerId,
+      scopeId: harlotId,
       payload: { outcome: killed ? "killed" : "safe" },
     });
   }
@@ -864,24 +625,31 @@ function makeNightEvents(
       });
     }
   }
+  const skVisit = realIntent(frozen, "serial_killer.visit");
+  const skStay = realIntent(frozen, "serial_killer.stay");
   events.push({
     kind: "audit.night",
     scope: "server",
     payload: {
       phaseId: state.phase!.id,
-      wolfVotes: frozen.wolfVotes,
+      wolfVotes: intentsFor(frozen, "wolf.attack").map((intent) => ({
+        playerId: intent.actorId,
+        targetId: intent.targetId ?? null,
+      })),
       wolfTarget: targetId,
-      seerInspection: seer ? { targetId: seer.targetId, role: seer.role } : null,
-      harlotAction: frozen.harlotAction
-        ? frozen.harlotAction.type === "visit"
-          ? { type: "visit", targetId: frozen.harlotAction.targetId }
-          : { type: "stay" }
+      seerInspection: seer
+        ? { targetId: seer.targetId!, role: state.players[seer.targetId!]!.role! }
         : null,
-      serialKillerAction: frozen.serialKillerAction
-        ? frozen.serialKillerAction.type === "visit"
-          ? { type: "visit", targetId: frozen.serialKillerAction.targetId }
-          : { type: "stay" }
-        : null,
+      harlotAction: harlotVisit
+        ? { type: "visit", targetId: harlotVisit.targetId! }
+        : harlotStay
+          ? { type: "stay" }
+          : null,
+      serialKillerAction: skVisit
+        ? { type: "visit", targetId: skVisit.targetId! }
+        : skStay
+          ? { type: "stay" }
+          : null,
       deaths: [...outcome.deaths.entries()].map(([playerId, cause]) => ({ playerId, cause })),
       conversions: outcome.conversions.map(({ playerId }) => playerId),
     },
