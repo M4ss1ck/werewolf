@@ -6,9 +6,10 @@ import { afterEach } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { applyMigrations, createDb, GameRepository } from "@werewolf/db";
+import { applyMigrations, createDb, GameRepository, games } from "@werewolf/db";
 import type { GameState } from "@werewolf/game-engine";
 import type { BotConfig, GameId, UserId } from "@werewolf/protocol";
+import { eq } from "drizzle-orm";
 import { GameCoordinator } from "../game/coordinator.ts";
 import { GameLock } from "../game/locks.ts";
 import { FallbackBotAgent } from "./agent.ts";
@@ -116,7 +117,10 @@ export type BotHarness = {
   clock: { now: number };
   logs: { event: string; fields: BotLogFields }[];
   /** Seat `count` bots plus a bot host, start the game, settle the bots. */
-  startBotGame: (count?: number) => Promise<GameId>;
+  /** `seed` pins the composition. Compositions are seeded from a per-game
+   * random uuid, so any test that needs a particular role dealt must pass one
+   * or it is rolling dice. */
+  startBotGame: (count?: number, seed?: string) => Promise<GameId>;
   /** Run the current phase out and resolve it, then let the bots react. */
   advancePhase: (gameId: GameId) => Promise<void>;
   state: (gameId: GameId) => Promise<GameState>;
@@ -162,7 +166,7 @@ export async function setupBots(
     clock,
     logs,
     state,
-    startBotGame: async (count = 5) => {
+    startBotGame: async (count = 5, seed?: string) => {
       const host = "bot:host" as UserId;
       const game = await coordinator.createGame({
         ownerUserId: host,
@@ -183,6 +187,9 @@ export async function setupBots(
           displayName: `Bot ${seat + 1}`,
           config: { ...BOT_CONFIG, botId: `fake-${seat}` },
         });
+      // The seed is read at start time, so it must be written before startGame.
+      if (seed !== undefined)
+        await db.update(games).set({ rngSeed: seed }).where(eq(games.id, gameId));
       await coordinator.startGame(gameId, host);
       await bots.whenIdle();
       return gameId;

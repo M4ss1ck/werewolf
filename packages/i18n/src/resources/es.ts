@@ -93,6 +93,11 @@ export const es: TranslationResource = {
       description:
         "Ganas con los lobos pero no eres parte de la manada: sin chat de lobos, sin cacería, y la manada puede devorarte. Cada noche adivinas a un jugador y solo aprendes si es lobo o no.",
     },
+    detective: {
+      name: "Detective",
+      description:
+        "Visita a un jugador cada noche para investigarlo. La mitad de las veces descubres su rol; si fallas, el resultado no es concluyente, nunca miente. El paseo es arriesgado: si los asesinos llegan a esa casa, mueres allí.",
+    },
   },
   factions: {
     village: "La aldea",
@@ -171,6 +176,11 @@ export const es: TranslationResource = {
       label: "Adivinar",
       prompt: "Elige a un jugador y descubre solo si es lobo o no.",
     },
+    "detective.investigate": {
+      label: "Investigar",
+      prompt:
+        "Elige a un jugador al que investigar esta noche. Visitas su casa: la mitad de las veces descubres su rol, pero si vienen los asesinos, mueres allí.",
+    },
   },
   errors: {
     UNKNOWN_ERROR: "Algo salió mal. Inténtalo de nuevo.",
@@ -227,6 +237,10 @@ export const es: TranslationResource = {
         killed: "Te mataron durante tu visita.",
       },
       "player.linked": "Estás unido a {{partnerId}}.",
+      "detective.result": {
+        role: "Tu investigación: {{player}} es {{role}}.",
+        inconclusive: "Tu investigación de {{player}} no fue concluyente.",
+      },
       "wolves.member_joined": "{{player}} se ha unido a los lobos.",
       "masons.member_joined": "{{player}} es masón.",
     },

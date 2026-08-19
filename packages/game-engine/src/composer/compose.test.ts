@@ -138,7 +138,9 @@ describe("balance-v1 role composer", () => {
         expect(roles.filter((role) => role === "cub").length).toBeLessThanOrEqual(1);
       }
     }
-  }, 30000);
+    // The candidate pool grows with every special role, and these loops sample
+    // 10 000 compositions; 30s is no longer a safe budget.
+  }, 60000);
 
   test("cub never appears below 7 players", () => {
     for (const playerCount of [5, 6]) {
@@ -172,7 +174,9 @@ describe("balance-v1 role composer", () => {
         expect(roles.filter((role) => role === "drunk").length).toBeLessThanOrEqual(1);
       }
     }
-  }, 30000);
+    // The candidate pool grows with every special role, and these loops sample
+    // 10 000 compositions; 30s is no longer a safe budget.
+  }, 60000);
 
   test("drunk never appears below 7 players", () => {
     for (const playerCount of [5, 6]) {

@@ -248,7 +248,9 @@ describe("determinism", () => {
 
   test("a game seeded identically produces the same role shuffle as before this change", () => {
     // Seed 9 at 8 players composes to a fixed role list; pinning it here
-    // catches a reordered or reused `assignment` derive call.
+    // catches a reordered or reused `assignment` derive call. The pool gained
+    // the Detective since this was last pinned, so the composition for seed 9
+    // moved ("veteran" became "serial_killer"); the shuffle itself is stable.
     const result = startGame(makeLobby(8), { now: 100, seed: 9 });
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.code);
@@ -258,7 +260,7 @@ describe("determinism", () => {
       "werewolf",
       "villager",
       "werewolf",
-      "veteran",
+      "serial_killer",
       "villager",
       "villager",
       "villager",

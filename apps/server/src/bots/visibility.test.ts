@@ -3,7 +3,7 @@
 // nothing a human in that seat could not also see.
 
 import { describe, expect, test } from "bun:test";
-import type { GameState } from "@werewolf/game-engine";
+import { type GameState, isPackMember } from "@werewolf/game-engine";
 import type { UserId } from "@werewolf/protocol";
 import { RecordingBotAgent, setupBots } from "./fixtures.ts";
 import type { BotDecisionInput } from "./types.ts";
@@ -14,13 +14,14 @@ function playersWith(state: GameState, predicate: (role: string) => boolean): Us
     .map((player) => player.id);
 }
 
-/** The pack is a FACTION, not the "werewolf" role: a cub or an alpha is in it
- * too, and the composer replaces a plain wolf with them. Keying this on the
- * role would silently stop finding a pack the moment another wolf role is
- * dealt. */
+/** The pack is WOLF_CHAT_ROLES membership, which is what the engine tells about
+ * itself — not the "werewolf" role (a cub or an alpha is in the pack too) and
+ * not the wolves faction (a Sorcerer is in that faction and is deliberately
+ * told nothing). Using the engine's own predicate keeps this test honest as
+ * more wolf-side roles land. */
 function packMembers(state: GameState): UserId[] {
   return Object.values(state.players)
-    .filter((player) => player.faction === "wolves")
+    .filter((player) => isPackMember(player))
     .map((player) => player.id);
 }
 
@@ -57,8 +58,9 @@ describe("bot player visibility", () => {
   test("a wolf learns its pack and a villager does not", async () => {
     const agent = new RecordingBotAgent();
     const harness = await setupBots({ agent });
-    // Six seats guarantee two wolves, so there is a pack to learn about.
-    const gameId = await harness.startBotGame(7);
+    // Compositions are seeded from a per-game random uuid, so a test that needs
+    // a pack of more than one must pin the seed rather than roll dice on it.
+    const gameId = await harness.startBotGame(7, "pack-1");
     const state = await harness.state(gameId);
     const wolves = packMembers(state);
     expect(wolves.length).toBeGreaterThan(1);

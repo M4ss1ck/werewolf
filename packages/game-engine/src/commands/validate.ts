@@ -69,6 +69,11 @@ export function validateCommand(
         if (!target || target.status !== "alive" || target.id === actorId)
           return { code: "INVALID_TARGET" };
         return null;
+      case "detective.investigate":
+        if (perceivedRole !== "detective") return { code: "ACTION_NOT_AVAILABLE" };
+        if (!target || target.status !== "alive" || target.id === actorId)
+          return { code: "INVALID_TARGET" };
+        return null;
       case "harlot.visit":
         if (perceivedRole !== "harlot") return { code: "ACTION_NOT_AVAILABLE" };
         if (!target || target.status !== "alive" || target.id === actorId)

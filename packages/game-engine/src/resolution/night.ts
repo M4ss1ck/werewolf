@@ -1,6 +1,6 @@
 import type { ConversionCause, NightDeathCause, RoleId, UserId } from "@werewolf/protocol";
 import { ROLE_IDS } from "@werewolf/protocol";
-import { ALPHA_CONVERSION_CHANCE } from "../composer/balance-v1.ts";
+import { ALPHA_CONVERSION_CHANCE, DETECTIVE_SUCCESS_CHANCE } from "../composer/balance-v1.ts";
 import type { SeededRng } from "../rng/rng.ts";
 import { getPerceivedRole } from "../roles/perceived.ts";
 import { isPackMember } from "../roles/registry.ts";
@@ -36,6 +36,11 @@ type FrozenNight = {
   priestProtect: { playerId: UserId; targetId: UserId } | null;
   guardianBond: { playerId: UserId; targetId: UserId } | null;
   sorcererDivine: { playerId: UserId; targetId: UserId; isWolf: boolean } | null;
+  /** The real Detective's investigation. `role: null` means inconclusive. */
+  detectiveInvestigation: { playerId: UserId; targetId: UserId; role: RoleId | null } | null;
+  /** A Drunk who believes they are the Detective. Same shape as the real
+   * result: sometimes a uniformly random role, sometimes null. */
+  drunkFakeDetective: { playerId: UserId; targetId: UserId; role: RoleId | null } | null;
 };
 
 type NightOutcome = {
@@ -218,6 +223,46 @@ function freezeNightIntents(state: GameState, rng: SeededRng, day: number): Froz
           isWolf: state.players[sorcererAction.targetId]!.faction === "wolves",
         }
       : null;
+  // The Detective investigates by walking to the target's house; the frozen
+  // record carries the resolved result so a night roll happens exactly once.
+  // A miss reports inconclusive (null), never a wrong role.
+  const detective = living.find((player) => player.role === "detective");
+  const detectiveAction = detective
+    ? currentAction(detective, phaseId, "detective.investigate")
+    : undefined;
+  const detectiveInvestigation =
+    detectiveAction?.targetId && isLivingTarget(state, detectiveAction.targetId)
+      ? {
+          playerId: detective!.id,
+          targetId: detectiveAction.targetId,
+          role:
+            rng.derive(`night:${day}:detective:investigation`).float() < DETECTIVE_SUCCESS_CHANCE
+              ? state.players[detectiveAction.targetId]!.role!
+              : null,
+        }
+      : null;
+  // A Drunk who believes they are the Detective is told the same shape of
+  // result as a real one would see: sometimes a uniformly random role,
+  // sometimes inconclusive. They walk to the target's house like the real
+  // one, because the risk has to be real.
+  const drunkDetective = living.find(
+    (player) => player.role === "drunk" && getPerceivedRole(player) === "detective",
+  );
+  const drunkDetectiveAction = drunkDetective
+    ? currentAction(drunkDetective, phaseId, "detective.investigate")
+    : undefined;
+  const drunkFakeDetectiveRng = rng.derive(`night:${day}:drunk:fake-detective`);
+  const drunkFakeDetective =
+    drunkDetectiveAction?.targetId && isLivingTarget(state, drunkDetectiveAction.targetId)
+      ? {
+          playerId: drunkDetective!.id,
+          targetId: drunkDetectiveAction.targetId,
+          role:
+            drunkFakeDetectiveRng.float() < DETECTIVE_SUCCESS_CHANCE
+              ? ROLE_IDS[drunkFakeDetectiveRng.int(ROLE_IDS.length)]!
+              : null,
+        }
+      : null;
   return {
     wolfVotes,
     seerInspection,
@@ -229,6 +274,8 @@ function freezeNightIntents(state: GameState, rng: SeededRng, day: number): Froz
     priestProtect,
     guardianBond,
     sorcererDivine,
+    detectiveInvestigation,
+    drunkFakeDetective,
   };
 }
 
@@ -255,9 +302,16 @@ function resolveWolfBallot(votes: FrozenNight["wolfVotes"]): UserId | null {
 /** Where every living player spends the night: a map from player id to the id
  * of the player whose house they are in. Everyone starts at home; the pack
  * gathers at the balloted target's house (or stay home on a tie or empty
- * ballot), and the harlot and serial killer travel to their visit targets.
- * The seer never travels: scrying is remote. The sorcerer neither: they are
- * wolf-faction but not one of the pack, so they do not gather with it. */
+ * ballot), and the harlot, serial killer and detective travel to their visit
+ * targets. The detective walks to the house it investigates: that is the
+ * price of the second information role. The seer never travels: scrying is
+ * remote. The sorcerer neither: they are wolf-faction but not one of the
+ * pack, so they do not gather with it.
+ *
+ * Travel keys on whoever STORED the action, not on who is really a detective:
+ * a Drunk who believes they are the Detective genuinely walks to that house
+ * and genuinely dies there. Locations are about where a body is, not about
+ * whether a power is real. */
 function resolveNightLocations(
   state: GameState,
   frozen: FrozenNight,
@@ -274,6 +328,10 @@ function resolveNightLocations(
     locations.set(frozen.harlotAction.playerId, frozen.harlotAction.targetId);
   if (frozen.serialKillerAction?.type === "visit")
     locations.set(frozen.serialKillerAction.playerId, frozen.serialKillerAction.targetId);
+  if (frozen.detectiveInvestigation)
+    locations.set(frozen.detectiveInvestigation.playerId, frozen.detectiveInvestigation.targetId);
+  if (frozen.drunkFakeDetective)
+    locations.set(frozen.drunkFakeDetective.playerId, frozen.drunkFakeDetective.targetId);
   return locations;
 }
 
@@ -591,6 +649,28 @@ function makeNightEvents(
       payload: {
         targetId: frozen.drunkFakeResult.targetId,
         role: frozen.drunkFakeResult.role,
+      },
+    });
+  // The result is emitted whether or not the investigator survives: they saw
+  // what they saw before anything happened to them.
+  if (frozen.detectiveInvestigation)
+    events.push({
+      kind: "detective.result",
+      scope: "player",
+      scopeId: frozen.detectiveInvestigation.playerId,
+      payload: {
+        targetId: frozen.detectiveInvestigation.targetId,
+        role: frozen.detectiveInvestigation.role,
+      },
+    });
+  if (frozen.drunkFakeDetective)
+    events.push({
+      kind: "detective.result",
+      scope: "player",
+      scopeId: frozen.drunkFakeDetective.playerId,
+      payload: {
+        targetId: frozen.drunkFakeDetective.targetId,
+        role: frozen.drunkFakeDetective.role,
       },
     });
   if (frozen.harlotAction) {

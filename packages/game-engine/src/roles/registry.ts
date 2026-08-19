@@ -27,6 +27,7 @@ import { alphaWolf } from "./alpha-wolf.ts";
 import { cub } from "./cub.ts";
 import { cupid } from "./cupid.ts";
 import { cursed } from "./cursed.ts";
+import { detective } from "./detective.ts";
 import { drunk } from "./drunk.ts";
 import { guardian } from "./guardian.ts";
 import { harlot } from "./harlot.ts";
@@ -63,6 +64,7 @@ export const roleRegistry: Readonly<Record<RoleId, RoleDefinition>> = {
   guardian,
   cub,
   sorcerer,
+  detective,
 };
 
 export function getRoleDefinition(role: RoleId): RoleDefinition {

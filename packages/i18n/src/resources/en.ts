@@ -95,6 +95,11 @@ export const en = {
       description:
         "You win with the wolves but are no part of the pack: no wolf chat, no hunt, and the pack may eat you. Each night you divine one player and learn only whether they are a wolf.",
     },
+    detective: {
+      name: "Detective",
+      description:
+        "Visits one player each night to investigate them. Half the time you learn their role; a miss is inconclusive, never a lie. The walk is risky — if the killers come to that house, you die there.",
+    },
   },
   factions: {
     village: "Village",
@@ -173,6 +178,11 @@ export const en = {
       label: "Divine",
       prompt: "Choose a player and learn only whether they are a wolf.",
     },
+    "detective.investigate": {
+      label: "Investigate",
+      prompt:
+        "Choose a player to investigate tonight. You visit their house: half the time you learn their role, but if the killers come you die there.",
+    },
   },
   errors: {
     UNKNOWN_ERROR: "Something went wrong. Please try again.",
@@ -229,6 +239,10 @@ export const en = {
         killed: "You were killed during your visit.",
       },
       "player.linked": "You are linked to {{partnerId}}.",
+      "detective.result": {
+        role: "Your investigation: {{player}} is a {{role}}.",
+        inconclusive: "Your investigation of {{player}} was inconclusive.",
+      },
       "wolves.member_joined": "{{player}} has joined the wolves.",
       "masons.member_joined": "{{player}} is a mason.",
     },

@@ -42,6 +42,7 @@ export const EVENT_KINDS = [
   "player.converted",
   "harlot.result",
   "player.linked",
+  "detective.result",
   // Wolf faction
   "wolves.member_joined",
   "masons.member_joined",
@@ -119,6 +120,9 @@ export interface EventPayloads {
   "player.converted": { role: RoleId; faction: FactionId; cause: ConversionCause };
   "harlot.result": { outcome: "safe" | "killed" };
   "player.linked": { partnerId: UserId };
+  /** The Detective's investigation. `role: null` means inconclusive — the
+   * investigation failed, it is never a wrong role. */
+  "detective.result": { targetId: UserId; role: RoleId | null };
   // Wolf faction
   "wolves.member_joined": { playerId: UserId };
   "masons.member_joined": { playerId: UserId };
@@ -347,6 +351,15 @@ export const GameEventSchema = z.discriminatedUnion("kind", [
     actorUserId: UserIdSchema.optional(),
     createdAt: z.number(),
     payload: z.object({ partnerId: UserIdSchema }),
+  }),
+  z.object({
+    id: EventIdSchema,
+    kind: z.literal("detective.result"),
+    scope: EventScopeSchema,
+    scopeId: z.string().optional(),
+    actorUserId: UserIdSchema.optional(),
+    createdAt: z.number(),
+    payload: z.object({ targetId: UserIdSchema, role: RoleIdSchema.nullable() }),
   }),
   z.object({
     id: EventIdSchema,

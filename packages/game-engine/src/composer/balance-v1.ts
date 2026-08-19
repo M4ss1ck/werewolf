@@ -5,6 +5,11 @@ export const BALANCE_V1 = 1 as const;
 /** Per-night chance the pack's victim is turned instead of killed. */
 export const ALPHA_CONVERSION_CHANCE = 0.1;
 
+/** Chance the Detective's investigation identifies the target's role. A miss
+ * is reported as inconclusive, never as a wrong role: a second lying
+ * information role would steal the Drunk's whole identity. */
+export const DETECTIVE_SUCCESS_CHANCE = 0.5;
+
 /** Consecutive night resolutions with no elimination that end the game in a draw. */
 export const STALEMATE_NIGHTS = 5;
 
@@ -34,13 +39,20 @@ export const roleAvailabilityMinimums: Partial<Record<RoleId, number>> = {
   guardian: 7,
   cub: 7,
   sorcerer: 8,
+  detective: 7,
 };
 
 /** Roles a Drunk may believe they are. Restricted to roles whose output is
  * PRIVATE information only: a publicly observable power (revealing, linking)
  * would out the Drunk the first time they used it. More are added as those
  * roles land. */
-export const DRUNK_FAKE_ROLES: readonly RoleId[] = ["seer", "cupid", "priest", "guardian"];
+export const DRUNK_FAKE_ROLES: readonly RoleId[] = [
+  "seer",
+  "cupid",
+  "priest",
+  "guardian",
+  "detective",
+];
 
 export const forbiddenCombinations: readonly (readonly RoleId[])[] = [["seer", "princess"]];
 
@@ -85,4 +97,5 @@ export const availableSpecialRoles: readonly RoleId[] = [
   "guardian",
   "cub",
   "sorcerer",
+  "detective",
 ];

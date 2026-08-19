@@ -58,6 +58,19 @@ export function getAvailableActions(state: GameState, playerId: UserId): Availab
           : {}),
       });
     }
+    if (perceivedRole === "detective") {
+      available.push({
+        id: "detective.investigate",
+        type: "target",
+        targets: others.map((target) => ({
+          userId: target.id,
+          enabled: target.status === "alive",
+        })),
+        ...(stored["detective.investigate"]?.targetId
+          ? { selectedTargetId: stored["detective.investigate"]!.targetId }
+          : {}),
+      });
+    }
     if (perceivedRole === "harlot") {
       available.push({
         id: "harlot.visit",
