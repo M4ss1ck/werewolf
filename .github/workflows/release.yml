@@ -1,0 +1,225 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  # No version input on purpose. Each build job checks out the repo fresh, so a
+  # bump made here would live only in the prepare job's workspace and the
+  # artifacts would ship the old version under the new tag. Bump with
+  # ./scripts/release.sh, which commits it, then push the tag. A bare dispatch
+  # re-runs the build for whatever is already committed.
+  workflow_dispatch:
+
+jobs:
+  # Resolve the version and release notes once, and refuse to build a
+  # half-bumped tree where the version files disagree.
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+      changelog: ${{ steps.changelog.outputs.notes }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Get version
+        id: get_version
+        run: |
+          VERSION=$(grep -Po '"version":\s*"\K[^"]+' package.json | head -1)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building version: $VERSION"
+
+      - name: Extract changelog notes
+        id: changelog
+        run: |
+          # Pull the top (latest) section from CHANGELOG.md, dropping the version
+          # header line. Falls back to empty if CHANGELOG.md is missing, in which
+          # case the release steps use GitHub's auto-generated notes.
+          if [ -f CHANGELOG.md ]; then
+            NOTES=$(awk '/^## \[/{c++} c==1' CHANGELOG.md | tail -n +2)
+          else
+            NOTES=""
+          fi
+          {
+            echo 'notes<<CHANGELOG_EOF'
+            echo "$NOTES"
+            echo 'CHANGELOG_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Verify versions are in sync
+        run: |
+          PKG_VERSION=$(grep -Po '"version":\s*"\K[^"]+' package.json | head -1)
+          TAURI_VERSION=$(grep -Po '"version":\s*"\K[^"]+' apps/client/src-tauri/tauri.conf.json | head -1)
+          CARGO_VERSION=$(grep -Po '^version = "\K[^"]+' apps/client/src-tauri/Cargo.toml | head -1)
+
+          echo "package.json version: $PKG_VERSION"
+          echo "tauri.conf.json version: $TAURI_VERSION"
+          echo "Cargo.toml version: $CARGO_VERSION"
+
+          if [[ "$PKG_VERSION" != "$TAURI_VERSION" ]] || [[ "$PKG_VERSION" != "$CARGO_VERSION" ]]; then
+            echo "Error: Version mismatch detected!"
+            echo "Run './scripts/bump-version.sh $PKG_VERSION' to sync versions."
+            exit 1
+          fi
+
+  quality:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run quality gate
+        run: bun run check
+
+  # Build for Linux (deb, rpm, appimage)
+  build-linux:
+    needs: [prepare, quality]
+    permissions:
+      contents: write
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libgtk-3-dev
+
+      - name: Rust setup
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./apps/client/src-tauri -> target"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build the app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: apps/client
+          tagName: v${{ needs.prepare.outputs.version }}
+          releaseName: "Werewolf v${{ needs.prepare.outputs.version }}"
+          releaseBody: ${{ needs.prepare.outputs.changelog }}
+          releaseDraft: true
+          prerelease: false
+          args: --target x86_64-unknown-linux-gnu
+
+  # Build for Windows using GNU toolchain, cross-compiled from Linux
+  build-windows:
+    needs: [prepare, quality]
+    permissions:
+      contents: write
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install cross-compilation dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gcc-mingw-w64-x86-64 \
+            nsis \
+            llvm \
+            clang \
+            lld \
+            libappindicator3-dev
+
+      - name: Rust setup
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-gnu
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./apps/client/src-tauri -> target"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build the app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: apps/client
+          tagName: v${{ needs.prepare.outputs.version }}
+          releaseName: "Werewolf v${{ needs.prepare.outputs.version }}"
+          releaseBody: ${{ needs.prepare.outputs.changelog }}
+          releaseDraft: true
+          prerelease: false
+          args: --target x86_64-pc-windows-gnu
+
+  # Build the server container (werewolf ships a SPA + API in one image)
+  build-docker:
+    needs: [prepare, quality]
+    permissions:
+      contents: read
+      packages: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=${{ needs.prepare.outputs.version }}
+            type=raw,value=latest
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
