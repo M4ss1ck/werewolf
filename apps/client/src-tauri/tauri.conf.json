@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "werewolf",
+  "productName": "Werewolf",
   "version": "0.1.0",
-  "identifier": "com.werewolf.app",
+  "identifier": "com.massick.werewolf",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -33,6 +33,22 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "category": "Game",
+    "shortDescription": "Live social deduction with friends",
+    "longDescription": "Werewolf is a server-authoritative live social deduction game. Join a lobby, get a secret role, and survive the night - or make sure the village does not. Plays in the browser, on the desktop and on Android.",
+    "linux": {
+      "deb": {
+        "depends": []
+      },
+      "rpm": {
+        "depends": []
+      }
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      }
+    },
     "android": {
       "debugApplicationIdSuffix": ".debug"
     }
