@@ -41,6 +41,7 @@ export const roleAvailabilityMinimums: Partial<Record<RoleId, number>> = {
   sorcerer: 8,
   detective: 7,
   cult_leader: 9,
+  lone_wolf: 10,
 };
 
 /** Roles a Drunk may believe they are. Restricted to roles whose output is
@@ -56,6 +57,11 @@ export const DRUNK_FAKE_ROLES: readonly RoleId[] = [
 ];
 
 export const forbiddenCombinations: readonly (readonly RoleId[])[] = [["seer", "princess"]];
+
+/** Roles that cannot be dealt unless their prerequisite is also dealt. */
+export const requiredCombinations: readonly (readonly [RoleId, RoleId])[] = [
+  ["lone_wolf", "alpha_wolf"],
+];
 
 export function getStartingWolfCount(players: number): number {
   if (players < 5) throw new Error("Minimum 5 players");

@@ -79,6 +79,10 @@ export const NightActionSetPayloadSchema = z.discriminatedUnion("action", [
     action: z.literal("cult.convert"),
     targetId: UserIdSchema,
   }),
+  z.object({
+    action: z.literal("lone_wolf.search"),
+    targetId: UserIdSchema,
+  }),
 ]);
 export type NightActionSetPayload = z.infer<typeof NightActionSetPayloadSchema>;
 

@@ -95,6 +95,11 @@ export const en = {
       description:
         "You win with the wolves but are no part of the pack: no wolf chat, no hunt, and the pack may eat you. Each night you divine one player and learn only whether they are a wolf.",
     },
+    lone_wolf: {
+      name: "Lone Wolf",
+      description:
+        "A wolf who answers to nobody. Each night you search a house for the Alpha, and if you find them you fight: one of you dies. Win, and you take their place at the head of the pack. That is your only way to win — until then the pack can eat you like anyone else.",
+    },
     detective: {
       name: "Detective",
       description:
@@ -117,6 +122,7 @@ export const en = {
     veteran: "The Veteran",
     serial_killer: "The Serial Killer",
     cult: "The Cult",
+    lone_wolf: "The Lone Wolf",
   },
   phases: {
     discussion: "Discussion",
@@ -189,6 +195,11 @@ export const en = {
       label: "Divine",
       prompt: "Choose a player and learn only whether they are a wolf.",
     },
+    "lone_wolf.search": {
+      label: "Search",
+      prompt:
+        "Choose a house to search for the Alpha tonight. If they are there, only one of you walks away.",
+    },
     "detective.investigate": {
       label: "Investigate",
       prompt:
@@ -255,6 +266,10 @@ export const en = {
         killed: "You were killed during your visit.",
       },
       "player.linked": "You are linked to {{partnerId}}.",
+      "lone_wolf.result": {
+        found: "You found the Alpha at {{player}}'s house.",
+        notFound: "No sign of the Alpha at {{player}}'s house.",
+      },
       "detective.result": {
         role: "Your investigation: {{player}} is a {{role}}.",
         inconclusive: "Your investigation of {{player}} was inconclusive.",

@@ -43,6 +43,7 @@ export const EVENT_KINDS = [
   "harlot.result",
   "player.linked",
   "detective.result",
+  "lone_wolf.result",
   // Wolf faction
   "wolves.member_joined",
   "masons.member_joined",
@@ -68,7 +69,8 @@ export type NightDeathCause =
   | "harlot_exposure"
   | "serial_killer_attack"
   | "lover_link"
-  | "guardian_substitution";
+  | "guardian_substitution"
+  | "lone_wolf_clash";
 
 export type VictoryReason =
   | "wolves_eliminated"
@@ -126,6 +128,9 @@ export interface EventPayloads {
   /** The Detective's investigation. `role: null` means inconclusive — the
    * investigation failed, it is never a wrong role. */
   "detective.result": { targetId: UserId; role: RoleId | null };
+  /** The Lone Wolf's nightly hunt for the Alpha. `found: true` means they
+   * clashed with the Alpha that night; `false` means the Alpha was not there. */
+  "lone_wolf.result": { targetId: UserId; found: boolean };
   // Wolf faction
   "wolves.member_joined": { playerId: UserId };
   "masons.member_joined": { playerId: UserId };
@@ -187,6 +192,7 @@ export const NightDeathCauseSchema = z.enum([
   "serial_killer_attack",
   "lover_link",
   "guardian_substitution",
+  "lone_wolf_clash",
 ]);
 export const VictoryReasonSchema = z.enum([
   "wolves_eliminated",
@@ -366,6 +372,15 @@ export const GameEventSchema = z.discriminatedUnion("kind", [
     actorUserId: UserIdSchema.optional(),
     createdAt: z.number(),
     payload: z.object({ targetId: UserIdSchema, role: RoleIdSchema.nullable() }),
+  }),
+  z.object({
+    id: EventIdSchema,
+    kind: z.literal("lone_wolf.result"),
+    scope: EventScopeSchema,
+    scopeId: z.string().optional(),
+    actorUserId: UserIdSchema.optional(),
+    createdAt: z.number(),
+    payload: z.object({ targetId: UserIdSchema, found: z.boolean() }),
   }),
   z.object({
     id: EventIdSchema,

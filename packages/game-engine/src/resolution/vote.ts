@@ -145,6 +145,38 @@ export function resolveDayVote(state: GameState): DomainResult {
     }
   }
   const eliminated = playerPatches.some((patch) => patch.changes.status === "dead");
+  // The Alpha's death ends the Lone Wolf's hunt. Ascension is the Lone Wolf's
+  // only path to the Alpha's seat, so if the last living Alpha Wolf was
+  // eliminated this vote and a Lone Wolf is still alive, the Lone Wolf
+  // converts to a plain werewolf and wins with the pack from then on.
+  const deadIds = new Set(
+    playerPatches.filter((patch) => patch.changes.status === "dead").map((patch) => patch.playerId),
+  );
+  const livingAlpha = Object.values(state.players).find(
+    (player) =>
+      player.role === "alpha_wolf" && player.status === "alive" && !deadIds.has(player.id),
+  );
+  const livingLoneWolf = Object.values(state.players).find(
+    (player) => player.role === "lone_wolf" && player.status === "alive" && !deadIds.has(player.id),
+  );
+  if (!livingAlpha && livingLoneWolf) {
+    playerPatches.push({
+      playerId: livingLoneWolf.id,
+      changes: { role: "werewolf", faction: "wolves" },
+    });
+    events.push({
+      kind: "player.converted",
+      scope: "player",
+      scopeId: livingLoneWolf.id,
+      payload: { role: "werewolf", faction: "wolves", cause: "alpha_dead" },
+    });
+    events.push({
+      kind: "wolves.member_joined",
+      scope: "faction",
+      scopeId: "wolves",
+      payload: { playerId: livingLoneWolf.id },
+    });
+  }
   const projected = {
     ...applyPatches(state, playerPatches),
     nightsWithoutElimination: eliminated ? 0 : state.nightsWithoutElimination,

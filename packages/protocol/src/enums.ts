@@ -27,6 +27,7 @@ export const ROLE_IDS = [
   "detective",
   "cult_leader",
   "cultist",
+  "lone_wolf",
 ] as const;
 export type RoleId = (typeof ROLE_IDS)[number];
 export const RoleIdSchema = z.enum(ROLE_IDS);
@@ -37,7 +38,14 @@ export const RoleIdSchema = z.enum(ROLE_IDS);
 export const WOLF_ROLE_IDS = ["werewolf", "alpha_wolf", "cub", "sorcerer"] as const;
 export type WolfRoleId = (typeof WOLF_ROLE_IDS)[number];
 
-export const FACTION_IDS = ["village", "wolves", "veteran", "serial_killer", "cult"] as const;
+export const FACTION_IDS = [
+  "village",
+  "wolves",
+  "veteran",
+  "serial_killer",
+  "cult",
+  "lone_wolf",
+] as const;
 export type FactionId = (typeof FACTION_IDS)[number];
 export const FactionIdSchema = z.enum(FACTION_IDS);
 
@@ -68,6 +76,7 @@ export const ACTION_IDS = [
   "sorcerer.divine",
   "detective.investigate",
   "cult.convert",
+  "lone_wolf.search",
 ] as const;
 export type ActionId = (typeof ACTION_IDS)[number];
 export const ActionIdSchema = z.enum(ACTION_IDS);
@@ -87,6 +96,6 @@ export const GAME_VISIBILITIES = ["public", "private"] as const;
 export type GameVisibility = (typeof GAME_VISIBILITIES)[number];
 export const GameVisibilitySchema = z.enum(GAME_VISIBILITIES);
 
-export const CONVERSION_CAUSES = ["cursed", "alpha_wolf", "cult"] as const;
+export const CONVERSION_CAUSES = ["cursed", "alpha_wolf", "cult", "alpha_dead"] as const;
 export type ConversionCause = (typeof CONVERSION_CAUSES)[number];
 export const ConversionCauseSchema = z.enum(CONVERSION_CAUSES);

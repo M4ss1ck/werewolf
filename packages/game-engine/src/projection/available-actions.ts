@@ -71,6 +71,19 @@ export function getAvailableActions(state: GameState, playerId: UserId): Availab
           : {}),
       });
     }
+    if (perceivedRole === "lone_wolf") {
+      available.push({
+        id: "lone_wolf.search",
+        type: "target",
+        targets: others.map((target) => ({
+          userId: target.id,
+          enabled: target.status === "alive",
+        })),
+        ...(stored["lone_wolf.search"]?.targetId
+          ? { selectedTargetId: stored["lone_wolf.search"]!.targetId }
+          : {}),
+      });
+    }
     if (perceivedRole === "harlot") {
       available.push({
         id: "harlot.visit",

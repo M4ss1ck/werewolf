@@ -52,6 +52,8 @@ function describeAction(input: BotDecisionInput, action: LegalAction): string {
   if (payload.action === "guardian.bond") return `bond with ${target} tonight`;
   if (payload.action === "detective.investigate") return `investigate ${target} tonight`;
   if (payload.action === "serial_killer.visit") return `visit ${target} tonight, and kill`;
+  if (payload.action === "lone_wolf.search")
+    return `search ${target}'s house for the alpha tonight`;
   if (payload.action === "cult.convert") return `convert ${target} into a cultist tonight`;
   return `visit ${target} tonight`;
 }

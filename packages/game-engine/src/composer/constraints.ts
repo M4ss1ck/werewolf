@@ -2,6 +2,7 @@ import type { RoleId } from "@werewolf/protocol";
 import {
   forbiddenCombinations,
   minimumVanillaVillagers,
+  requiredCombinations,
   roleAvailabilityMinimums,
 } from "./balance-v1.ts";
 
@@ -31,6 +32,7 @@ export function hasValidSpecialCardinality(roles: readonly RoleId[]): boolean {
       "sorcerer",
       "detective",
       "cult_leader",
+      "lone_wolf",
     ] as const
   ).every((role) => roles.filter((candidate) => candidate === role).length <= 1);
 }
@@ -58,12 +60,21 @@ export function hasMinimumVanillaVillagers(roles: readonly RoleId[], playerCount
   return roles.filter((role) => role === "villager").length >= minimumVanillaVillagers(playerCount);
 }
 
+/** A role that requires a prerequisite is only valid when that prerequisite is
+ * also dealt. The Lone Wolf is meaningless without an Alpha to hunt. */
+export function hasRequiredCombinations(roles: readonly RoleId[]): boolean {
+  return requiredCombinations.every(
+    ([role, prerequisite]) => !hasRole(roles, role) || hasRole(roles, prerequisite),
+  );
+}
+
 export function isValidComposition(roles: readonly RoleId[], playerCount: number): boolean {
   return (
     roles.length === playerCount &&
     hasValidSpecialCardinality(roles) &&
     hasAvailableRoles(roles, playerCount) &&
     hasAllowedCombinations(roles, playerCount) &&
+    hasRequiredCombinations(roles) &&
     hasMinimumVanillaVillagers(roles, playerCount)
   );
 }

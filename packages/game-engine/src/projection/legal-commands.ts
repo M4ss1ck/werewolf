@@ -51,13 +51,12 @@ export function getLegalCommands(state: GameState, playerId: UserId, now: number
 
   if (phase.type === "night") {
     for (const action of getAvailableActions(state, playerId)) {
-      // The one action that takes no target; handling it first leaves the rest
-      // narrowed to the three that do.
-      if (action.id === "harlot.stay") {
+      // Actions that take no target at all.
+      if (action.id === "harlot.stay" || action.id === "serial_killer.stay") {
         candidates.push({
           type: "night.action.set",
           phaseId: phase.id,
-          payload: { action: "harlot.stay" },
+          payload: { action: action.id },
         });
         continue;
       }
@@ -79,22 +78,15 @@ export function getLegalCommands(state: GameState, playerId: UserId, now: number
       if (action.type !== "target") continue;
       const targets = [...action.targets].sort((a, b) => (a.userId < b.userId ? -1 : 1));
       for (const target of targets) {
-        const payload =
-          action.id === "wolf.attack"
-            ? ({ action: "wolf.attack", targetId: target.userId } as const)
-            : action.id === "seer.inspect"
-              ? ({ action: "seer.inspect", targetId: target.userId } as const)
-              : action.id === "sorcerer.divine"
-                ? ({ action: "sorcerer.divine", targetId: target.userId } as const)
-                : action.id === "detective.investigate"
-                  ? ({ action: "detective.investigate", targetId: target.userId } as const)
-                  : action.id === "priest.protect"
-                    ? ({ action: "priest.protect", targetId: target.userId } as const)
-                    : action.id === "guardian.bond"
-                      ? ({ action: "guardian.bond", targetId: target.userId } as const)
-                      : action.id === "cult.convert"
-                        ? ({ action: "cult.convert", targetId: target.userId } as const)
-                        : ({ action: "harlot.visit", targetId: target.userId } as const);
+        // Every remaining night action has the same { action, targetId } shape,
+        // so the id carries straight through. A ternary chain here used to end
+        // in a default, which silently mapped serial_killer.visit onto a
+        // harlot.visit payload that validation then rejected — leaving the
+        // Serial Killer with no legal visit at all.
+        const payload = { action: action.id, targetId: target.userId } as Extract<
+          LegalCommand,
+          { type: "night.action.set" }
+        >["payload"];
         candidates.push({ type: "night.action.set", phaseId: phase.id, payload });
       }
     }

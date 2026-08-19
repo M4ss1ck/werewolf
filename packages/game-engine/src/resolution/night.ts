@@ -44,11 +44,18 @@ type FrozenNight = {
   /** The cult leader's conversion target. The leader travels to the target's
    * house and converts them; the conversion is not a hit. */
   cultConvert: { playerId: UserId; targetId: UserId } | null;
+  /** The Lone Wolf's nightly hunt: the house they searched for the Alpha. The
+   * Lone Wolf travels there. */
+  loneWolfSearch: { playerId: UserId; targetId: UserId } | null;
 };
 
 type NightOutcome = {
   deaths: Map<UserId, NightDeathCause>;
   conversions: { playerId: UserId; cause: ConversionCause }[];
+  /** The Lone Wolf won the duel and ascended to Alpha this night. */
+  ascension: { playerId: UserId } | null;
+  /** The Lone Wolf's search result for this night. */
+  loneWolfResult: { playerId: UserId; targetId: UserId; found: boolean } | null;
 };
 
 export function resolveNight(state: GameState, context: NightResolutionContext): DomainResult {
@@ -277,6 +284,17 @@ function freezeNightIntents(state: GameState, rng: SeededRng, day: number): Froz
     cultConvertAction?.targetId && isLivingTarget(state, cultConvertAction.targetId)
       ? { playerId: cultLeader!.id, targetId: cultConvertAction.targetId }
       : null;
+  // The Lone Wolf hunts the Alpha every night, searching one house. The action
+  // is frozen here so the search lands even if the Lone Wolf is killed that
+  // same night — they got there and looked.
+  const loneWolf = living.find((player) => player.role === "lone_wolf");
+  const loneWolfAction = loneWolf
+    ? currentAction(loneWolf, phaseId, "lone_wolf.search")
+    : undefined;
+  const loneWolfSearch =
+    loneWolfAction?.targetId && isLivingTarget(state, loneWolfAction.targetId)
+      ? { playerId: loneWolf!.id, targetId: loneWolfAction.targetId }
+      : null;
   return {
     wolfVotes,
     seerInspection,
@@ -291,6 +309,7 @@ function freezeNightIntents(state: GameState, rng: SeededRng, day: number): Froz
     detectiveInvestigation,
     drunkFakeDetective,
     cultConvert,
+    loneWolfSearch,
   };
 }
 
@@ -350,6 +369,10 @@ function resolveNightLocations(
   // The cult leader travels to the target's house, exactly as the Detective
   // and Harlot do. They can be killed there.
   if (frozen.cultConvert) locations.set(frozen.cultConvert.playerId, frozen.cultConvert.targetId);
+  // The Lone Wolf travels to the house it searches for the Alpha. It can be
+  // killed there, and it is there that the duel with the Alpha happens.
+  if (frozen.loneWolfSearch)
+    locations.set(frozen.loneWolfSearch.playerId, frozen.loneWolfSearch.targetId);
   return locations;
 }
 
@@ -388,6 +411,8 @@ function resolveHouseAttacks(
 ): NightOutcome {
   const deaths = new Map<UserId, NightDeathCause>();
   const conversions: { playerId: UserId; cause: ConversionCause }[] = [];
+  let ascension: { playerId: UserId } | null = null;
+  let loneWolfResult: { playerId: UserId; targetId: UserId; found: boolean } | null = null;
 
   const attacks: { attacker: "wolves" | "serial_killer"; houseId: UserId }[] = [];
   if (wolfTargetId !== null) attacks.push({ attacker: "wolves", houseId: wolfTargetId });
@@ -440,6 +465,35 @@ function resolveHouseAttacks(
     }
   }
 
+  // Stage 3 (cont.): the Lone Wolf's duel with the Alpha. A clash happens when
+  // the Lone Wolf and a living Alpha Wolf are in the SAME house — the alpha's
+  // location equals the house the Lone Wolf searched. The alpha travels with
+  // the pack, so this is the house the pack is attacking, or the alpha's own
+  // house when the pack stayed home. The loser dies; the clash pre-empts
+  // everything else in that house, so neither duellist is later hit by the
+  // pack's attack. The Priest's shield does not protect against a duel inside
+  // a house. Hunter retaliation above resolves first, as it does for everyone.
+  if (frozen.loneWolfSearch) {
+    const lw = frozen.loneWolfSearch.playerId;
+    const alpha = livingPlayers(state).find((player) => player.role === "alpha_wolf");
+    const clash =
+      alpha !== undefined &&
+      !deaths.has(alpha.id) &&
+      !deaths.has(lw) &&
+      locations.get(alpha.id) === frozen.loneWolfSearch.targetId;
+    if (clash) {
+      if (rng.derive(`night:${day}:lone_wolf:challenge`).float() < 0.5) {
+        // The Lone Wolf wins: the Alpha dies and the Lone Wolf ascends to take
+        // its place.
+        deaths.set(alpha!.id, "lone_wolf_clash");
+        ascension = { playerId: lw };
+      } else {
+        deaths.set(lw, "lone_wolf_clash");
+      }
+    }
+    loneWolfResult = { playerId: lw, targetId: frozen.loneWolfSearch.targetId, found: clash };
+  }
+
   // Stage 4: compute raw hits. Each non-repelled attack hits the occupants of
   // its house.
   const hits = new Map<UserId, Set<"wolves" | "serial_killer">>();
@@ -452,6 +506,10 @@ function resolveHouseAttacks(
         // one attacked at home has no clash and dies normally here.
         if (occupant.role === "serial_killer" && locations.get(occupant.id) !== occupant.id)
           continue;
+        // The Lone Wolf's duel with the Alpha was settled in stage 3; when a
+        // clash happened, the duellist is not also hit by the pack's attack on
+        // that house. The Alpha is already skipped as a pack member.
+        if (loneWolfResult?.found && occupant.id === frozen.loneWolfSearch!.playerId) continue;
       } else {
         if (occupant.id === frozen.serialKillerAction!.playerId) continue;
         // Wolves' fate is the clash in stage 3.
@@ -554,7 +612,22 @@ function resolveHouseAttacks(
       deaths.set(harlot, "harlot_exposure");
   }
 
-  return { deaths, conversions };
+  // Stage 9: the Alpha's death ends the Lone Wolf's hunt. Ascension is the
+  // Lone Wolf's only path to the Alpha's seat, so if the last living Alpha
+  // Wolf died this resolution and a Lone Wolf is still alive, the Lone Wolf
+  // converts to a plain werewolf and wins with the pack from then on. An
+  // ascended Lone Wolf is now the Alpha, so this does not fire for them.
+  const livingAlpha = livingPlayers(state).find(
+    (player) => player.role === "alpha_wolf" && !deaths.has(player.id),
+  );
+  const livingLoneWolf = livingPlayers(state).find(
+    (player) => player.role === "lone_wolf" && !deaths.has(player.id),
+  );
+  if (!livingAlpha && !ascension && livingLoneWolf) {
+    conversions.push({ playerId: livingLoneWolf.id, cause: "alpha_dead" });
+  }
+
+  return { deaths, conversions, ascension, loneWolfResult };
 }
 
 function livingPlayers(state: GameState): PlayerState[] {
@@ -578,6 +651,11 @@ function commitNight(outcome: NightOutcome): PlayerPatch[] {
       patches.push({ playerId, changes: { role: "werewolf", faction: "wolves" } });
     }
   }
+  if (outcome.ascension)
+    patches.push({
+      playerId: outcome.ascension.playerId,
+      changes: { role: "alpha_wolf", faction: "wolves" },
+    });
   return patches;
 }
 
@@ -734,6 +812,29 @@ function makeNightEvents(
       payload: { outcome: killed ? "killed" : "safe" },
     });
   }
+  // The Lone Wolf learns whether it found the Alpha. `found: true` means a
+  // clash happened; `false` is a real deduction tool, not a silent miss.
+  if (outcome.loneWolfResult)
+    events.push({
+      kind: "lone_wolf.result",
+      scope: "player",
+      scopeId: outcome.loneWolfResult.playerId,
+      payload: {
+        targetId: outcome.loneWolfResult.targetId,
+        found: outcome.loneWolfResult.found,
+      },
+    });
+  // On ascension the Lone Wolf becomes the Alpha and joins the pack. The
+  // surviving pack is told only after the fact, through this same event, which
+  // also writes the channel marker so the new Alpha reads wolf chat only from
+  // this moment on.
+  if (outcome.ascension)
+    events.push({
+      kind: "wolves.member_joined",
+      scope: "faction",
+      scopeId: "wolves",
+      payload: { playerId: outcome.ascension.playerId },
+    });
   for (const { playerId, cause } of outcome.conversions) {
     if (cause === "cult") {
       events.push({

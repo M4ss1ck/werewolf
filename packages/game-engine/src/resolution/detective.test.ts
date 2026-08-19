@@ -256,8 +256,13 @@ describe("the Drunk-Detective", () => {
     // The fake result is drawn from the role ids, never a lie.
     expect(fakeRole).not.toBeNull();
     expect(ROLE_IDS).toContain(fakeRole!);
-    // Pinned by the seed: the fake roll succeeds and draws "princess".
-    expect(fakeRole).toBe("princess");
+    // Deterministic for the seed, but deliberately NOT pinned to a named role:
+    // the draw indexes into ROLE_IDS, so every role added to the roster would
+    // shift it. The scope is what must stay stable, not the value it lands on.
+    const again = detectiveResults(resolve(game, "drunk-det")).find(
+      (event) => event.scopeId === id("p0"),
+    );
+    expect((again!.payload as EventPayloads["detective.result"]).role).toBe(fakeRole);
   });
 
   test("can also roll inconclusive, never a wrong role", () => {

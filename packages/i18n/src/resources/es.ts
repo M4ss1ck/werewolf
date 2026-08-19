@@ -93,6 +93,11 @@ export const es: TranslationResource = {
       description:
         "Ganas con los lobos pero no eres parte de la manada: sin chat de lobos, sin cacería, y la manada puede devorarte. Cada noche adivinas a un jugador y solo aprendes si es lobo o no.",
     },
+    lone_wolf: {
+      name: "Lobo Solitario",
+      description:
+        "Un lobo que no rinde cuentas a nadie. Cada noche registras una casa en busca del Alfa, y si lo encuentras peleáis: uno de los dos muere. Si ganas, ocupas su lugar al frente de la manada. Es tu única forma de ganar, y hasta entonces la manada puede devorarte como a cualquiera.",
+    },
     detective: {
       name: "Detective",
       description:
@@ -115,6 +120,7 @@ export const es: TranslationResource = {
     veteran: "El Veterano",
     serial_killer: "El Asesino en Serie",
     cult: "El Culto",
+    lone_wolf: "El Lobo Solitario",
   },
   phases: {
     discussion: "Discusión",
@@ -187,6 +193,11 @@ export const es: TranslationResource = {
       label: "Adivinar",
       prompt: "Elige a un jugador y descubre solo si es lobo o no.",
     },
+    "lone_wolf.search": {
+      label: "Registrar",
+      prompt:
+        "Elige una casa donde buscar al Alfa esta noche. Si está allí, solo uno de los dos saldrá con vida.",
+    },
     "detective.investigate": {
       label: "Investigar",
       prompt:
@@ -253,6 +264,10 @@ export const es: TranslationResource = {
         killed: "Te mataron durante tu visita.",
       },
       "player.linked": "Estás unido a {{partnerId}}.",
+      "lone_wolf.result": {
+        found: "Encontraste al Alfa en casa de {{player}}.",
+        notFound: "Ni rastro del Alfa en casa de {{player}}.",
+      },
       "detective.result": {
         role: "Tu investigación: {{player}} es {{role}}.",
         inconclusive: "Tu investigación de {{player}} no fue concluyente.",
