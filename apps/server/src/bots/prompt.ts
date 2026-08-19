@@ -126,6 +126,13 @@ export function buildUserPrompt(input: BotDecisionInput): string {
     .filter((line): line is string => line !== null)
     .join("\n");
 
+  const phaseChat = input.phaseChat
+    .map((event) => describeEvent(input, event))
+    .filter((line): line is string => line !== null)
+    .join("\n");
+
+  const digest = input.digest.join("\n");
+
   const actions = input.legalActions
     .map((action) => `${action.id}. ${describeAction(input, action)}`)
     .join("\n");
@@ -136,11 +143,13 @@ export function buildUserPrompt(input: BotDecisionInput): string {
     `It is day ${input.playerView.game.day}, ${input.phase} phase. ${Math.round(input.remainingMs / 1000)}s remain.`,
     `Players:\n${roster}`,
     history ? `What you know so far (oldest first):\n${history}` : null,
+    digest ? `Earlier days:\n${digest}` : null,
+    phaseChat ? `This phase's conversation (newest last):\n${phaseChat}` : null,
     actions ? `Legal actions:\n${actions}` : "Legal actions: none this turn.",
     input.speakableChannels.length > 0
       ? `You may speak on: ${input.speakableChannels.join(", ")}.`
       : "You cannot speak this turn; set say and channel to null.",
-    'Reply as {"actionId": <id or null>, "say": <text or null>, "channel": <channel or null>}.',
+    'Reply as {"actionId": <id or null>, "say": <text or null>, "channel": <channel or null>, "done": <true when you have nothing further to say this phase>}.',
   ].filter((section): section is string => section !== null);
 
   return sections.join("\n\n");

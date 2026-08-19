@@ -45,6 +45,13 @@ export interface BotDecisionInput {
   config: BotConfig;
   playerView: ViewerGameSnapshot;
   visibleEvents: GameEvent[];
+  /** Chat messages from the current phase this bot may see, newest last,
+   * capped at BOT_PHASE_CHAT_LIMIT. This is what makes a reply a reply. */
+  phaseChat: GameEvent[];
+  /** One compact line per earlier day — who was voted out, who died in the
+   * night — oldest first, capped at BOT_DIGEST_DAYS. Built deterministically
+   * from the bot's visible public events, never by a model. */
+  digest: string[];
   legalActions: LegalAction[];
   speakableChannels: ChatChannel[];
 }
@@ -55,6 +62,9 @@ export interface BotDecision {
   actionId: number | null;
   say: string | null;
   channel: ChatChannel | null;
+  /** True when the bot has nothing further to say this phase. The manager
+   * readies the seat on it, which is what lets the phase end early. */
+  done: boolean;
 }
 
 /** Lenient on the way in — a cheap model that omits a field should degrade to
@@ -74,6 +84,10 @@ export const BotDecisionSchema = z.object({
     .enum(["public", "wolves", "cult"])
     .nullish()
     .transform((value) => value ?? null),
+  done: z
+    .boolean()
+    .nullish()
+    .transform((value) => value ?? false),
 });
 
 export interface BotAgent {

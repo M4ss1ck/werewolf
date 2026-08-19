@@ -33,11 +33,20 @@ const botEnvSchema = z.object({
   /** How many turns one bot may take in a single discussion or voting phase,
    * counting the unconditional first one. This is the hard cap on model calls:
    * bots x turns per phase. */
-  BOT_CHAT_TURNS: z.coerce.number().int().min(1).max(6).default(2),
+  BOT_CHAT_TURNS: z.coerce.number().int().min(1).max(12).default(6),
 
   /** How many recent visible events go into a prompt. Bounded on purpose: the
    * match log must not grow into every request. */
   BOT_HISTORY_LIMIT: z.coerce.number().int().positive().default(24),
+
+  /** How many chat messages from the current phase go into a prompt, newest
+   * last. Bounded on purpose: a long discussion must not grow into every
+   * request. */
+  BOT_PHASE_CHAT_LIMIT: z.coerce.number().int().positive().default(40),
+
+  /** How many earlier days the digest covers, keeping the most recent ones.
+   * One compact line per day, so this bounds the digest's size. */
+  BOT_DIGEST_DAYS: z.coerce.number().int().positive().default(6),
 
   /** Development aid. Never enable in production: prompts carry the bot's own
    * hidden role. */

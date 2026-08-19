@@ -3,14 +3,22 @@
 // provider behaviour can wedge a match.
 
 import { describe, expect, test } from "bun:test";
-import type { GameId, UserId } from "@werewolf/protocol";
+import type { GameEvent, GameId, UserId } from "@werewolf/protocol";
 import { CoordinatorError } from "../game/coordinator.ts";
-import { GatedBotAgent, RecordingBotAgent, setupBots, testBotConfig, waitFor } from "./fixtures.ts";
+import { LlmBotAgent } from "./agent.ts";
+import {
+  FakeModelProvider,
+  GatedBotAgent,
+  RecordingBotAgent,
+  setupBots,
+  testBotConfig,
+  waitFor,
+} from "./fixtures.ts";
 import type { BotAgent, BotDecision } from "./types.ts";
 
 const voteFirst = (input: Parameters<BotAgent["decide"]>[0]): BotDecision => {
   const vote = input.legalActions.find((action) => action.command.type === "vote.set");
-  return { actionId: vote?.id ?? null, say: null, channel: null };
+  return { actionId: vote?.id ?? null, say: null, channel: null, done: false };
 };
 
 describe("bot command path", () => {
@@ -66,13 +74,91 @@ describe("bot command path", () => {
     expect(living.every((player) => player.phaseState.ready === true)).toBe(false);
   });
 
+  test("a bot that says done readies immediately, even with turns left", async () => {
+    const agent = new RecordingBotAgent(() => ({
+      actionId: null,
+      say: null,
+      channel: null,
+      done: true,
+    }));
+    const harness = await setupBots({ agent, config: testBotConfig({ BOT_CHAT_TURNS: "6" }) });
+    const gameId = await harness.startBotGame(5);
+    await harness.advancePhase(gameId); // discussion -> voting
+
+    const state = await harness.state(gameId);
+    const living = Object.values(state.players).filter((player) => player.status === "alive");
+    expect(living.length).toBeGreaterThan(0);
+    for (const player of living) {
+      expect(player.phaseState.phaseId).toBe(state.phase!.id);
+      expect(player.phaseState.ready).toBe(true);
+    }
+  });
+
+  test("a bot that says done: false with budget remaining does not ready", async () => {
+    const agent = new RecordingBotAgent(() => ({
+      actionId: null,
+      say: null,
+      channel: null,
+      done: false,
+    }));
+    const harness = await setupBots({ agent, config: testBotConfig({ BOT_CHAT_TURNS: "6" }) });
+    const gameId = await harness.startBotGame(5);
+    await harness.advancePhase(gameId); // discussion -> voting
+
+    const state = await harness.state(gameId);
+    const living = Object.values(state.players).filter((player) => player.status === "alive");
+    expect(living.length).toBeGreaterThan(0);
+    expect(living.every((player) => player.phaseState.ready === true)).toBe(false);
+  });
+
+  test("a bot that exhausts its turn budget readies even while saying done: false", async () => {
+    const agent = new RecordingBotAgent(() => ({
+      actionId: null,
+      say: null,
+      channel: null,
+      done: false,
+    }));
+    const harness = await setupBots({ agent, config: testBotConfig({ BOT_CHAT_TURNS: "1" }) });
+    const gameId = await harness.startBotGame(5);
+    await harness.advancePhase(gameId); // discussion -> voting
+
+    const state = await harness.state(gameId);
+    const living = Object.values(state.players).filter((player) => player.status === "alive");
+    expect(living.length).toBeGreaterThan(0);
+    for (const player of living) {
+      expect(player.phaseState.phaseId).toBe(state.phase!.id);
+      expect(player.phaseState.ready).toBe(true);
+    }
+  });
+
+  test("the random fallback agent readies after its decision", async () => {
+    const harness = await setupBots(); // default agent is the fallback
+    const gameId = await harness.startBotGame(5);
+    await harness.advancePhase(gameId); // discussion -> voting
+
+    const state = await harness.state(gameId);
+    const living = Object.values(state.players).filter((player) => player.status === "alive");
+    expect(living.length).toBeGreaterThan(0);
+    for (const player of living) {
+      expect(player.phaseState.phaseId).toBe(state.phase!.id);
+      expect(player.phaseState.ready).toBe(true);
+    }
+  });
+
   test("a bot whose response is stale does NOT send a ready", async () => {
     const agent = new GatedBotAgent(
       (input) => input.phase === "night",
-      (input) => ({ actionId: input.legalActions[0]?.id ?? null, say: null, channel: null }),
+      (input) => ({
+        actionId: input.legalActions[0]?.id ?? null,
+        say: null,
+        channel: null,
+        done: true,
+      }),
     );
     const harness = await setupBots({ agent });
-    const gameId = await harness.startBotGame(6);
+    // The seed pins the resolution order so the game reliably reaches the
+    // night; a victory landing in voting would leave no night decision to gate.
+    const gameId = await harness.startBotGame(6, "stale-1");
     await harness.advancePhase(gameId); // -> voting
     const voting = await harness.state(gameId);
     harness.clock.now = voting.phase!.endsAt;
@@ -121,7 +207,12 @@ describe("bot command path", () => {
   });
 
   test("an action the model was never offered is never submitted", async () => {
-    const agent = new RecordingBotAgent(() => ({ actionId: 9999, say: null, channel: null }));
+    const agent = new RecordingBotAgent(() => ({
+      actionId: 9999,
+      say: null,
+      channel: null,
+      done: true,
+    }));
     const harness = await setupBots({ agent });
     const gameId = await harness.startBotGame(5);
     await harness.advancePhase(gameId); // into voting
@@ -152,8 +243,8 @@ describe("bot command path", () => {
   test("discussion turns are capped, so a chat cascade terminates", async () => {
     const agent = new RecordingBotAgent((input) =>
       input.phase === "discussion"
-        ? { actionId: null, say: "I have my suspicions.", channel: "public" }
-        : { actionId: null, say: null, channel: null },
+        ? { actionId: null, say: "I have my suspicions.", channel: "public", done: false }
+        : { actionId: null, say: null, channel: null, done: false },
     );
     const harness = await setupBots({
       agent,
@@ -174,8 +265,8 @@ describe("bot command path", () => {
   test("a bot answers a chat message during voting, under the same cap", async () => {
     const agent = new RecordingBotAgent((input) =>
       input.phase === "voting"
-        ? { actionId: null, say: "I have my suspicions.", channel: "public" }
-        : { actionId: null, say: null, channel: null },
+        ? { actionId: null, say: "I have my suspicions.", channel: "public", done: false }
+        : { actionId: null, say: null, channel: null, done: false },
     );
     const harness = await setupBots({
       agent,
@@ -197,15 +288,111 @@ describe("bot command path", () => {
     expect(events.filter((event) => event.kind === "chat.message").length).toBeGreaterThan(0);
   });
 
+  test("the phase-chat window holds the current phase's conversation, capped", async () => {
+    const agent = new RecordingBotAgent((input) =>
+      input.phase === "discussion" || input.phase === "voting"
+        ? { actionId: null, say: "I have my suspicions.", channel: "public", done: false }
+        : { actionId: null, say: null, channel: null, done: true },
+    );
+    const harness = await setupBots({
+      agent,
+      config: testBotConfig({ BOT_CHAT_TURNS: "6", BOT_PHASE_CHAT_LIMIT: "40" }),
+    });
+    const gameId = await harness.startBotGame(8); // 9 seats, so >40 messages fit
+    await harness.advancePhase(gameId); // discussion -> voting
+
+    const votingInputs = agent.inputs.filter((input) => input.phase === "voting");
+    expect(votingInputs.length).toBeGreaterThan(0);
+    // The fullest window is the one built last, when the conversation is over.
+    const fullest = votingInputs.reduce((best, input) =>
+      input.phaseChat.length > best.phaseChat.length ? input : best,
+    );
+    // Every message is from the current phase, never from the discussion that
+    // preceded it.
+    expect(fullest.phaseChat.length).toBeGreaterThan(0);
+    for (const message of fullest.phaseChat) {
+      expect(message.kind).toBe("chat.message");
+      expect(message.createdAt).toBeGreaterThanOrEqual(fullest.playerView.game.phase!.startedAt);
+    }
+    // Capped at the configured limit, and the cap actually binds: more than
+    // forty messages were spoken in the voting phase.
+    for (const input of votingInputs) expect(input.phaseChat.length).toBeLessThanOrEqual(40);
+    expect(fullest.phaseChat.length).toBe(40);
+    const events = (await harness.coordinator.getVisibleEvents(gameId, 0)) as GameEvent[];
+    const votingStarted = (
+      events.find((event) => event.kind === "phase.started" && event.payload.type === "voting")!
+        .payload as { startedAt: number }
+    ).startedAt;
+    const votingChat = events.filter(
+      (event) => event.kind === "chat.message" && event.createdAt >= votingStarted,
+    );
+    expect(votingChat.length).toBeGreaterThan(40);
+  });
+
+  test("the digest names vote outcomes and night deaths from earlier days, capped", async () => {
+    const agent = new RecordingBotAgent((input) => {
+      const vote = input.legalActions.find((action) => action.command.type === "vote.set");
+      const night = input.legalActions.find((action) => action.command.type === "night.action.set");
+      return { actionId: vote?.id ?? night?.id ?? null, say: null, channel: null, done: true };
+    });
+    const harness = await setupBots({ agent, config: testBotConfig({ BOT_DIGEST_DAYS: "6" }) });
+    // The seed pins the composition and the resolution order, so the game
+    // reliably reaches day 2+ and the digest has earlier days to name.
+    const gameId = await harness.startBotGame(7, "digest-3");
+    for (let step = 0; step < 15; step += 1) {
+      const state = await harness.state(gameId);
+      if (state.status !== "running") break;
+      await harness.advancePhase(gameId);
+    }
+
+    // A decision made on day 2 or later, so at least one earlier day exists.
+    const late = agent.inputs.filter((input) => input.playerView.game.day >= 2);
+    expect(late.length).toBeGreaterThan(0);
+    const input = late.at(-1)!;
+    expect(input.digest.length).toBeGreaterThan(0);
+    expect(input.digest.length).toBeLessThanOrEqual(6);
+
+    // The digest is built from the same public events the bot could see: the
+    // names of the voted-out and the night-dead from the days before this
+    // decision appear in it.
+    const state = await harness.state(gameId);
+    const nameOf = (id: UserId) => state.players[id]?.displayName ?? id;
+    const events = (await harness.coordinator.getVisibleEvents(gameId, 0)) as GameEvent[];
+    const dayOfPhase = (phaseId: number) => Math.floor((phaseId - 1) / 3) + 1;
+    const earlierDays = input.playerView.game.day - 1;
+    const votedOut = events
+      .filter(
+        (event) =>
+          event.kind === "vote.resolved" &&
+          event.payload.eliminated !== null &&
+          dayOfPhase(event.payload.phaseId) <= earlierDays,
+      )
+      .map((event) => nameOf((event.payload as { eliminated: UserId }).eliminated));
+    const nightDeaths = events
+      .filter((event) => event.kind === "night.resolved")
+      .slice(0, earlierDays)
+      .flatMap((event) => event.payload.deaths.map(nameOf));
+    const digestText = input.digest.join("\n");
+    for (const name of votedOut) expect(digestText).toContain(name);
+    for (const name of nightDeaths) expect(digestText).toContain(name);
+  });
+
   test("a response that arrives after the phase moved on is discarded", async () => {
     // Only night decisions block, so the game can be driven into the night
     // with an outstanding call still in flight.
     const agent = new GatedBotAgent(
       (input) => input.phase === "night",
-      (input) => ({ actionId: input.legalActions[0]?.id ?? null, say: null, channel: null }),
+      (input) => ({
+        actionId: input.legalActions[0]?.id ?? null,
+        say: null,
+        channel: null,
+        done: true,
+      }),
     );
     const harness = await setupBots({ agent });
-    const gameId = await harness.startBotGame(6);
+    // The seed pins the resolution order so the game reliably reaches the
+    // night; a victory landing in voting would leave no night decision to gate.
+    const gameId = await harness.startBotGame(6, "stale-1");
     await harness.advancePhase(gameId); // -> voting
     // Into the night without waiting for the bots: their calls block there,
     // which is the situation under test.
@@ -243,6 +430,7 @@ describe("bot command path", () => {
       actionId: null,
       say: "Morning, all.",
       channel: "public",
+      done: true,
     }));
     const harness = await setupBots({
       agent,
@@ -277,7 +465,7 @@ describe("bot command path", () => {
         peak = Math.max(peak, inFlight);
         await new Promise((resolve) => setTimeout(resolve, 5));
         inFlight -= 1;
-        return { actionId: null, say: null, channel: null };
+        return { actionId: null, say: null, channel: null, done: true };
       },
     };
     const harness = await setupBots({
@@ -288,6 +476,22 @@ describe("bot command path", () => {
     await harness.startBotGame(7);
     expect(peak).toBeLessThanOrEqual(2);
     expect(peak).toBeGreaterThan(0);
+  });
+
+  test("a timed-out provider still falls back and the seat still readies", async () => {
+    const agent = new LlmBotAgent(new FakeModelProvider([new Error("timeout")]), testBotConfig());
+    const harness = await setupBots({ agent });
+    const gameId = await harness.startBotGame(5);
+    await harness.advancePhase(gameId); // discussion -> voting
+
+    const state = await harness.state(gameId);
+    const living = Object.values(state.players).filter((player) => player.status === "alive");
+    expect(living.length).toBeGreaterThan(0);
+    // The fallback says done, so the seat readies exactly as if the model had.
+    for (const player of living) {
+      expect(player.phaseState.phaseId).toBe(state.phase!.id);
+      expect(player.phaseState.ready).toBe(true);
+    }
   });
 
   test("an agent that always throws leaves the match playable", async () => {

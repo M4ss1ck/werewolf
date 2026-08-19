@@ -225,6 +225,24 @@ export class BotManager {
     const limit = this.options.config.BOT_HISTORY_LIMIT;
     const stored = (await this.coordinator.getRecentEvents(state.id, limit * 3)) as GameEvent[];
     const visibleEvents = filterVisibleEvents(stored, playerId, state).slice(-limit);
+    // The phase-chat window and the day digest need more than the recent tail:
+    // the current phase can hold a long conversation, and the digest reaches
+    // back several days. One bounded fetch serves both — the caps bound what
+    // reaches the prompt, and the fetch is a constant, so cost per decision
+    // stays flat however long the match runs.
+    const contextLimit =
+      this.options.config.BOT_PHASE_CHAT_LIMIT * 4 + this.options.config.BOT_DIGEST_DAYS * 60;
+    const contextStored = (await this.coordinator.getRecentEvents(
+      state.id,
+      contextLimit,
+    )) as GameEvent[];
+    const contextVisible = filterVisibleEvents(contextStored, playerId, state);
+    const phaseChat = contextVisible
+      .filter((event) => event.kind === "chat.message" && event.createdAt >= state.phase!.startedAt)
+      .slice(-this.options.config.BOT_PHASE_CHAT_LIMIT);
+    const names = (userId: UserId) =>
+      playerView.players.find((player) => player.userId === userId)?.displayName ?? userId;
+    const digest = buildDigest(contextVisible, names, this.options.config.BOT_DIGEST_DAYS);
     return {
       decisionId,
       gameId: state.id,
@@ -237,6 +255,8 @@ export class BotManager {
       config,
       playerView,
       visibleEvents,
+      phaseChat,
+      digest,
       legalActions: getLegalCommands(state, playerId, now).map((command, id) => ({ id, command })),
       speakableChannels: getSpeakableChannels(state, playerId, now),
     };
@@ -284,15 +304,20 @@ export class BotManager {
     // choice the model weighs. It is sent after the action so the action is
     // stored before the ready can end the phase.
     //
-    // Only on the bot's LAST turn of the phase, though: readying after every
-    // decision would end the phase at its floor the moment every bot had spoken
-    // once, and no bot would ever earn the reply turn that makes a discussion a
-    // discussion. A bot with budget left holds the phase to its hard deadline,
-    // which is exactly the old behaviour.
+    // The seat readies when the bot says it is done talking, or when it has
+    // spent its last budgeted turn — whichever comes first. `done` is what
+    // resolves the two failure modes: readying after every decision would end
+    // the phase at its floor the moment every bot had spoken once, and never
+    // readying would hold every phase to its hard deadline.
+    //
+    // At night `reactsToChat` is always false, so a bot's first decision is
+    // also its last: `moreTurnsPossible` is false and the seat readies
+    // unconditionally. That is intended — a night action is a single decision,
+    // not a conversation — so do not "fix" it.
     const moreTurnsPossible =
       (input.phase === "discussion" || input.phase === "voting") &&
       turn + 1 < this.options.config.BOT_CHAT_TURNS;
-    if (!moreTurnsPossible)
+    if (decision.done || !moreTurnsPossible)
       await this.send(decisionId, gameId, playerId, {
         commandId: `${decisionId}:ready`,
         phaseId,
@@ -356,4 +381,43 @@ export class BotManager {
             .int(spread + 1);
     await this.sleep(min + jitter);
   }
+}
+
+/** One compact line per earlier day, built deterministically from the bot's
+ * visible public events: who was voted out, who died in the night. Oldest
+ * first, capped at `maxDays`, keeping the most recent days. No model call. */
+function buildDigest(
+  events: readonly GameEvent[],
+  names: (userId: UserId) => string,
+  maxDays: number,
+): string[] {
+  // The engine numbers phases sequentially and bumps the day after each night,
+  // so a phase id maps to a day: ids 1-3 are day 1, 4-6 day 2, and so on.
+  const dayOfPhase = (phaseId: PhaseId) => Math.floor((Number(phaseId) - 1) / 3) + 1;
+  // vote.resolved names its own phase; night.resolved does not, so each night
+  // resolution is paired with the most recent vote resolution before it —
+  // which is the same day's vote. A night whose vote fell outside the window
+  // is skipped rather than mislabelled.
+  const days: { day: number; eliminated: UserId | null; deaths: UserId[] }[] = [];
+  let lastVote: { day: number; eliminated: UserId | null } | null = null;
+  for (const event of events) {
+    if (event.kind === "vote.resolved") {
+      lastVote = { day: dayOfPhase(event.payload.phaseId), eliminated: event.payload.eliminated };
+    } else if (event.kind === "night.resolved" && lastVote !== null) {
+      days.push({
+        day: lastVote.day,
+        eliminated: lastVote.eliminated,
+        deaths: event.payload.deaths,
+      });
+    }
+  }
+  return days.slice(-maxDays).map((day) => {
+    const vote =
+      day.eliminated !== null ? `${names(day.eliminated)} was voted out` : "no one was voted out";
+    const night =
+      day.deaths.length > 0
+        ? `${day.deaths.map(names).join(", ")} died in the night`
+        : "no one died in the night";
+    return `Day ${day.day}: ${vote}; ${night}.`;
+  });
 }

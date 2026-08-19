@@ -22,7 +22,7 @@ import {
   BotProviderError,
 } from "./types.ts";
 
-const SILENT: BotDecision = { actionId: null, say: null, channel: null };
+const SILENT: BotDecision = { actionId: null, say: null, channel: null, done: true };
 
 /** Deterministic given the decision id, which is itself derived from the game,
  * player, phase and turn — so a replayed test picks the same action. */
@@ -31,7 +31,7 @@ export class FallbackBotAgent implements BotAgent {
     if (input.legalActions.length === 0) return Promise.resolve(SILENT);
     const rng = createRng(input.decisionId);
     const choice = input.legalActions[rng.int(input.legalActions.length)]!;
-    return Promise.resolve({ actionId: choice.id, say: null, channel: null });
+    return Promise.resolve({ actionId: choice.id, say: null, channel: null, done: true });
   }
 }
 
@@ -135,7 +135,12 @@ export class LlmBotAgent implements BotAgent {
   /** The model's output is a suggestion. Anything it was not offered is
    * dropped here; the coordinator validates whatever survives all over again. */
   private sanitise(
-    decision: { actionId: number | null; say: string | null; channel: string | null },
+    decision: {
+      actionId: number | null;
+      say: string | null;
+      channel: string | null;
+      done: boolean;
+    },
     input: BotDecisionInput,
   ): BotDecision {
     const offered = input.legalActions.some((action) => action.id === decision.actionId);
@@ -149,6 +154,7 @@ export class LlmBotAgent implements BotAgent {
       actionId: offered ? decision.actionId : null,
       say: say !== null && maySpeak ? say : null,
       channel: say !== null && maySpeak ? channel : null,
+      done: decision.done,
     };
   }
 }

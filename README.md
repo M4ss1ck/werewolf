@@ -174,8 +174,11 @@ Bots run in this process, and they cannot hold up a game:
   the phase moved on are discarded before reaching the command path.
 - `BOT_MAX_CONCURRENT_CALLS` caps calls in flight process-wide, so a room full
   of games queues instead of collecting rate limits.
-- Prompts read only the tail of the event log, so cost per decision does not
-  grow with match length.
+- Prompts read a bounded window rather than the whole match: the recent event
+  tail, the current phase's chat up to a cap, and a fixed-length digest of
+  recent days. Cost per decision is bounded by those caps, not by match
+  length, and `BOT_CHAT_TURNS` is the hard cap on model calls per bot per
+  phase.
 
 Provider configuration is environment-only and documented in `.env.example`.
 Credentials are never written to a game row, projected to a viewer, or logged.

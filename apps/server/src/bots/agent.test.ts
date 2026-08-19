@@ -52,6 +52,8 @@ function input(overrides: Partial<BotDecisionInput> = {}): BotDecisionInput {
     config: BOT_CONFIG,
     playerView,
     visibleEvents: [],
+    phaseChat: [],
+    digest: [],
     legalActions: [
       {
         id: 0,
@@ -107,7 +109,13 @@ describe("fallback bot agent", () => {
 
   test("stays silent when there is nothing legal to do", async () => {
     const decision = await new FallbackBotAgent().decide(input({ legalActions: [] }));
-    expect(decision).toEqual({ actionId: null, say: null, channel: null });
+    expect(decision).toEqual({ actionId: null, say: null, channel: null, done: true });
+  });
+
+  test("always says done, so the manager can ready the seat", async () => {
+    const fallback = new FallbackBotAgent();
+    expect((await fallback.decide(input())).done).toBe(true);
+    expect((await fallback.decide(input({ legalActions: [] }))).done).toBe(true);
   });
 });
 
@@ -120,7 +128,21 @@ describe("llm bot agent", () => {
       actionId: 1,
       say: "I'll sit this one out.",
       channel: "public",
+      done: false,
     });
+  });
+
+  test("a decision without a done field parses and is treated as still talking", async () => {
+    const { agent } = agentWith([JSON.stringify({ actionId: 0, say: null, channel: null })]);
+    const decision = await agent.decide(input());
+    expect(decision.done).toBe(false);
+  });
+
+  test("a decision that says done keeps it", async () => {
+    const { agent } = agentWith([
+      JSON.stringify({ actionId: 0, say: null, channel: null, done: true }),
+    ]);
+    expect((await agent.decide(input())).done).toBe(true);
   });
 
   test("unwraps a markdown-fenced object", async () => {

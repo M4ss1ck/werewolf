@@ -3,9 +3,9 @@
 // nothing a human in that seat could not also see.
 
 import { describe, expect, test } from "bun:test";
-import { type GameState, isPackMember } from "@werewolf/game-engine";
+import { type GameState, isCultMember, isPackMember } from "@werewolf/game-engine";
 import type { UserId } from "@werewolf/protocol";
-import { RecordingBotAgent, setupBots } from "./fixtures.ts";
+import { RecordingBotAgent, setupBots, testBotConfig } from "./fixtures.ts";
 import type { BotDecisionInput } from "./types.ts";
 
 function playersWith(state: GameState, predicate: (role: string) => boolean): UserId[] {
@@ -92,7 +92,7 @@ describe("bot player visibility", () => {
           action.command.type === "night.action.set" &&
           action.command.payload.action === "seer.inspect",
       );
-      return { actionId: inspect?.id ?? null, say: null, channel: null };
+      return { actionId: inspect?.id ?? null, say: null, channel: null, done: true };
     });
     const harness = await setupBots({ agent });
     const gameId = await harness.startBotGame(7);
@@ -137,7 +137,7 @@ describe("bot player visibility", () => {
   test("individual votes stay hidden while a vote is running", async () => {
     const agent = new RecordingBotAgent((input) => {
       const vote = input.legalActions.find((action) => action.command.type === "vote.set");
-      return { actionId: vote?.id ?? null, say: null, channel: null };
+      return { actionId: vote?.id ?? null, say: null, channel: null, done: true };
     });
     const harness = await setupBots({ agent });
     const gameId = await harness.startBotGame(6);
@@ -154,6 +154,59 @@ describe("bot player visibility", () => {
       // Nothing in the view describes anyone else's pending intent.
       for (const player of input.playerView.players)
         expect(Object.keys(player)).not.toContain("currentIntent");
+    }
+  });
+
+  test("the phase-chat window and digest leak nothing the projection hides", async () => {
+    // Bots speak on their most private channel and keep talking (done: false),
+    // so there is wolf, cult and grave content to leak in the first place and
+    // reply turns whose phase-chat window actually holds a conversation.
+    const agent = new RecordingBotAgent((input) => {
+      const vote = input.legalActions.find((action) => action.command.type === "vote.set");
+      const channel = input.speakableChannels.at(-1) ?? null;
+      return {
+        actionId: vote?.id ?? null,
+        say: channel ? "Secrets." : null,
+        channel,
+        done: input.phase === "discussion" || input.phase === "voting" ? false : true,
+      };
+    });
+    const harness = await setupBots({
+      agent,
+      config: testBotConfig({ BOT_CHAT_TURNS: "2" }),
+    });
+    // The cult preset guarantees a cult leader; 9 seats guarantee a pack.
+    const gameId = await harness.startBotGame(8, "cult-1", "cult");
+    await harness.advancePhase(gameId); // discussion -> voting
+    await harness.advancePhase(gameId); // voting -> night
+    await harness.advancePhase(gameId); // night -> next discussion
+
+    const state = await harness.state(gameId);
+    const pack = new Set(packMembers(state));
+    const cult = new Set(
+      Object.values(state.players)
+        .filter((player) => isCultMember(player))
+        .map((player) => player.id),
+    );
+    const living = Object.values(state.players).filter((player) => player.status === "alive");
+    expect(living.length).toBeGreaterThan(0);
+
+    for (const player of living) {
+      const input = agent.forPlayer(player.id).at(-1)!;
+      // The window is the current phase's conversation, and it is exactly what
+      // the projection would show: no wolf chat for a villager, no cult chat
+      // for an outsider, no grave chat for the living.
+      expect(input.phaseChat.length).toBeGreaterThan(0);
+      const channels = new Set(
+        input.phaseChat
+          .filter((message) => message.kind === "chat.message")
+          .map((message) => message.payload.channel),
+      );
+      if (!pack.has(player.id)) expect(channels.has("wolves")).toBe(false);
+      if (!cult.has(player.id)) expect(channels.has("cult")).toBe(false);
+      expect(channels.has("grave")).toBe(false);
+      // The digest is built from public events only: no secret chat text.
+      expect(input.digest.join("\n")).not.toContain("Secrets.");
     }
   });
 });

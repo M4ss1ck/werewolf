@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { applyMigrations, createDb, GameRepository, games } from "@werewolf/db";
 import type { GameState } from "@werewolf/game-engine";
-import type { BotConfig, GameId, UserId } from "@werewolf/protocol";
+import type { BotConfig, GameId, PresetId, UserId } from "@werewolf/protocol";
 import { eq } from "drizzle-orm";
 import { GameCoordinator } from "../game/coordinator.ts";
 import { GameLock } from "../game/locks.ts";
@@ -49,6 +49,7 @@ export class RecordingBotAgent implements BotAgent {
       actionId: null,
       say: null,
       channel: null,
+      done: true,
     }),
   ) {}
   decide(input: BotDecisionInput): Promise<BotDecision> {
@@ -119,8 +120,8 @@ export type BotHarness = {
   /** Seat `count` bots plus a bot host, start the game, settle the bots. */
   /** `seed` pins the composition. Compositions are seeded from a per-game
    * random uuid, so any test that needs a particular role dealt must pass one
-   * or it is rolling dice. */
-  startBotGame: (count?: number, seed?: string) => Promise<GameId>;
+   * or it is rolling dice. `preset` picks the composition preset. */
+  startBotGame: (count?: number, seed?: string, preset?: PresetId) => Promise<GameId>;
   /** Run the current phase out and resolve it, then let the bots react. */
   advancePhase: (gameId: GameId) => Promise<void>;
   state: (gameId: GameId) => Promise<GameState>;
@@ -166,7 +167,7 @@ export async function setupBots(
     clock,
     logs,
     state,
-    startBotGame: async (count = 5, seed?: string) => {
+    startBotGame: async (count = 5, seed?: string, preset?: PresetId) => {
       const host = "bot:host" as UserId;
       const game = await coordinator.createGame({
         ownerUserId: host,
@@ -178,6 +179,7 @@ export async function setupBots(
           votingDurationMs: 60_000,
           nightDurationMs: 60_000,
           spectatingEnabled: true,
+          ...(preset ? { preset } : {}),
         },
         ownerController: { type: "bot", config: { ...BOT_CONFIG, botId: "fake-host" } },
       });
