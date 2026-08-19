@@ -61,6 +61,21 @@ export function getLegalCommands(state: GameState, playerId: UserId, now: number
         });
         continue;
       }
+      if (action.type === "targets") {
+        // cupid.link: every unordered distinct pair of living players, in a
+        // stable sorted order so a seeded fallback pick is reproducible.
+        const living = sortedPlayerIds(state).filter((id) => state.players[id]?.status === "alive");
+        for (let i = 0; i < living.length; i += 1) {
+          for (let j = i + 1; j < living.length; j += 1) {
+            candidates.push({
+              type: "night.action.set",
+              phaseId: phase.id,
+              payload: { action: "cupid.link", targetIds: [living[i]!, living[j]!] },
+            });
+          }
+        }
+        continue;
+      }
       if (action.type !== "target") continue;
       const targets = [...action.targets].sort((a, b) => (a.userId < b.userId ? -1 : 1));
       for (const target of targets) {

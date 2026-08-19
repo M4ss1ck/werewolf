@@ -7,7 +7,8 @@ import type {
   PlayerState,
   VictoryResult,
 } from "../state.ts";
-import { checkVictory } from "./victory.ts";
+import { loverPartner } from "./link.ts";
+import { applyLoverRider, checkVictory } from "./victory.ts";
 
 export function resolveDayVote(state: GameState): DomainResult {
   if (!state.phase || state.phase.type !== "voting")
@@ -79,11 +80,20 @@ export function resolveDayVote(state: GameState): DomainResult {
           scope: "public",
           payload: { playerId: selected.id, role: selected.role, cause: "day_vote" },
         });
-        const winner: VictoryResult = {
+        const partner = loverPartner(state, selected.id, new Set([selected.id]));
+        if (partner) {
+          playerPatches.push({ playerId: partner, changes: { status: "dead" } });
+          events.push({
+            kind: "player.eliminated",
+            scope: "public",
+            payload: { playerId: partner, role: state.players[partner]!.role!, cause: "day_vote" },
+          });
+        }
+        const winner: VictoryResult = applyLoverRider(state, {
           winningFactions: ["veteran"],
           winningPlayers: [selected.id],
           reason: "veteran_lynched",
-        };
+        });
         events.push({ kind: "game.finished", scope: "public", payload: winner });
         return {
           ok: true,
@@ -122,6 +132,15 @@ export function resolveDayVote(state: GameState): DomainResult {
           scope: "public",
           payload: { playerId: selected.id, role: selected.role!, cause: "day_vote" },
         });
+        const partner = loverPartner(state, selected.id, new Set([selected.id]));
+        if (partner) {
+          playerPatches.push({ playerId: partner, changes: { status: "dead" } });
+          events.push({
+            kind: "player.eliminated",
+            scope: "public",
+            payload: { playerId: partner, role: state.players[partner]!.role!, cause: "day_vote" },
+          });
+        }
       }
     }
   }

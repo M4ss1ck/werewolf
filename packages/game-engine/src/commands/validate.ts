@@ -1,4 +1,5 @@
 import type { ActionId, GameplayCommand, UserId } from "@werewolf/protocol";
+import { isUnlinkedCupid } from "../roles/cupid.ts";
 import { getPerceivedRole } from "../roles/perceived.ts";
 import { WOLF_CHAT_ROLES } from "../roles/registry.ts";
 import type { DomainError, GameState } from "../state.ts";
@@ -79,6 +80,18 @@ export function validateCommand(
       case "serial_killer.stay":
         if (perceivedRole !== "serial_killer") return { code: "ACTION_NOT_AVAILABLE" };
         return null;
+      case "cupid.link": {
+        if (state.day !== 1) return { code: "ACTION_NOT_AVAILABLE" };
+        if (!isUnlinkedCupid(player)) return { code: "ACTION_NOT_AVAILABLE" };
+        if (!("targetIds" in command.payload)) return { code: "INVALID_TARGET" };
+        const [first, second] = command.payload.targetIds;
+        if (!first || !second || first === second) return { code: "INVALID_TARGET" };
+        for (const targetId of command.payload.targetIds) {
+          const target = state.players[targetId];
+          if (!target || target.status !== "alive") return { code: "INVALID_TARGET" };
+        }
+        return null;
+      }
     }
   }
   if (command.type === "day.action.set") {

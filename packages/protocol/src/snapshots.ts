@@ -55,7 +55,7 @@ export interface ViewerPlayer {
  * server. Aggregates only: the viewer's own vote/action, never anyone else's. */
 export interface ViewerIntent {
   vote?: { type: "player"; targetId: UserId } | { type: "abstain" };
-  actions?: Record<string, { targetId?: UserId }>;
+  actions?: Record<string, { targetId?: UserId; targetIds?: UserId[] }>;
 }
 
 export interface ViewerGameSnapshot {
@@ -116,7 +116,15 @@ export const ViewerIntentSchema = z.object({
       z.object({ type: z.literal("abstain") }),
     ])
     .optional(),
-  actions: z.record(z.string(), z.object({ targetId: UserIdSchema.optional() })).optional(),
+  actions: z
+    .record(
+      z.string(),
+      z.object({
+        targetId: UserIdSchema.optional(),
+        targetIds: z.array(UserIdSchema).optional(),
+      }),
+    )
+    .optional(),
 });
 
 /** Runtime validation for the viewer-specific projection. */

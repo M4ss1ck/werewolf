@@ -69,6 +69,11 @@ export const es: TranslationResource = {
       description:
         "Una vez por partida, durante el día, puedes revelarte y nombrar directamente al eliminado del día, anulando la votación; o indultar a todos y cancelar el linchamiento.",
     },
+    cupid: {
+      name: "Cupido",
+      description:
+        "En la primera noche, une las vidas de dos jugadores. Si uno muere, el otro muere con él, y ganan juntos.",
+    },
   },
   factions: {
     village: "La aldea",
@@ -131,6 +136,10 @@ export const es: TranslationResource = {
       prompt:
         "Da un paso al frente, revélate como el Alcalde y perdona a la aldea: hoy no cuelgan a nadie.",
     },
+    "cupid.link": {
+      label: "Unir",
+      prompt: "Elige a dos jugadores cuyas vidas quedarán unidas.",
+    },
   },
   errors: {
     UNKNOWN_ERROR: "Algo salió mal. Inténtalo de nuevo.",
@@ -182,6 +191,7 @@ export const es: TranslationResource = {
         safe: "Volviste a casa sin problemas.",
         killed: "Te mataron durante tu visita.",
       },
+      "player.linked": "Estás unido a {{partnerId}}.",
       "wolves.member_joined": "{{player}} se ha unido a los lobos.",
       "masons.member_joined": "{{player}} es masón.",
     },
@@ -331,6 +341,10 @@ export const es: TranslationResource = {
       yourMove: "Tu jugada · {{role}}",
       confirm: "Confirmar · {{player}}",
       noAction: "Nada que hacer hoy.",
+    },
+    action: {
+      confirm: "Confirmar",
+      pickCount: "Elige {{count}}",
     },
     cancelled: {
       title: "Partida cancelada",

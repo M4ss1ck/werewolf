@@ -46,6 +46,10 @@ export const NightActionSetPayloadSchema = z.discriminatedUnion("action", [
       action: z.literal("harlot.stay"),
     })
     .strict(),
+  z.object({
+    action: z.literal("cupid.link"),
+    targetIds: z.array(UserIdSchema).length(2),
+  }),
 ]);
 export type NightActionSetPayload = z.infer<typeof NightActionSetPayloadSchema>;
 

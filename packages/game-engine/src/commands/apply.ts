@@ -47,7 +47,12 @@ export function applyCommand(
       // drops the other: the Harlot never holds both at once.
       if (action === "harlot.visit") delete actions["harlot.stay"];
       if (action === "harlot.stay") delete actions["harlot.visit"];
-      actions[action] = "targetId" in command.payload ? { targetId: command.payload.targetId } : {};
+      if (action === "cupid.link" && "targetIds" in command.payload) {
+        actions[action] = { targetIds: command.payload.targetIds };
+      } else {
+        actions[action] =
+          "targetId" in command.payload ? { targetId: command.payload.targetId } : {};
+      }
     }
     return {
       ok: true,

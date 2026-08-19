@@ -24,6 +24,7 @@ export interface RoleDefinition<State = unknown> {
 }
 
 import { alphaWolf } from "./alpha-wolf.ts";
+import { cupid } from "./cupid.ts";
 import { cursed } from "./cursed.ts";
 import { drunk } from "./drunk.ts";
 import { harlot } from "./harlot.ts";
@@ -53,6 +54,7 @@ export const roleRegistry: Readonly<Record<RoleId, RoleDefinition>> = {
   alpha_wolf: alphaWolf,
   drunk,
   mayor,
+  cupid,
 };
 
 export function getRoleDefinition(role: RoleId): RoleDefinition {

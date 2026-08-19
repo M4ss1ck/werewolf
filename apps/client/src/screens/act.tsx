@@ -16,6 +16,8 @@ type Send = (command: Omit<GameplayCommand, "commandId">) => Promise<void>;
 
 type VotePick = { type: "player"; targetId: UserId } | { type: "abstain" };
 
+type ActionEntry = { targetId?: UserId; targetIds?: UserId[] };
+
 type PhaseInfo = NonNullable<ViewerGameSnapshot["game"]["phase"]>;
 
 /** Designs 07–08 · the Act tab: voting by day, night actions by night. */
@@ -215,13 +217,15 @@ function ActionList({
   const [picked, setPicked] = useState<{
     phaseId: PhaseId;
     active: ActionId | null;
-    actions: Record<string, { targetId?: UserId }>;
+    actions: Record<string, ActionEntry>;
   } | null>(() => {
-    const initial: Record<string, { targetId?: UserId }> = {};
+    const initial: Record<string, ActionEntry> = {};
     for (const action of actions) {
       if (action.type === "target" && action.selectedTargetId !== undefined)
         initial[action.id] = { targetId: action.selectedTargetId };
       else if (action.type === "choice" && action.selected === true) initial[action.id] = {};
+      else if (action.type === "targets" && action.selectedTargetIds !== undefined)
+        initial[action.id] = { targetIds: action.selectedTargetIds };
     }
     const first = Object.keys(initial)[0] as ActionId | undefined;
     return { phaseId: phase.id, active: first ?? null, actions: initial };
@@ -235,7 +239,7 @@ function ActionList({
     pickedForPhase !== null && pickedForPhase.active !== null
       ? pickedForPhase.actions[pickedForPhase.active]
       : undefined;
-  const setPick = (actionId: ActionId, entry: { targetId?: UserId } | null) => {
+  const setPick = (actionId: ActionId, entry: ActionEntry | null) => {
     setPicked((current) => {
       const base =
         current !== null && current.phaseId === phase.id
@@ -247,10 +251,27 @@ function ActionList({
       return { phaseId: phase.id, active: actionId, actions: next };
     });
   };
+  const toggleTarget = (actionId: ActionId, userId: UserId) => {
+    setPicked((current) => {
+      const base =
+        current !== null && current.phaseId === phase.id
+          ? current
+          : { phaseId: phase.id, active: null as ActionId | null, actions: {} };
+      const next = { ...base.actions };
+      const currentIds = next[actionId]?.targetIds ?? [];
+      const targetIds = currentIds.includes(userId)
+        ? currentIds.filter((id) => id !== userId)
+        : [...currentIds, userId];
+      next[actionId] = { targetIds };
+      return { phaseId: phase.id, active: actionId, actions: next };
+    });
+  };
   const confirm = (() => {
     if (activeAction === undefined || activeEntry === undefined) return null;
+    const caption = phase.type === "night" ? "ui.night.confirm" : "ui.dayAction.confirm";
     if (activeAction.type === "choice") {
       return {
+        caption,
         label: t(`actions.${activeAction.id}.label`),
         send: () =>
           void send({
@@ -260,9 +281,24 @@ function ActionList({
           } as Omit<GameplayCommand, "commandId">).catch(() => undefined),
       };
     }
+    if (activeAction.type === "targets") {
+      const targetIds = activeEntry.targetIds ?? [];
+      if (targetIds.length !== activeAction.count) return null;
+      return {
+        caption: "ui.action.confirm",
+        label: t("ui.action.pickCount", { count: activeAction.count }),
+        send: () =>
+          void send({
+            type: commandType,
+            phaseId: phase.id,
+            payload: { action: activeAction.id, targetIds },
+          } as Omit<GameplayCommand, "commandId">).catch(() => undefined),
+      };
+    }
     const targetId = activeEntry.targetId;
     if (targetId === undefined) return null;
     return {
+      caption,
       label: names.get(targetId) ?? targetId,
       send: () =>
         void send({
@@ -281,6 +317,11 @@ function ActionList({
             <h2 className="text-[28px] font-semibold leading-tight tracking-[-0.03em] text-paper">
               {t(`actions.${action.id}.prompt`)}
             </h2>
+            {action.type === "targets" && (
+              <p className="text-sm text-fog">
+                {t("ui.action.pickCount", { count: action.count })}
+              </p>
+            )}
             {action.type === "choice" ? (
               <ul className="flex flex-col gap-2.5">
                 <li>
@@ -300,6 +341,35 @@ function ActionList({
                     <CheckMark on={selectedChoice(pickedForPhase, action)} />
                   </button>
                 </li>
+              </ul>
+            ) : action.type === "targets" ? (
+              <ul className="flex flex-col gap-2.5">
+                {action.targets.map((target) => {
+                  const selectedIds = pickedForPhase?.actions[action.id]?.targetIds ?? [];
+                  const selected = selectedIds.includes(target.userId);
+                  const atCap = selectedIds.length >= action.count;
+                  const selectable = target.enabled && (selected || !atCap);
+                  const name = names.get(target.userId) ?? target.userId;
+                  return (
+                    <li key={target.userId}>
+                      <button
+                        aria-pressed={selected}
+                        className={`row relative w-full text-left disabled:cursor-not-allowed disabled:opacity-40 ${
+                          selected ? "row--selected" : ""
+                        }`}
+                        disabled={!selectable}
+                        onClick={() => toggleTarget(action.id, target.userId)}
+                        type="button"
+                      >
+                        <span className="relative flex-none">
+                          <Avatar name={name} />
+                        </span>
+                        <span className="relative row__name text-[17px] font-medium">{name}</span>
+                        <CheckMark on={selected} />
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
             ) : (
               <ul className="flex flex-col gap-2.5">
@@ -335,9 +405,7 @@ function ActionList({
       {confirm !== null && (
         <div className="border-t border-paper/10 bg-bar px-[18px] py-3">
           <button className="btn btn--pale w-full" onClick={confirm.send} type="button">
-            {t(phase.type === "night" ? "ui.night.confirm" : "ui.dayAction.confirm", {
-              player: confirm.label,
-            })}
+            {t(confirm.caption, { player: confirm.label })}
           </button>
         </div>
       )}
@@ -428,7 +496,7 @@ function DiscussionBranch({
 }
 
 function selectedChoice(
-  pickedForPhase: { actions: Record<string, { targetId?: UserId }> } | null,
+  pickedForPhase: { actions: Record<string, ActionEntry> } | null,
   action: AvailableAction,
 ): boolean {
   return pickedForPhase !== null && action.id in pickedForPhase.actions;

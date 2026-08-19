@@ -27,7 +27,7 @@ export type StoredVote = { type: "player"; targetId: UserId } | { type: "abstain
 export interface StoredPhaseState {
   phaseId: PhaseId;
   vote?: StoredVote;
-  actions?: Record<string, { targetId?: UserId }>;
+  actions?: Record<string, { targetId?: UserId; targetIds?: UserId[] }>;
   ready?: boolean;
 }
 

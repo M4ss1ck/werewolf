@@ -10,6 +10,7 @@ import type {
   PlayerPatch,
   PlayerState,
 } from "../state.ts";
+import { getLinkPair } from "./link.ts";
 import { checkVictory } from "./victory.ts";
 
 export interface NightResolutionContext {
@@ -29,6 +30,8 @@ type FrozenNight = {
     | { playerId: UserId; type: "stay" }
     | { playerId: UserId; type: "visit"; targetId: UserId }
     | null;
+  cupidLink: { playerId: UserId; targetIds: [UserId, UserId] } | null;
+  drunkCupidSelfLink: { playerId: UserId; partnerId: UserId } | null;
 };
 
 type NightOutcome = {
@@ -44,14 +47,16 @@ export function resolveNight(state: GameState, context: NightResolutionContext):
   const targetId = resolveWolfBallot(frozen.wolfVotes);
   const locations = resolveNightLocations(state, frozen, targetId);
   const outcome = resolveHouseAttacks(state, frozen, targetId, locations, context.rng, state.day);
-  const playerPatches = commitNight(outcome);
+  applyLoverLinkDeaths(state, outcome.deaths);
+  const link = formLink(state, frozen);
+  const playerPatches = [...commitNight(outcome), ...link.patches];
   const nextNightsWithoutElimination =
     outcome.deaths.size > 0 ? 0 : state.nightsWithoutElimination + 1;
   const projected = {
     ...applyPatches(state, playerPatches),
     nightsWithoutElimination: nextNightsWithoutElimination,
   };
-  const events = makeNightEvents(state, frozen, targetId, outcome, seer);
+  const events = [...makeNightEvents(state, frozen, targetId, outcome, seer), ...link.events];
   const winner = checkVictory(projected);
   if (winner) {
     events.push({ kind: "game.finished", scope: "public", payload: winner });
@@ -152,7 +157,44 @@ function freezeNightIntents(state: GameState, rng: SeededRng, day: number): Froz
       : skStay
         ? { playerId: serialKiller!.id, type: "stay" as const }
         : null;
-  return { wolfVotes, seerInspection, drunkFakeResult, harlotAction, serialKillerAction };
+  const cupid = living.find((player) => player.role === "cupid");
+  const cupidLinkAction = cupid ? currentAction(cupid, phaseId, "cupid.link") : undefined;
+  const cupidLink =
+    cupidLinkAction?.targetIds && cupidLinkAction.targetIds.length === 2
+      ? {
+          playerId: cupid!.id,
+          targetIds: [cupidLinkAction.targetIds[0]!, cupidLinkAction.targetIds[1]!] as [
+            UserId,
+            UserId,
+          ],
+        }
+      : null;
+  // A Drunk who believes they are Cupid forms no real link, but if they picked
+  // THEMSELVES they are told they are linked to the other pick — exactly what a
+  // real Cupid would be told, so the two are indistinguishable.
+  const drunkCupid = living.find(
+    (player) => player.role === "drunk" && getPerceivedRole(player) === "cupid",
+  );
+  const drunkCupidAction = drunkCupid
+    ? currentAction(drunkCupid, phaseId, "cupid.link")
+    : undefined;
+  const drunkCupidSelfLink =
+    drunkCupidAction?.targetIds && drunkCupidAction.targetIds.length === 2
+      ? drunkCupidAction.targetIds[0] === drunkCupid!.id
+        ? { playerId: drunkCupid!.id, partnerId: drunkCupidAction.targetIds[1]! }
+        : drunkCupidAction.targetIds[1] === drunkCupid!.id
+          ? { playerId: drunkCupid!.id, partnerId: drunkCupidAction.targetIds[0]! }
+          : null
+      : null;
+  return {
+    wolfVotes,
+    seerInspection,
+    drunkFakeResult,
+    harlotAction,
+    serialKillerAction,
+    cupidLink,
+    drunkCupidSelfLink,
+  };
 }
 
 function currentAction(
@@ -352,6 +394,58 @@ function commitNight(outcome: NightOutcome): PlayerPatch[] {
   for (const { playerId } of outcome.conversions)
     patches.push({ playerId, changes: { role: "werewolf", faction: "wolves" } });
   return patches;
+}
+
+/** If exactly one member of an established pair is in `deaths` and the other is
+ * alive, the other dies too with cause "lover_link". ONE pass only. */
+function applyLoverLinkDeaths(state: GameState, deaths: Map<UserId, NightDeathCause>): void {
+  const pair = getLinkPair(state);
+  if (!pair) return;
+  const [a, b] = pair;
+  const aDead = deaths.has(a);
+  const bDead = deaths.has(b);
+  if (aDead && !bDead && state.players[b]?.status === "alive") deaths.set(b, "lover_link");
+  else if (bDead && !aDead && state.players[a]?.status === "alive") deaths.set(a, "lover_link");
+}
+
+/** Form the cupid's link on night 1: patch the cupid's roleState and tell each
+ * lover who the other is. No-op once a link already exists. A Drunk-Cupid who
+ * picked themselves is told they are linked, but no real pair is stored. */
+function formLink(
+  state: GameState,
+  frozen: FrozenNight,
+): { patches: PlayerPatch[]; events: DomainTransition["events"] } {
+  const patches: PlayerPatch[] = [];
+  const events: DomainTransition["events"] = [];
+  if (frozen.cupidLink) {
+    const cupid = state.players[frozen.cupidLink.playerId];
+    if (cupid && isCupidUnlinked(cupid.roleState)) {
+      const [a, b] = frozen.cupidLink.targetIds;
+      patches.push({ playerId: cupid.id, changes: { roleState: { linked: [a, b] } } });
+      events.push(
+        { kind: "player.linked", scope: "player", scopeId: a, payload: { partnerId: b } },
+        { kind: "player.linked", scope: "player", scopeId: b, payload: { partnerId: a } },
+      );
+    }
+  }
+  if (frozen.drunkCupidSelfLink) {
+    events.push({
+      kind: "player.linked",
+      scope: "player",
+      scopeId: frozen.drunkCupidSelfLink.playerId,
+      payload: { partnerId: frozen.drunkCupidSelfLink.partnerId },
+    });
+  }
+  return { patches, events };
+}
+
+function isCupidUnlinked(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "linked" in value &&
+    (value as { linked: unknown }).linked === null
+  );
 }
 
 function makeNightEvents(

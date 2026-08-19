@@ -23,6 +23,18 @@ export const AvailableActionSchema = z.discriminatedUnion("type", [
     type: z.literal("choice"),
     selected: z.boolean().optional(),
   }),
+  z.object({
+    id: ActionIdSchema,
+    type: z.literal("targets"),
+    count: z.number(),
+    targets: z.array(
+      z.object({
+        userId: UserIdSchema,
+        enabled: z.boolean(),
+      }),
+    ),
+    selectedTargetIds: z.array(UserIdSchema).optional(),
+  }),
 ]);
 
 /** Union of action models; more shapes may join it later. */

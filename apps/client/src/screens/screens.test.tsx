@@ -954,6 +954,254 @@ test("night regression: the night branch still renders its actions and posts nig
   });
 });
 
+test("targets: a count-2 action renders its rows, including the viewer's own row", () => {
+  renderWithI18n(
+    <Act
+      events={[]}
+      send={() => Promise.resolve()}
+      snapshot={makeGameSnapshot({
+        game: { phase: { id: 2 as PhaseId, type: "night", startedAt: 1000, endsAt: 10_000 } },
+        me: { userId: "wren" as UserId, status: "alive", role: "cupid" },
+        availableActions: [
+          {
+            id: "cupid.link" as ActionId,
+            type: "targets",
+            count: 2,
+            targets: [
+              { userId: "wren" as UserId, enabled: true },
+              { userId: "odile" as UserId, enabled: true },
+              { userId: "mattias" as UserId, enabled: true },
+            ],
+          },
+        ],
+      })}
+    />,
+  );
+
+  expect(
+    screen.getByText("Choose two players whose lives will be bound together."),
+  ).toBeInTheDocument();
+  // The viewer may be in their own target list; the row must still render.
+  expect(screen.getByRole("button", { name: /Wren/ })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /Odile/ })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /Mattias/ })).toBeInTheDocument();
+});
+
+test("targets: picking one target sends nothing", () => {
+  const send = vi.fn(() => Promise.resolve());
+  renderWithI18n(
+    <Act
+      events={[]}
+      send={send}
+      snapshot={makeGameSnapshot({
+        game: { phase: { id: 2 as PhaseId, type: "night", startedAt: 1000, endsAt: 10_000 } },
+        me: { userId: "wren" as UserId, status: "alive", role: "cupid" },
+        availableActions: [
+          {
+            id: "cupid.link" as ActionId,
+            type: "targets",
+            count: 2,
+            targets: [
+              { userId: "wren" as UserId, enabled: true },
+              { userId: "odile" as UserId, enabled: true },
+              { userId: "mattias" as UserId, enabled: true },
+            ],
+          },
+        ],
+      })}
+    />,
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: /Odile/ }));
+  // A partial selection never submits and offers no confirm.
+  expect(screen.queryByRole("button", { name: "Confirm" })).not.toBeInTheDocument();
+  expect(send).not.toHaveBeenCalled();
+});
+
+test("targets: picking two enables confirm and posts night.action.set with targetIds", () => {
+  const send = vi.fn(() => Promise.resolve());
+  renderWithI18n(
+    <Act
+      events={[]}
+      send={send}
+      snapshot={makeGameSnapshot({
+        game: { phase: { id: 2 as PhaseId, type: "night", startedAt: 1000, endsAt: 10_000 } },
+        me: { userId: "wren" as UserId, status: "alive", role: "cupid" },
+        availableActions: [
+          {
+            id: "cupid.link" as ActionId,
+            type: "targets",
+            count: 2,
+            targets: [
+              { userId: "wren" as UserId, enabled: true },
+              { userId: "odile" as UserId, enabled: true },
+              { userId: "mattias" as UserId, enabled: true },
+            ],
+          },
+        ],
+      })}
+    />,
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: /Odile/ }));
+  fireEvent.click(screen.getByRole("button", { name: /Mattias/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+  expect(send).toHaveBeenCalledWith({
+    type: "night.action.set",
+    phaseId: 2,
+    payload: { action: "cupid.link", targetIds: ["odile", "mattias"] },
+  });
+});
+
+test("targets: at cap a third row is not selectable; un-picking frees a slot", () => {
+  const send = vi.fn(() => Promise.resolve());
+  renderWithI18n(
+    <Act
+      events={[]}
+      send={send}
+      snapshot={makeGameSnapshot({
+        game: { phase: { id: 2 as PhaseId, type: "night", startedAt: 1000, endsAt: 10_000 } },
+        me: { userId: "wren" as UserId, status: "alive", role: "cupid" },
+        availableActions: [
+          {
+            id: "cupid.link" as ActionId,
+            type: "targets",
+            count: 2,
+            targets: [
+              { userId: "wren" as UserId, enabled: true },
+              { userId: "odile" as UserId, enabled: true },
+              { userId: "mattias" as UserId, enabled: true },
+            ],
+          },
+        ],
+      })}
+    />,
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: /Odile/ }));
+  fireEvent.click(screen.getByRole("button", { name: /Mattias/ }));
+  // Both slots are full, so the remaining row is not selectable.
+  expect(screen.getByRole("button", { name: /Wren/ })).toBeDisabled();
+  // Un-picking one frees a slot for the third row.
+  fireEvent.click(screen.getByRole("button", { name: /Odile/ }));
+  expect(screen.getByRole("button", { name: /Wren/ })).toBeEnabled();
+  fireEvent.click(screen.getByRole("button", { name: /Wren/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+  expect(send).toHaveBeenCalledWith({
+    type: "night.action.set",
+    phaseId: 2,
+    payload: { action: "cupid.link", targetIds: ["mattias", "wren"] },
+  });
+});
+
+test("targets: a disabled target cannot be picked", () => {
+  const send = vi.fn(() => Promise.resolve());
+  renderWithI18n(
+    <Act
+      events={[]}
+      send={send}
+      snapshot={makeGameSnapshot({
+        game: { phase: { id: 2 as PhaseId, type: "night", startedAt: 1000, endsAt: 10_000 } },
+        me: { userId: "wren" as UserId, status: "alive", role: "cupid" },
+        availableActions: [
+          {
+            id: "cupid.link" as ActionId,
+            type: "targets",
+            count: 2,
+            targets: [
+              { userId: "wren" as UserId, enabled: true },
+              { userId: "odile" as UserId, enabled: true },
+              { userId: "mattias" as UserId, enabled: false },
+            ],
+          },
+        ],
+      })}
+    />,
+  );
+
+  const disabled = screen.getByRole("button", { name: /Mattias/ });
+  expect(disabled).toBeDisabled();
+  fireEvent.click(disabled);
+  expect(send).not.toHaveBeenCalled();
+});
+
+test("targets: selectedTargetIds from the server pre-seeds the selection", () => {
+  const send = vi.fn(() => Promise.resolve());
+  renderWithI18n(
+    <Act
+      events={[]}
+      send={send}
+      snapshot={makeGameSnapshot({
+        game: { phase: { id: 2 as PhaseId, type: "night", startedAt: 1000, endsAt: 10_000 } },
+        me: { userId: "wren" as UserId, status: "alive", role: "cupid" },
+        availableActions: [
+          {
+            id: "cupid.link" as ActionId,
+            type: "targets",
+            count: 2,
+            targets: [
+              { userId: "wren" as UserId, enabled: true },
+              { userId: "odile" as UserId, enabled: true },
+              { userId: "mattias" as UserId, enabled: true },
+            ],
+            selectedTargetIds: ["odile" as UserId, "mattias" as UserId],
+          },
+        ],
+      })}
+    />,
+  );
+
+  expect(screen.getByRole("button", { name: /Odile/ })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: /Mattias/ })).toHaveAttribute("aria-pressed", "true");
+  // The pre-seeded pair is already complete, so confirm is available at once.
+  fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+  expect(send).toHaveBeenCalledWith({
+    type: "night.action.set",
+    phaseId: 2,
+    payload: { action: "cupid.link", targetIds: ["odile", "mattias"] },
+  });
+});
+
+test("regression: single-target and choice actions keep their payload shape", () => {
+  const send = vi.fn(() => Promise.resolve());
+  renderWithI18n(
+    <Act
+      events={[]}
+      send={send}
+      snapshot={makeGameSnapshot({
+        game: { phase: { id: 2 as PhaseId, type: "night", startedAt: 1000, endsAt: 10_000 } },
+        me: { userId: "wren" as UserId, status: "alive", role: "seer" },
+        availableActions: [
+          {
+            id: "seer.inspect" as ActionId,
+            type: "target",
+            targets: [{ userId: "odile" as UserId, enabled: true }],
+          },
+          { id: "harlot.stay" as ActionId, type: "choice" },
+        ],
+      })}
+    />,
+  );
+
+  // Single-target: posts targetId, never targetIds.
+  fireEvent.click(screen.getByRole("button", { name: /Odile/ }));
+  fireEvent.click(screen.getByRole("button", { name: /Confirm · Odile/ }));
+  expect(send).toHaveBeenCalledWith({
+    type: "night.action.set",
+    phaseId: 2,
+    payload: { action: "seer.inspect", targetId: "odile" },
+  });
+
+  // Choice: posts no target field at all.
+  fireEvent.click(screen.getByRole("button", { name: "Stay home" }));
+  fireEvent.click(screen.getByRole("button", { name: /Confirm · Stay home/ }));
+  expect(send).toHaveBeenCalledWith({
+    type: "night.action.set",
+    phaseId: 2,
+    payload: { action: "harlot.stay" },
+  });
+});
+
 test("the wolf chat tab appears only when the snapshot lists that channel", () => {
   const withWolfChat = renderWithI18n(
     <Talk

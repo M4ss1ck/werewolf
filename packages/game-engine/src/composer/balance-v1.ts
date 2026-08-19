@@ -29,13 +29,14 @@ export const roleAvailabilityMinimums: Partial<Record<RoleId, number>> = {
   mason: 8,
   alpha_wolf: 10,
   mayor: 8,
+  cupid: 8,
 };
 
 /** Roles a Drunk may believe they are. Restricted to roles whose output is
  * PRIVATE information only: a publicly observable power (revealing, linking)
  * would out the Drunk the first time they used it. More are added as those
  * roles land. */
-export const DRUNK_FAKE_ROLES: readonly RoleId[] = ["seer"];
+export const DRUNK_FAKE_ROLES: readonly RoleId[] = ["seer", "cupid"];
 
 export const forbiddenCombinations: readonly (readonly RoleId[])[] = [["seer", "princess"]];
 
@@ -70,4 +71,5 @@ export const availableSpecialRoles: readonly RoleId[] = [
   "alpha_wolf",
   "drunk",
   "mayor",
+  "cupid",
 ];

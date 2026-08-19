@@ -41,6 +41,8 @@ function describeAction(input: BotDecisionInput, action: LegalAction): string {
   }
   const payload = command.payload;
   if (payload.action === "harlot.stay") return "stay home tonight";
+  if (payload.action === "cupid.link")
+    return `link ${nameOf(input, payload.targetIds[0]!)} and ${nameOf(input, payload.targetIds[1]!)} tonight`;
   const target = nameOf(input, payload.targetId);
   if (payload.action === "wolf.attack") return `have the pack attack ${target} tonight`;
   if (payload.action === "seer.inspect") return `inspect ${target} tonight`;

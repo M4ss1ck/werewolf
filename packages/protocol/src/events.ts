@@ -40,6 +40,7 @@ export const EVENT_KINDS = [
   "seer.result",
   "player.converted",
   "harlot.result",
+  "player.linked",
   // Wolf faction
   "wolves.member_joined",
   "masons.member_joined",
@@ -61,7 +62,8 @@ export type NightDeathCause =
   | "wolf_attack"
   | "hunter_retaliation"
   | "harlot_exposure"
-  | "serial_killer_attack";
+  | "serial_killer_attack"
+  | "lover_link";
 
 export type VictoryReason =
   | "wolves_eliminated"
@@ -113,6 +115,7 @@ export interface EventPayloads {
   "seer.result": { targetId: UserId; role: RoleId };
   "player.converted": { role: RoleId; faction: FactionId; cause: ConversionCause };
   "harlot.result": { outcome: "safe" | "killed" };
+  "player.linked": { partnerId: UserId };
   // Wolf faction
   "wolves.member_joined": { playerId: UserId };
   "masons.member_joined": { playerId: UserId };
@@ -170,6 +173,7 @@ export const NightDeathCauseSchema = z.enum([
   "hunter_retaliation",
   "harlot_exposure",
   "serial_killer_attack",
+  "lover_link",
 ]);
 export const VictoryReasonSchema = z.enum([
   "wolves_eliminated",
@@ -321,6 +325,15 @@ export const GameEventSchema = z.discriminatedUnion("kind", [
     actorUserId: UserIdSchema.optional(),
     createdAt: z.number(),
     payload: z.object({ outcome: z.enum(["safe", "killed"]) }),
+  }),
+  z.object({
+    id: EventIdSchema,
+    kind: z.literal("player.linked"),
+    scope: EventScopeSchema,
+    scopeId: z.string().optional(),
+    actorUserId: UserIdSchema.optional(),
+    createdAt: z.number(),
+    payload: z.object({ partnerId: UserIdSchema }),
   }),
   z.object({
     id: EventIdSchema,

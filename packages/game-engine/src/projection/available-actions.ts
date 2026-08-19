@@ -4,6 +4,7 @@
 // ineligible players as disabled rather than hiding them.
 
 import type { AvailableAction, UserId } from "@werewolf/protocol";
+import { isUnlinkedCupid } from "../roles/cupid.ts";
 import { getPerceivedRole } from "../roles/perceived.ts";
 import type { GameState } from "../state.ts";
 
@@ -77,6 +78,21 @@ export function getAvailableActions(state: GameState, playerId: UserId): Availab
         id: "serial_killer.stay",
         type: "choice",
         ...("serial_killer.stay" in stored ? { selected: true } : {}),
+      });
+    }
+    if (state.day === 1 && isUnlinkedCupid(player)) {
+      const all = Object.values(state.players);
+      available.push({
+        id: "cupid.link",
+        type: "targets",
+        count: 2,
+        targets: all.map((target) => ({
+          userId: target.id,
+          enabled: target.status === "alive",
+        })),
+        ...(stored["cupid.link"]?.targetIds
+          ? { selectedTargetIds: stored["cupid.link"]!.targetIds }
+          : {}),
       });
     }
     return available;

@@ -19,6 +19,7 @@ export const ROLE_IDS = [
   "alpha_wolf",
   "drunk",
   "mayor",
+  "cupid",
 ] as const;
 export type RoleId = (typeof ROLE_IDS)[number];
 export const RoleIdSchema = z.enum(ROLE_IDS);
@@ -54,6 +55,7 @@ export const ACTION_IDS = [
   "serial_killer.stay",
   "mayor.reveal",
   "mayor.pardon",
+  "cupid.link",
 ] as const;
 export type ActionId = (typeof ACTION_IDS)[number];
 export const ActionIdSchema = z.enum(ACTION_IDS);

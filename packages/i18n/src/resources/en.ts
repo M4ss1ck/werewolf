@@ -71,6 +71,11 @@ export const en = {
       description:
         "Once per game, during the day, you may reveal yourself and name the day's elimination outright, overriding the vote — or pardon everyone and cancel the lynch.",
     },
+    cupid: {
+      name: "Cupid",
+      description:
+        "On the first night, links two players' lives. If one dies, the other dies with them, and they win together.",
+    },
   },
   factions: {
     village: "Village",
@@ -133,6 +138,10 @@ export const en = {
       prompt:
         "Step forward, reveal yourself as the Mayor, and spare the village — nobody hangs today.",
     },
+    "cupid.link": {
+      label: "Link",
+      prompt: "Choose two players whose lives will be bound together.",
+    },
   },
   errors: {
     UNKNOWN_ERROR: "Something went wrong. Please try again.",
@@ -184,6 +193,7 @@ export const en = {
         safe: "You returned home safely.",
         killed: "You were killed during your visit.",
       },
+      "player.linked": "You are linked to {{partnerId}}.",
       "wolves.member_joined": "{{player}} has joined the wolves.",
       "masons.member_joined": "{{player}} is a mason.",
     },
@@ -331,6 +341,10 @@ export const en = {
       yourMove: "Your move · {{role}}",
       confirm: "Confirm · {{player}}",
       noAction: "Nothing to do today.",
+    },
+    action: {
+      confirm: "Confirm",
+      pickCount: "Pick {{count}}",
     },
     cancelled: {
       title: "Game cancelled",
