@@ -1,4 +1,5 @@
 import type { ActionId, GameplayCommand, UserId } from "@werewolf/protocol";
+import { getPerceivedRole } from "../roles/perceived.ts";
 import { WOLF_CHAT_ROLES } from "../roles/registry.ts";
 import type { DomainError, GameState } from "../state.ts";
 
@@ -41,6 +42,7 @@ export function validateCommand(
     if (state.phase.type !== "night") return { code: "ACTION_NOT_AVAILABLE" };
     if (command.type === "night.action.clear") return null;
     const target = "targetId" in command.payload ? state.players[command.payload.targetId] : null;
+    const perceivedRole = getPerceivedRole(player);
     // The payload type only covers the original four actions; the serial
     // killer's actions are part of the ActionId vocabulary, so widen the
     // discriminant to accept them.
@@ -51,25 +53,25 @@ export function validateCommand(
           return { code: "INVALID_TARGET" };
         return null;
       case "seer.inspect":
-        if (player.role !== "seer") return { code: "ACTION_NOT_AVAILABLE" };
+        if (perceivedRole !== "seer") return { code: "ACTION_NOT_AVAILABLE" };
         if (!target || target.status !== "alive" || target.id === actorId)
           return { code: "INVALID_TARGET" };
         return null;
       case "harlot.visit":
-        if (player.role !== "harlot") return { code: "ACTION_NOT_AVAILABLE" };
+        if (perceivedRole !== "harlot") return { code: "ACTION_NOT_AVAILABLE" };
         if (!target || target.status !== "alive" || target.id === actorId)
           return { code: "INVALID_TARGET" };
         return null;
       case "harlot.stay":
-        if (player.role !== "harlot") return { code: "ACTION_NOT_AVAILABLE" };
+        if (perceivedRole !== "harlot") return { code: "ACTION_NOT_AVAILABLE" };
         return null;
       case "serial_killer.visit":
-        if (player.role !== "serial_killer") return { code: "ACTION_NOT_AVAILABLE" };
+        if (perceivedRole !== "serial_killer") return { code: "ACTION_NOT_AVAILABLE" };
         if (!target || target.status !== "alive" || target.id === actorId)
           return { code: "INVALID_TARGET" };
         return null;
       case "serial_killer.stay":
-        if (player.role !== "serial_killer") return { code: "ACTION_NOT_AVAILABLE" };
+        if (perceivedRole !== "serial_killer") return { code: "ACTION_NOT_AVAILABLE" };
         return null;
     }
   }

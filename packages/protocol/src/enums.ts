@@ -17,6 +17,7 @@ export const ROLE_IDS = [
   "veteran",
   "serial_killer",
   "alpha_wolf",
+  "drunk",
 ] as const;
 export type RoleId = (typeof ROLE_IDS)[number];
 export const RoleIdSchema = z.enum(ROLE_IDS);

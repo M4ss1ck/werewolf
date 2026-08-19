@@ -61,6 +61,11 @@ export const en = {
       description:
         "You hunt with the pack. Each night, your bite may turn the pack's victim into a werewolf instead of killing them.",
     },
+    drunk: {
+      name: "Drunk",
+      description:
+        "Believes they are another village role and acts on that belief, but the results they get are wrong. Their true role is revealed on death.",
+    },
   },
   factions: {
     village: "Village",

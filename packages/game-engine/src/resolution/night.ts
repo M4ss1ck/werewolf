@@ -1,6 +1,8 @@
 import type { ConversionCause, NightDeathCause, RoleId, UserId } from "@werewolf/protocol";
+import { ROLE_IDS } from "@werewolf/protocol";
 import { ALPHA_CONVERSION_CHANCE } from "../composer/balance-v1.ts";
 import type { SeededRng } from "../rng/rng.ts";
+import { getPerceivedRole } from "../roles/perceived.ts";
 import type {
   DomainResult,
   DomainTransition,
@@ -18,6 +20,7 @@ export interface NightResolutionContext {
 type FrozenNight = {
   wolfVotes: { playerId: UserId; targetId: UserId | null }[];
   seerInspection: { playerId: UserId; targetId: UserId; role: RoleId } | null;
+  drunkFakeResult: { playerId: UserId; targetId: UserId; role: RoleId } | null;
   harlotAction:
     | { playerId: UserId; type: "stay" }
     | { playerId: UserId; type: "visit"; targetId: UserId }
@@ -36,7 +39,7 @@ type NightOutcome = {
 export function resolveNight(state: GameState, context: NightResolutionContext): DomainResult {
   if (!state.phase || state.phase.type !== "night")
     return { ok: false, error: { code: "ACTION_NOT_AVAILABLE" } };
-  const frozen = freezeNightIntents(state);
+  const frozen = freezeNightIntents(state, context.rng, state.day);
   const seer = frozen.seerInspection;
   const targetId = resolveWolfBallot(frozen.wolfVotes);
   const locations = resolveNightLocations(state, frozen, targetId);
@@ -97,7 +100,7 @@ export function resolveNight(state: GameState, context: NightResolutionContext):
   };
 }
 
-function freezeNightIntents(state: GameState): FrozenNight {
+function freezeNightIntents(state: GameState, rng: SeededRng, day: number): FrozenNight {
   const phaseId = state.phase!.id;
   const living = Object.values(state.players).filter((player) => player.status === "alive");
   const wolfVotes = living
@@ -113,6 +116,18 @@ function freezeNightIntents(state: GameState): FrozenNight {
           playerId: seer!.id,
           targetId: seerAction.targetId,
           role: state.players[seerAction.targetId]!.role!,
+        }
+      : null;
+  const drunk = living.find(
+    (player) => player.role === "drunk" && getPerceivedRole(player) === "seer",
+  );
+  const drunkAction = drunk ? currentAction(drunk, phaseId, "seer.inspect") : undefined;
+  const drunkFakeResult =
+    drunkAction?.targetId && isLivingTarget(state, drunkAction.targetId)
+      ? {
+          playerId: drunk!.id,
+          targetId: drunkAction.targetId,
+          role: ROLE_IDS[rng.derive(`night:${day}:drunk:fake-result`).int(ROLE_IDS.length)]!,
         }
       : null;
   const harlot = living.find((player) => player.role === "harlot");
@@ -137,7 +152,7 @@ function freezeNightIntents(state: GameState): FrozenNight {
       : skStay
         ? { playerId: serialKiller!.id, type: "stay" as const }
         : null;
-  return { wolfVotes, seerInspection, harlotAction, serialKillerAction };
+  return { wolfVotes, seerInspection, drunkFakeResult, harlotAction, serialKillerAction };
 }
 
 function currentAction(
@@ -365,6 +380,16 @@ function makeNightEvents(
       scope: "player",
       scopeId: seer.playerId,
       payload: { targetId: seer.targetId, role: seer.role },
+    });
+  if (frozen.drunkFakeResult)
+    events.push({
+      kind: "seer.result",
+      scope: "player",
+      scopeId: frozen.drunkFakeResult.playerId,
+      payload: {
+        targetId: frozen.drunkFakeResult.targetId,
+        role: frozen.drunkFakeResult.role,
+      },
     });
   if (frozen.harlotAction) {
     const killed = [...outcome.deaths.keys()].includes(frozen.harlotAction.playerId);

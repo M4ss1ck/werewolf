@@ -59,6 +59,11 @@ export const es: TranslationResource = {
       description:
         "Cazas con la manada. Cada noche, tu mordisco puede convertir a la víctima de la manada en hombre lobo en lugar de matarla.",
     },
+    drunk: {
+      name: "Borracho",
+      description:
+        "Cree que es otro rol de la aldea y actúa en consecuencia, pero los resultados que obtiene son erróneos. Su rol real se revela al morir.",
+    },
   },
   factions: {
     village: "La aldea",

@@ -44,10 +44,12 @@ describe("balance-v1 role composer", () => {
         "cursed",
         "veteran",
         "serial_killer",
+        "drunk",
       ] as const) {
         expect(roles.filter((candidate) => candidate === role).length).toBeLessThanOrEqual(1);
       }
       if (playerCount < 7) expect(roles).not.toContain("hunter");
+      if (playerCount < 7) expect(roles).not.toContain("drunk");
       if (playerCount < 8) expect(roles).not.toContain("mason");
       if (playerCount === 5 || playerCount === 7) expect(roles).not.toContain("cursed");
       if (playerCount === 5 || playerCount === 6) {
@@ -106,6 +108,24 @@ describe("balance-v1 role composer", () => {
       for (let seed = 0; seed < 2000; seed += 1) {
         const roles = composeBalancedGame({ playerCount, seed: `find-${seed}` });
         expect(roles.filter((role) => role === "alpha_wolf").length).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
+  test("never two drunks in a composition", () => {
+    for (const playerCount of [7, 8, 10, 14, 20]) {
+      for (let seed = 0; seed < 2000; seed += 1) {
+        const roles = composeBalancedGame({ playerCount, seed: `find-${seed}` });
+        expect(roles.filter((role) => role === "drunk").length).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
+  test("drunk never appears below 7 players", () => {
+    for (const playerCount of [5, 6]) {
+      for (let seed = 0; seed < 2000; seed += 1) {
+        const roles = composeBalancedGame({ playerCount, seed: `find-${seed}` });
+        expect(roles).not.toContain("drunk");
       }
     }
   });

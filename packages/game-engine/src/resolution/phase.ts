@@ -1,6 +1,8 @@
 import type { GamePhase, UserId } from "@werewolf/protocol";
+import { DRUNK_FAKE_ROLES } from "../composer/balance-v1.ts";
 import { composeBalancedGame } from "../composer/compose.ts";
 import { SeededRng } from "../rng/rng.ts";
+import { getPerceivedRole } from "../roles/perceived.ts";
 import { getRoleDefinition } from "../roles/registry.ts";
 import type { DomainResult, DomainTransition, GameSettings, GameState } from "../state.ts";
 import { resolveNight } from "./night.ts";
@@ -33,9 +35,14 @@ export function startGame(state: GameState, context: PhaseContext): DomainResult
     balanceVersion: state.balanceVersion,
   });
   const shuffledRoles = shuffle(roles, new SeededRng(context.seed).derive("assignment"));
+  const drunkRng = new SeededRng(context.seed).derive("assignment:drunk:perceived");
   const playerPatches = players.map((player, index) => {
     const role = shuffledRoles[index]!;
     const definition = getRoleDefinition(role);
+    const roleState =
+      role === "drunk"
+        ? { perceivedRole: DRUNK_FAKE_ROLES[drunkRng.int(DRUNK_FAKE_ROLES.length)]! }
+        : definition.createState();
     return {
       playerId: player.id,
       changes: {
@@ -43,7 +50,7 @@ export function startGame(state: GameState, context: PhaseContext): DomainResult
         originalRole: role,
         role,
         faction: definition.startingFaction,
-        roleState: definition.createState(),
+        roleState,
       },
     };
   });
@@ -53,11 +60,15 @@ export function startGame(state: GameState, context: PhaseContext): DomainResult
     { kind: "phase.started", scope: "public", payload: phasePayload(phase) },
   ];
   for (const patch of playerPatches) {
+    const perceivedRole = getPerceivedRole({
+      ...state.players[patch.playerId]!,
+      ...patch.changes,
+    });
     events.push({
       kind: "role.assigned",
       scope: "player",
       scopeId: patch.playerId,
-      payload: { role: patch.changes.role, faction: patch.changes.faction },
+      payload: { role: perceivedRole!, faction: patch.changes.faction },
     });
   }
   addKnowledgeEvents(events, playerPatches);

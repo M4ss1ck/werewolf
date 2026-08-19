@@ -5,6 +5,8 @@ import type {
   ViewerIntent,
   ViewerPlayer,
 } from "@werewolf/protocol";
+import { getPerceivedRole } from "../roles/perceived.ts";
+import { getRoleDefinition } from "../roles/registry.ts";
 import type { GameState, PlayerState } from "../state.ts";
 import { getAvailableActions } from "./available-actions.ts";
 
@@ -101,12 +103,17 @@ export function projectSnapshot(
 
   if (member) {
     const intent = currentIntent(member, state);
+    const perceivedRole = getPerceivedRole(member);
+    const roleState =
+      member.role === "drunk" && perceivedRole !== null
+        ? getRoleDefinition(perceivedRole).createState()
+        : member.roleState;
     snapshot.me = {
       userId: member.id,
       status: member.status,
-      ...(member.role ? { role: member.role } : {}),
+      ...(perceivedRole ? { role: perceivedRole } : {}),
       ...(member.faction ? { faction: member.faction } : {}),
-      ...(member.roleState !== undefined ? { roleState: member.roleState } : {}),
+      ...(roleState !== undefined ? { roleState } : {}),
       ...(intent !== undefined ? { currentIntent: intent } : {}),
       ...(state.phase &&
       member.phaseState.phaseId === state.phase.id &&

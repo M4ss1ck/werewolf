@@ -4,6 +4,7 @@
 // ineligible players as disabled rather than hiding them.
 
 import type { AvailableAction, UserId } from "@werewolf/protocol";
+import { getPerceivedRole } from "../roles/perceived.ts";
 import type { GameState } from "../state.ts";
 
 export function getAvailableActions(state: GameState, playerId: UserId): AvailableAction[] {
@@ -13,6 +14,7 @@ export function getAvailableActions(state: GameState, playerId: UserId): Availab
   const others = Object.values(state.players).filter((other) => other.id !== playerId);
   const stored =
     player.phaseState.phaseId === state.phase.id ? (player.phaseState.actions ?? {}) : {};
+  const perceivedRole = getPerceivedRole(player);
   const available: AvailableAction[] = [];
   if (player.faction === "wolves") {
     available.push({
@@ -27,7 +29,7 @@ export function getAvailableActions(state: GameState, playerId: UserId): Availab
         : {}),
     });
   }
-  if (player.role === "seer") {
+  if (perceivedRole === "seer") {
     available.push({
       id: "seer.inspect",
       type: "target",
@@ -37,7 +39,7 @@ export function getAvailableActions(state: GameState, playerId: UserId): Availab
         : {}),
     });
   }
-  if (player.role === "harlot") {
+  if (perceivedRole === "harlot") {
     available.push({
       id: "harlot.visit",
       type: "target",
@@ -52,7 +54,7 @@ export function getAvailableActions(state: GameState, playerId: UserId): Availab
       ...("harlot.stay" in stored ? { selected: true } : {}),
     });
   }
-  if (player.role === "serial_killer") {
+  if (perceivedRole === "serial_killer") {
     available.push({
       id: "serial_killer.visit",
       type: "target",
