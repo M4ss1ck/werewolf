@@ -183,6 +183,23 @@ Bots run in this process, and they cannot hold up a game:
 Provider configuration is environment-only and documented in `.env.example`.
 Credentials are never written to a game row, projected to a viewer, or logged.
 
+## Telegram bot
+
+A Telegram bot runs inside the same server process, in long-polling mode — no
+webhook and no extra container. It answers exactly three commands, registered
+programmatically at boot (no BotFather setup): `/start` (a welcome message with
+a "Play Werewolf" button), `/help` (lists the commands) and `/ping` (round-trip
+latency to the Telegram API).
+
+It is off unless `TELEGRAM_BOT_TOKEN` is set; without it the server boots
+normally and simply does not start the bot. The `/start` WebApp button targets
+`BETTER_AUTH_URL`, and Telegram only accepts an https URL there, so the button
+is inert against the local `http://localhost:3000` default.
+
+Because it polls `getUpdates`, exactly one replica may run it — a second one
+would fight over the same updates. This reinforces the existing one-replica
+rule.
+
 ## Package boundaries
 
 `scripts/check-boundaries.ts` enforces these mechanically, not by convention:

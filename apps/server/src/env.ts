@@ -22,6 +22,9 @@ const envSchema = z.object({
 
   GOOGLE_CLIENT_ID: z.string().min(1),
   GOOGLE_CLIENT_SECRET: z.string().min(1),
+
+  /** Telegram bot token from @BotFather. Absent: the bot does not start. */
+  TELEGRAM_BOT_TOKEN: z.string().min(1).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

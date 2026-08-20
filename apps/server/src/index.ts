@@ -1,4 +1,7 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { applyMigrations, createDb, GameRepository, GlobalChatRepository } from "@werewolf/db";
+import type { Bot } from "grammy";
 import { websocket } from "hono/bun";
 import { createApp } from "./app.ts";
 import { createAuth, resolveAuthSession } from "./auth/auth.ts";
@@ -16,6 +19,8 @@ import { GameCoordinator } from "./game/coordinator.ts";
 import { PhaseScheduler } from "./game/scheduler.ts";
 import { GameHub } from "./live/game-hub.ts";
 import { GlobalChatHub } from "./live/global-chat-hub.ts";
+import { clientAssetRoot } from "./static/serve-client.ts";
+import { createTelegramBot, startTelegramBot } from "./telegram/bot.ts";
 
 const env = loadEnv();
 const { client, db } = createDb(env.TURSO_DATABASE_URL, env.TURSO_AUTH_TOKEN);
@@ -84,6 +89,28 @@ const server = Bun.serve({
 });
 await scheduler.start();
 
+// The Telegram bot is an in-process long-polling surface, off unless a token is
+// configured. It never touches game state; it only answers three commands.
+let telegramBot: Bot | undefined;
+if (env.TELEGRAM_BOT_TOKEN) {
+  const logoPath =
+    clientAssetRoot && existsSync(join(clientAssetRoot, "icon-512.png"))
+      ? join(clientAssetRoot, "icon-512.png")
+      : null;
+  telegramBot = createTelegramBot({
+    token: env.TELEGRAM_BOT_TOKEN,
+    webAppUrl: env.BETTER_AUTH_URL,
+    logoPath,
+  });
+  // A side surface must never take the game server down: if Telegram is
+  // unreachable the bot stays off and everything else keeps serving.
+  void startTelegramBot(telegramBot).catch((error) => {
+    console.error("telegram bot failed to start:", error);
+  });
+} else {
+  console.log("telegram bot disabled: no TELEGRAM_BOT_TOKEN configured");
+}
+
 console.log(`werewolf server listening on ${server.url}`);
 
 // Graceful restart: stop accepting new work, let the in-flight DB transaction
@@ -96,6 +123,8 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
       hub.stop();
       chatHub.stop();
       bots.stop();
+      // grammY's stop() is async; fire it and let the process exit.
+      if (telegramBot) void telegramBot.stop();
       client.close();
       process.exit(0);
     });

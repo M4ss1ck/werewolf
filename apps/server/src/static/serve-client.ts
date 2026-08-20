@@ -12,6 +12,10 @@ const CANDIDATE_ROOTS = [
 
 const clientRoot = CANDIDATE_ROOTS.find((dir) => existsSync(join(dir, "index.html")));
 
+// The Telegram bot reuses this root to find the app icon; null when no client
+// build exists, in which case the bot falls back to a text-only reply.
+export const clientAssetRoot = clientRoot;
+
 export function serveClient(app: Hono) {
   if (!clientRoot) return;
 

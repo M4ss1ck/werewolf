@@ -24,3 +24,8 @@ test("BETTER_AUTH_TRUSTED_ORIGINS trims and drops empties", () => {
   const env = loadEnv({ ...base, BETTER_AUTH_TRUSTED_ORIGINS: " a , b ,, " });
   expect(env.BETTER_AUTH_TRUSTED_ORIGINS).toEqual(["a", "b"]);
 });
+
+test("TELEGRAM_BOT_TOKEN absent parses to undefined and does not fail", () => {
+  const env = loadEnv(base);
+  expect(env.TELEGRAM_BOT_TOKEN).toBeUndefined();
+});
