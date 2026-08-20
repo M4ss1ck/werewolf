@@ -5,6 +5,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.7] - 2026-08-20
+
+### Added
+- Hand the desktop token back over a loopback redirect, replacing the unreliable custom deep link for browser-based sign-in
+- Carry the app's locale through the authentication flow so users are answered in their chosen language mid-sign-in
+
+### Changed
+- Distinguish the five different failure modes that previously shared a single HANDOFF_FAILED code, making it clear whether a token was spent, a request never left the machine, or the server was unreachable
+- Document the loopback handoff flow, including why a redirect works where a custom scheme could not and the security properties that keep it safe
+
+### Fixed
+- Resolve an issue where packaged clients could fail silently when built without a server origin, now refusing to build unless VITE_SERVER_ORIGIN is provided
+
 ## [0.1.6] - 2026-08-20
 
 ### Fixed
