@@ -16,6 +16,13 @@ import { drizzle } from "drizzle-orm/libsql";
 import { createApp } from "../app.ts";
 import { createAuth } from "../auth/auth.ts";
 import { authSchema, createAuthTables } from "../auth/schema.ts";
+import {
+  HANDOFF_COOKIE,
+  HANDOFF_LOCALE_COOKIE,
+  loopbackUrl,
+  readHandoffCookie,
+  resolveHandoffLocale,
+} from "./auth-handoff.ts";
 
 const cleanups: (() => void)[] = [];
 afterEach(() => {
@@ -151,4 +158,128 @@ test("the ott completes the packaged-client HTTP exchange and authenticates the 
   expect(session.status).toBe(200);
   const sessionBody = (await session.json()) as { user: { id: string } };
   expect(sessionBody.user.id).toBe("user-1");
+});
+
+// The desktop handoff: a redirect to the app's own loopback listener instead
+// of a page the user has to click. These are security tests as much as
+// behaviour tests — the port ends up in a redirect the browser will follow.
+
+test("readHandoffCookie refuses anything that could redirect off the loopback", () => {
+  expect(readHandoffCookie(undefined)).toBeNull();
+  expect(readHandoffCookie("")).toBeNull();
+  // No port, no separator, or a port outside the unprivileged range.
+  expect(readHandoffCookie("nonsense")).toBeNull();
+  expect(readHandoffCookie(".abcdefghijklmnopqrstuvwxyz012345")).toBeNull();
+  expect(readHandoffCookie("80.abcdefghijklmnopqrstuvwxyz012345")).toBeNull();
+  expect(readHandoffCookie("99999.abcdefghijklmnopqrstuvwxyz012345")).toBeNull();
+  // A host smuggled in where the port belongs.
+  expect(readHandoffCookie("evil.example.com.abcdefghijklmnopqrstuvwxyz012345")).toBeNull();
+  // A state that is too short to be a nonce, or carries punctuation.
+  expect(readHandoffCookie("41234.short")).toBeNull();
+  expect(readHandoffCookie("41234.abcdefghijklmnopqrstuvwxyz01234/")).toBeNull();
+  expect(readHandoffCookie("41234.abcdefghijklmnopqrstuvwxyz012345")).toEqual({
+    port: 41234,
+    state: "abcdefghijklmnopqrstuvwxyz012345",
+  });
+});
+
+test("loopbackUrl always points at 127.0.0.1, whatever it is handed", () => {
+  const url = new URL(loopbackUrl(41234, "state-value", { ott: "tok en/+=" }));
+  expect(url.protocol).toBe("http:");
+  expect(url.hostname).toBe("127.0.0.1");
+  expect(url.port).toBe("41234");
+  expect(url.pathname).toBe("/callback");
+  // The token round-trips through the query string untouched.
+  expect(url.searchParams.get("ott")).toBe("tok en/+=");
+  expect(url.searchParams.get("state")).toBe("state-value");
+});
+
+test("with a handoff cookie, the desktop client is redirected to its listener", async () => {
+  const { client, authDb } = setup();
+  await createAuthTables(client);
+  const token = await seedSession(authDb);
+  const auth = createAuth(authDb as unknown as Db, env);
+  const app = createApp({ auth });
+
+  const response = await app.request("/api/auth-handoff", {
+    headers: {
+      ...bearerHeaders(token),
+      cookie: `${HANDOFF_COOKIE}=41234.abcdefghijklmnopqrstuvwxyz012345`,
+    },
+  });
+
+  expect(response.status).toBe(302);
+  const location = new URL(response.headers.get("location") ?? "");
+  expect(location.hostname).toBe("127.0.0.1");
+  expect(location.port).toBe("41234");
+  expect(location.searchParams.get("state")).toBe("abcdefghijklmnopqrstuvwxyz012345");
+  expect((location.searchParams.get("ott") ?? "").length).toBeGreaterThan(0);
+  expect(response.headers.get("cache-control")).toBe("no-store");
+  // The cookie is spent: it must not survive to a second handoff.
+  expect(response.headers.get("set-cookie") ?? "").toContain(HANDOFF_COOKIE);
+});
+
+test("with no session, the desktop client is redirected with a code, not a page", async () => {
+  const { client, authDb } = setup();
+  await createAuthTables(client);
+  const auth = createAuth(authDb as unknown as Db, env);
+  const app = createApp({ auth });
+
+  const response = await app.request("/api/auth-handoff", {
+    headers: { cookie: `${HANDOFF_COOKIE}=41234.abcdefghijklmnopqrstuvwxyz012345` },
+  });
+
+  expect(response.status).toBe(302);
+  const location = new URL(response.headers.get("location") ?? "");
+  expect(location.hostname).toBe("127.0.0.1");
+  expect(location.searchParams.get("error")).toBe("UNAUTHENTICATED");
+  expect(location.searchParams.get("state")).toBe("abcdefghijklmnopqrstuvwxyz012345");
+});
+
+test("a malformed handoff cookie falls back to the page rather than redirecting", async () => {
+  const { client, authDb } = setup();
+  await createAuthTables(client);
+  const token = await seedSession(authDb);
+  const auth = createAuth(authDb as unknown as Db, env);
+  const app = createApp({ auth });
+
+  const response = await app.request("/api/auth-handoff", {
+    headers: { ...bearerHeaders(token), cookie: `${HANDOFF_COOKIE}=80.evil` },
+  });
+
+  expect(response.status).toBe(200);
+  expect(response.headers.get("content-type")).toContain("text/html");
+});
+
+// The page renders outside the app, so it has to be told which language the
+// user picked there. Before this it followed Accept-Language, which is a
+// different setting and regularly a different language.
+test("the handoff page follows the app's locale, not the browser's", () => {
+  expect(resolveHandoffLocale("es", "en-US,en;q=0.9")).toBe("es");
+  expect(resolveHandoffLocale("en", "es-ES,es;q=0.9")).toBe("en");
+  // No app locale: the browser is the fallback, not the other way round.
+  expect(resolveHandoffLocale(undefined, "es-ES,es;q=0.9")).toBe("es");
+  expect(resolveHandoffLocale(undefined, "en-US")).toBe("en");
+  // A locale we do not ship is ignored rather than rendered blank.
+  expect(resolveHandoffLocale("fr", "en-US")).toBe("en");
+});
+
+test("with a Spanish app locale the page is Spanish even for an English browser", async () => {
+  const { client, authDb } = setup();
+  await createAuthTables(client);
+  const token = await seedSession(authDb);
+  const auth = createAuth(authDb as unknown as Db, env);
+  const app = createApp({ auth });
+
+  const response = await app.request("/api/auth-handoff", {
+    headers: {
+      ...bearerHeaders(token),
+      cookie: `${HANDOFF_LOCALE_COOKIE}=es`,
+      "accept-language": "en-US,en;q=0.9",
+    },
+  });
+
+  const html = await response.text();
+  expect(html).toContain('lang="es"');
+  expect(html).toContain("Abrir Werewolf");
 });

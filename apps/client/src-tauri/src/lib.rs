@@ -1,3 +1,9 @@
+// The desktop sign-in handoff. Mobile keeps the deep-link path: an intent is
+// the platform norm on Android, and loopback is the option Google is
+// deprecating for mobile client types.
+#[cfg(desktop)]
+mod auth_listener;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   let builder = tauri::Builder::default();
@@ -18,6 +24,10 @@ pub fn run() {
       let _ = window.set_focus();
     }
   }));
+
+  #[cfg(desktop)]
+  let builder =
+    builder.invoke_handler(tauri::generate_handler![auth_listener::start_auth_handoff]);
 
   builder
     // Google refuses OAuth inside an embedded webview, so sign-in opens the

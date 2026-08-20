@@ -16,6 +16,7 @@ import { drizzle } from "drizzle-orm/libsql";
 import { createApp } from "../app.ts";
 import { createAuth } from "../auth/auth.ts";
 import { authSchema, createAuthTables } from "../auth/schema.ts";
+import { parseLoopbackHandoff } from "./auth-start.ts";
 
 const cleanups: (() => void)[] = [];
 afterEach(() => {
@@ -94,4 +95,60 @@ test("GET /api/auth-start answers unauthenticated, mounted ahead of requireViewe
   const guarded = await app.request("/api/games/g-1");
   expect(guarded.status).toBe(401);
   expect(await guarded.json()).toEqual({ error: { code: "UNAUTHENTICATED" } });
+});
+
+// The desktop client tells auth-start where its loopback listener is. Those
+// two values have to survive the Google round trip, so they ride in a cookie.
+
+test("parseLoopbackHandoff accepts only a port number and a nonce", () => {
+  const state = "abcdefghijklmnopqrstuvwxyz012345";
+  expect(parseLoopbackHandoff("41234", state)).toEqual({ port: 41234, state });
+  expect(parseLoopbackHandoff(undefined, state)).toBeNull();
+  expect(parseLoopbackHandoff("41234", undefined)).toBeNull();
+  // Privileged and out-of-range ports.
+  expect(parseLoopbackHandoff("80", state)).toBeNull();
+  expect(parseLoopbackHandoff("70000", state)).toBeNull();
+  // Anything that is not purely digits: a host, a URL, a scheme. Accepting one
+  // of these is how this route would become an open redirect.
+  expect(parseLoopbackHandoff("evil.example.com", state)).toBeNull();
+  expect(parseLoopbackHandoff("http://evil.example.com", state)).toBeNull();
+  expect(parseLoopbackHandoff("41234@evil.example.com", state)).toBeNull();
+  expect(parseLoopbackHandoff(" 41234", state)).toBeNull();
+  // A nonce too short to be unguessable, or carrying punctuation.
+  expect(parseLoopbackHandoff("41234", "short")).toBeNull();
+  expect(parseLoopbackHandoff("41234", `${state}/../`)).toBeNull();
+});
+
+test("GET /api/auth-start remembers a valid loopback handoff in a cookie", async () => {
+  const { client, authDb } = setup();
+  await createAuthTables(client);
+  const auth = createAuth(authDb as unknown as Db, env);
+  const app = createApp({ auth });
+
+  const state = "abcdefghijklmnopqrstuvwxyz012345";
+  const response = await app.request(`/api/auth-start?port=41234&state=${state}`);
+
+  expect(response.status).toBe(302);
+  const cookies = response.headers.getSetCookie();
+  const handoff = cookies.find((cookie) => cookie.startsWith("werewolf.handoff="));
+  expect(handoff).toBeDefined();
+  expect(handoff).toContain(`werewolf.handoff=41234.${state}`);
+  expect(handoff).toContain("HttpOnly");
+  expect(handoff).toContain("SameSite=Lax");
+  // The Google leg's own state cookie must still be forwarded alongside it.
+  expect(cookies.some((cookie) => cookie.includes("better-auth.state"))).toBe(true);
+});
+
+test("GET /api/auth-start ignores a malformed handoff and sets no cookie", async () => {
+  const { client, authDb } = setup();
+  await createAuthTables(client);
+  const auth = createAuth(authDb as unknown as Db, env);
+  const app = createApp({ auth });
+
+  const response = await app.request("/api/auth-start?port=80&state=short");
+
+  expect(response.status).toBe(302);
+  expect(response.headers.getSetCookie().some((c) => c.startsWith("werewolf.handoff="))).toBe(
+    false,
+  );
 });

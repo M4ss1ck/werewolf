@@ -1,6 +1,8 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { apiUrl } from "../api/origin.ts";
+import { i18n } from "../i18n/i18n.ts";
+import { startLoopbackHandoff } from "./loopback.ts";
 import { captureAuthToken, clearAuthToken, getAuthToken } from "./token.ts";
 
 export interface SessionUser {
@@ -31,12 +33,17 @@ export async function getSession(): Promise<Session | null> {
 }
 
 export async function signInWithGoogle() {
-  // The packaged app runs the whole OAuth leg in the system browser and comes
-  // back via the werewolf://auth deep link (see routes/auth-start.ts), so it
-  // just opens that route and returns. The web path keeps the POST below
-  // because there the cookie and the callback are in the same browser.
+  // The packaged app runs the whole OAuth leg in the system browser. On desktop
+  // it first binds a loopback listener and tells the server where to redirect
+  // the browser when it is done; on Android there is no such listener and the
+  // server falls back to the werewolf:// page. See routes/auth-start.ts. The
+  // web path keeps the POST below because there the cookie and the callback are
+  // in the same browser.
   if (isTauri()) {
-    await openUrl(apiUrl("/api/auth-start"));
+    // The user's language, as chosen in the app — every page in this flow
+    // renders outside the app and cannot read its i18n.
+    const handoff = await startLoopbackHandoff(i18n.language);
+    await openUrl(apiUrl(handoff ? `/api/auth-start?${handoff}` : "/api/auth-start"));
     return;
   }
 

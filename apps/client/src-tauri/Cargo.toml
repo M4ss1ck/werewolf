@@ -25,6 +25,9 @@ tauri = { version = "2.11.3", features = [] }
 tauri-plugin-log = "2"
 tauri-plugin-deep-link = "2.4.9"
 tauri-plugin-opener = "2.5.4"
+# Parsing the loopback callback target by hand is exactly where a silent
+# percent-decoding bug would live; this is already in the tree via deep-link.
+url = "2"
 
 # Desktop only. Without this the OS starts a second instance to deliver a
 # werewolf:// deep link, and the window the user is looking at never sees it.

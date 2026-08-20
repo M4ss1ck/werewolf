@@ -11,7 +11,8 @@ import {
   withOlderPage,
 } from "./api/chat-state.ts";
 import { api } from "./api/client.ts";
-import { listenForAuthDeepLinks } from "./auth/deep-link.ts";
+import { type AuthDeepLinkResult, listenForAuthDeepLinks } from "./auth/deep-link.ts";
+import { listenForLoopbackCallback } from "./auth/loopback.ts";
 import { getSession, type Session } from "./auth/session.ts";
 import { TabBar } from "./components.tsx";
 import { i18n } from "./i18n/i18n.ts";
@@ -109,18 +110,24 @@ function Shell() {
   // A handoff that fails has to say so. Swallowing the code left the app on the
   // sign-in screen looking idle, with the reason known only to the server.
   const [signInError, setSignInError] = useState<string | undefined>(undefined);
-  useEffect(
-    () =>
-      listenForAuthDeepLinks((result) => {
-        if (result.ok) {
-          setSignInError(undefined);
-          refreshSessionRef.current();
-        } else if (result.code !== "IGNORED") {
-          setSignInError(result.code);
-        }
-      }),
-    [],
-  );
+  useEffect(() => {
+    const onResult = (result: AuthDeepLinkResult) => {
+      if (result.ok) {
+        setSignInError(undefined);
+        refreshSessionRef.current();
+      } else if (result.code !== "IGNORED") {
+        setSignInError(result.code);
+      }
+    };
+    // Two ways the token can arrive: the desktop loopback listener and the
+    // Android deep link. Only one of them ever fires on a given platform.
+    const stopDeepLinks = listenForAuthDeepLinks(onResult);
+    const stopLoopback = listenForLoopbackCallback(onResult);
+    return () => {
+      stopDeepLinks();
+      stopLoopback();
+    };
+  }, []);
   const sendChatMessage = (text: string) =>
     api
       .sendChatMessage(text)
