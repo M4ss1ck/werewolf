@@ -56,8 +56,10 @@ export function authHandoffRoutes(auth: ReturnType<typeof createAuth>) {
   const app = new Hono();
 
   app.get("/auth-handoff", async (c) => {
-    const page = (deepLink: string) =>
-      c.html(appHandoffPage(deepLink, c.req.header("accept-language")));
+    const page = (deepLink: string) => {
+      c.header("cache-control", "no-store");
+      return c.html(appHandoffPage(deepLink, c.req.header("accept-language")));
+    };
 
     const session = await auth.api.getSession({ headers: c.req.raw.headers });
     if (!session) {

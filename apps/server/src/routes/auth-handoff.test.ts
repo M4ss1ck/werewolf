@@ -86,6 +86,7 @@ test("with a valid session, GET /api/auth-handoff answers a page linking to the 
   // never heard back. The click supplies the gesture.
   expect(response.status).toBe(200);
   expect(response.headers.get("location")).toBeNull();
+  expect(response.headers.get("cache-control")).toBe("no-store");
   const html = await response.text();
   const href = html.match(/href="(werewolf:\/\/auth\?ott=[^"]+)"/)?.[1] ?? "";
   expect(href.length).toBeGreaterThan(0);

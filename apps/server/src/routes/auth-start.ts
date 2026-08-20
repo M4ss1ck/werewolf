@@ -8,8 +8,7 @@
 // via the werewolf://auth deep link (see auth-handoff.ts).
 //
 // The caller is a browser tab the user is looking at, so failures are reported
-// as a redirect with an error code in the query string, never as a 401 JSON
-// body.
+// on a page that links back to the app, never as a 401 JSON body.
 
 import { Hono } from "hono";
 import type { createAuth } from "../auth/auth.ts";
@@ -28,6 +27,7 @@ export function authStartRoutes(auth: ReturnType<typeof createAuth>) {
     if (!url) {
       // A page, not a redirect, for the same reason as auth-handoff: a browser
       // drops a gesture-less redirect into a custom scheme.
+      c.header("cache-control", "no-store");
       return c.html(
         appHandoffPage(
           `${APP_SCHEME}://auth?error=HANDOFF_FAILED`,
