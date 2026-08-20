@@ -13,7 +13,7 @@
 
 import { Hono } from "hono";
 import type { createAuth } from "../auth/auth.ts";
-import { APP_SCHEME } from "./auth-handoff.ts";
+import { APP_SCHEME, appHandoffPage } from "./auth-handoff.ts";
 
 export function authStartRoutes(auth: ReturnType<typeof createAuth>) {
   const app = new Hono();
@@ -26,7 +26,14 @@ export function authStartRoutes(auth: ReturnType<typeof createAuth>) {
 
     const { url } = (await response.json()) as { url?: string };
     if (!url) {
-      return c.redirect(`${APP_SCHEME}://auth?error=HANDOFF_FAILED`);
+      // A page, not a redirect, for the same reason as auth-handoff: a browser
+      // drops a gesture-less redirect into a custom scheme.
+      return c.html(
+        appHandoffPage(
+          `${APP_SCHEME}://auth?error=HANDOFF_FAILED`,
+          c.req.header("accept-language"),
+        ),
+      );
     }
 
     // Forward the OAuth state cookie onto the system browser that will finish

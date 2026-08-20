@@ -69,7 +69,7 @@ function bearerHeaders(token: string) {
   return { authorization: `Bearer ${token}` };
 }
 
-test("with a valid session, GET /api/auth-handoff redirects to the app with a non-empty ott", async () => {
+test("with a valid session, GET /api/auth-handoff answers a page linking to the app with a non-empty ott", async () => {
   const { client, authDb } = setup();
   await createAuthTables(client);
   const token = await seedSession(authDb);
@@ -80,14 +80,20 @@ test("with a valid session, GET /api/auth-handoff redirects to the app with a no
     headers: bearerHeaders(token),
   });
 
-  expect(response.status).toBe(302);
-  const location = response.headers.get("location") ?? "";
-  expect(location.startsWith("werewolf://auth?ott=")).toBe(true);
-  const ott = new URLSearchParams(location.split("?")[1] ?? "").get("ott") ?? "";
+  // A page with a link the user clicks, NOT a redirect. A browser refuses to
+  // launch a custom scheme from a server redirect without a user gesture, so
+  // the 302 this route used to answer was dropped on the floor and the app
+  // never heard back. The click supplies the gesture.
+  expect(response.status).toBe(200);
+  expect(response.headers.get("location")).toBeNull();
+  const html = await response.text();
+  const href = html.match(/href="(werewolf:\/\/auth\?ott=[^"]+)"/)?.[1] ?? "";
+  expect(href.length).toBeGreaterThan(0);
+  const ott = new URLSearchParams(href.split("?")[1] ?? "").get("ott") ?? "";
   expect(ott.length).toBeGreaterThan(0);
 });
 
-test("with no session, GET /api/auth-handoff redirects to UNAUTHENTICATED, not a 401 body", async () => {
+test("with no session, GET /api/auth-handoff answers UNAUTHENTICATED as a page, not a 401 body", async () => {
   const { client, authDb } = setup();
   await createAuthTables(client);
   const auth = createAuth(authDb as unknown as Db, env);
@@ -100,12 +106,15 @@ test("with no session, GET /api/auth-handoff redirects to UNAUTHENTICATED, not a
 
   const response = await app.request("/api/auth-handoff");
 
-  expect(response.status).toBe(302);
-  expect(response.headers.get("location")).toBe("werewolf://auth?error=UNAUTHENTICATED");
+  expect(response.status).toBe(200);
   expect(response.headers.get("content-type") ?? "").not.toContain("application/json");
+  // The error reaches the app the same way the token does, through a link the
+  // user clicks. A redirect would be dropped and the app would sit on the
+  // sign-in screen with nothing to show for it.
+  expect(await response.text()).toContain('href="werewolf://auth?error=UNAUTHENTICATED"');
 
   // Control: a sibling /api route under the same app IS intercepted by
-  // requireViewer, so the 302 above is the route's own answer and not an
+  // requireViewer, so the 200 above is the route's own answer and not an
   // artefact of requireViewer being absent.
   const guarded = await app.request("/api/games/g-1");
   expect(guarded.status).toBe(401);
@@ -122,8 +131,9 @@ test("the ott from the handoff is genuinely usable: it verifies to the seeded us
   const response = await app.request("/api/auth-handoff", {
     headers: bearerHeaders(token),
   });
-  const location = response.headers.get("location") ?? "";
-  const ott = new URLSearchParams(location.split("?")[1] ?? "").get("ott") ?? "";
+  const html = await response.text();
+  const href = html.match(/href="(werewolf:\/\/auth\?ott=[^"]+)"/)?.[1] ?? "";
+  const ott = new URLSearchParams(href.split("?")[1] ?? "").get("ott") ?? "";
 
   const verified = await auth.api.verifyOneTimeToken({ body: { token: ott } });
   expect(verified?.user?.id).toBe("user-1");
