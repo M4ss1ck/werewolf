@@ -164,9 +164,9 @@ export function LobbyScreen({
                   >
                     +
                   </span>
-                  <span className="flex-1">
-                    {bot.displayName}
-                    <span className="block text-[13px] text-fog-dim">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">{bot.displayName}</span>
+                    <span className="block truncate text-[13px] text-fog-dim">
                       {bot.reason
                         ? t(`ui.lobby.botReason.${bot.reason}`)
                         : (bot.model ?? t("ui.lobby.botRandom"))}

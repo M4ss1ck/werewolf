@@ -113,7 +113,9 @@ export function ProfileScreen({
           ) : (
             <>
               <div className="flex items-center gap-2">
-                <h1 className="text-[26px] font-semibold tracking-[-0.03em]">{displayName}</h1>
+                <h1 className="truncate text-[26px] font-semibold tracking-[-0.03em]">
+                  {displayName}
+                </h1>
                 <button
                   aria-label={t("ui.profile.editUsername")}
                   className="text-fog transition-colors hover:text-paper"

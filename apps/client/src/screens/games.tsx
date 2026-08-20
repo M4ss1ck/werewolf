@@ -43,7 +43,9 @@ function GameCard({ game }: { game: PublicGameSummary }) {
         onClick={() => navigate(`/games/${game.id}/replay`)}
         type="button"
       >
-        <span className="text-[19px] font-semibold tracking-[-0.02em] text-fog">{game.name}</span>
+        <span className="truncate text-[19px] font-semibold tracking-[-0.02em] text-fog">
+          {game.name}
+        </span>
         <span className="font-mono text-xs text-fog-dim">
           {t("ui.browser.finished")} · {t("ui.players.count", { count: game.playerCount })}
         </span>

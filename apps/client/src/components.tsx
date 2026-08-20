@@ -60,7 +60,9 @@ export function ChatBubble({
     <div className={`flex gap-2.5 ${mine ? "justify-end" : ""}`}>
       {!mine && <Avatar name={author} size="sm" />}
       <div className={`flex max-w-[82%] flex-col ${mine ? "items-end" : ""}`}>
-        {!mine && <span className="mb-[5px] font-mono text-[11px] text-fog">{author}</span>}
+        {!mine && (
+          <span className="mb-[5px] truncate font-mono text-[11px] text-fog">{author}</span>
+        )}
         <div className={`bubble ${mine ? "bubble--mine" : "bubble--theirs"}`}>{text}</div>
       </div>
     </div>

@@ -392,6 +392,10 @@ body {
   padding:
     env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
     env(safe-area-inset-left);
+  /* Nothing inside the column may give the page a horizontal scrollbar. `clip`
+   * rather than `hidden` so this does not become a scroll container and break
+   * the sticky bars. */
+  overflow-x: clip;
 }
 
 /* A quiet night sky: moon glow on one side, faint fog on the other. It belongs
@@ -502,6 +506,11 @@ body {
 .row__name {
   min-width: 0;
   flex: 1;
+  /* A name is user input with no useful upper bound on rendered width, so it
+   * ellipsises rather than painting over the tag and button beside it. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .row--selected {
@@ -779,6 +788,9 @@ body {
   padding: 12px 15px;
   font-size: 15px;
   line-height: 1.45;
+  /* A pasted URL or a long unbroken word has nowhere to wrap, and the bubble's
+   * max-width cannot hold it without this. */
+  overflow-wrap: anywhere;
 }
 
 .bubble--theirs {
