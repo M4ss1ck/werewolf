@@ -11,6 +11,7 @@ import {
   withOlderPage,
 } from "./api/chat-state.ts";
 import { api } from "./api/client.ts";
+import { listenForAuthDeepLinks } from "./auth/deep-link.ts";
 import { getSession, type Session } from "./auth/session.ts";
 import { TabBar } from "./components.tsx";
 import { i18n } from "./i18n/i18n.ts";
@@ -101,6 +102,17 @@ function Shell() {
     return () => connection.close();
   }, [inLobby, signedInWithUsername]);
   const refreshSession = () => void getSession().then(setSession);
+  // A ref keeps the deep-link effect stable (runs once) while still calling the
+  // latest refreshSession, which is recreated on every render.
+  const refreshSessionRef = useRef(refreshSession);
+  refreshSessionRef.current = refreshSession;
+  useEffect(
+    () =>
+      listenForAuthDeepLinks((result) => {
+        if (result.ok) refreshSessionRef.current();
+      }),
+    [],
+  );
   const sendChatMessage = (text: string) =>
     api
       .sendChatMessage(text)

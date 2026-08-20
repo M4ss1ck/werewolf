@@ -1,3 +1,5 @@
+import { isTauri } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { apiUrl } from "../api/origin.ts";
 import { captureAuthToken, clearAuthToken, getAuthToken } from "./token.ts";
 
@@ -30,6 +32,7 @@ export async function getSession(): Promise<Session | null> {
 
 export async function signInWithGoogle() {
   const token = getAuthToken();
+  const callbackURL = isTauri() ? apiUrl("/api/auth-handoff") : globalThis.location.href;
   const response = await fetch(apiUrl("/api/auth/sign-in/social"), {
     method: "POST",
     credentials: "include",
@@ -37,13 +40,16 @@ export async function signInWithGoogle() {
       "content-type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify({ provider: "google", callbackURL: globalThis.location.href }),
+    body: JSON.stringify({ provider: "google", callbackURL }),
   });
   captureAuthToken(response);
   if (!response.ok) throw new Error(`Google sign-in failed (${response.status})`);
 
   const result = (await response.json()) as { redirect?: boolean; url?: string };
-  if (result.redirect && result.url) globalThis.location.href = result.url;
+  if (result.redirect && result.url) {
+    if (isTauri()) await openUrl(result.url);
+    else globalThis.location.href = result.url;
+  }
 }
 
 export function signOut() {

@@ -14,6 +14,8 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2.9.0",
+    "@tauri-apps/plugin-deep-link": "^2.4.9",
+    "@tauri-apps/plugin-opener": "^2.5.4",
     "@werewolf/i18n": "workspace:*",
     "@werewolf/protocol": "workspace:*",
     "i18next": "^25.6.0",

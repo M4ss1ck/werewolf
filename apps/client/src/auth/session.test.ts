@@ -2,8 +2,17 @@ import { afterEach, expect, test, vi } from "vitest";
 
 import { signInWithGoogle } from "./session.ts";
 
+const mocks = vi.hoisted(() => ({
+  isTauri: vi.fn(),
+  openUrl: vi.fn(),
+}));
+
+vi.mock("@tauri-apps/api/core", () => ({ isTauri: mocks.isTauri }));
+vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: mocks.openUrl }));
+
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.clearAllMocks();
 });
 
 test("Google sign-in follows the OAuth URL returned by Better Auth", async () => {
@@ -23,4 +32,46 @@ test("Google sign-in follows the OAuth URL returned by Better Auth", async () =>
   await signInWithGoogle();
 
   expect(location.href).toBe(oauthUrl);
+});
+
+test("on the web it assigns location.href, does not call openUrl, and uses location.href as callbackURL", async () => {
+  mocks.isTauri.mockReturnValue(false);
+  const oauthUrl = "https://accounts.google.com/o/oauth2/v2/auth?state=web";
+  const location = { href: "http://localhost:1420/" };
+  vi.stubGlobal("location", location);
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response(JSON.stringify({ url: oauthUrl, redirect: true }), {
+      headers: { "content-type": "application/json" },
+      status: 200,
+    }),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+
+  await signInWithGoogle();
+
+  expect(location.href).toBe(oauthUrl);
+  expect(mocks.openUrl).not.toHaveBeenCalled();
+  const [, init] = fetchMock.mock.calls[0]!;
+  expect(JSON.parse(init.body).callbackURL).toBe("http://localhost:1420/");
+});
+
+test("in Tauri it calls openUrl and uses the auth-handoff callbackURL", async () => {
+  mocks.isTauri.mockReturnValue(true);
+  const oauthUrl = "https://accounts.google.com/o/oauth2/v2/auth?state=tauri";
+  const location = { href: "http://localhost:1420/" };
+  vi.stubGlobal("location", location);
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response(JSON.stringify({ url: oauthUrl, redirect: true }), {
+      headers: { "content-type": "application/json" },
+      status: 200,
+    }),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+
+  await signInWithGoogle();
+
+  expect(mocks.openUrl).toHaveBeenCalledWith(oauthUrl);
+  expect(location.href).toBe("http://localhost:1420/");
+  const [, init] = fetchMock.mock.calls[0]!;
+  expect(JSON.parse(init.body).callbackURL).toMatch(/\/api\/auth-handoff$/);
 });

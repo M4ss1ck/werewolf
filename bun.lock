@@ -12,9 +12,11 @@
     },
     "apps/client": {
       "name": "@werewolf/client",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "dependencies": {
         "@tauri-apps/api": "^2.9.0",
+        "@tauri-apps/plugin-deep-link": "^2.4.9",
+        "@tauri-apps/plugin-opener": "^2.5.4",
         "@werewolf/i18n": "workspace:*",
         "@werewolf/protocol": "workspace:*",
         "i18next": "^25.6.0",
@@ -44,7 +46,7 @@
     },
     "apps/server": {
       "name": "@werewolf/server",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "dependencies": {
         "@werewolf/db": "workspace:*",
         "@werewolf/game-engine": "workspace:*",
@@ -57,7 +59,7 @@
     },
     "packages/db": {
       "name": "@werewolf/db",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "dependencies": {
         "@libsql/client": "^0.15.15",
         "@werewolf/game-engine": "workspace:*",
@@ -70,14 +72,14 @@
     },
     "packages/game-engine": {
       "name": "@werewolf/game-engine",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "dependencies": {
         "@werewolf/protocol": "workspace:*",
       },
     },
     "packages/i18n": {
       "name": "@werewolf/i18n",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "dependencies": {
         "@werewolf/protocol": "workspace:*",
         "i18next": "^25.6.0",
@@ -85,7 +87,7 @@
     },
     "packages/protocol": {
       "name": "@werewolf/protocol",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "dependencies": {
         "zod": "^4.1.5",
       },
@@ -417,6 +419,10 @@
     "@tauri-apps/cli-win32-ia32-msvc": ["@tauri-apps/cli-win32-ia32-msvc@2.11.4", "", { "os": "win32", "cpu": "ia32" }, "sha512-12Hxi0XX/H5VFxO/bGgHkFWhml9VMgEOu9CidjeCeTNQ1l6fpUlbiGgSP7CLI3PFtW9/FfbeHieZ+kyWK5H7CA=="],
 
     "@tauri-apps/cli-win32-x64-msvc": ["@tauri-apps/cli-win32-x64-msvc@2.11.4", "", { "os": "win32", "cpu": "x64" }, "sha512-+vDiqBIU5dMISg/wNvX3sF+ZHfgJGJ5T0AcO+EHNXV9GGAG+P5fzodlDXD3QdKCRgZxMoCm5PPvj3BqLNjBthw=="],
+
+    "@tauri-apps/plugin-deep-link": ["@tauri-apps/plugin-deep-link@2.4.9", "", { "dependencies": { "@tauri-apps/api": "^2.11.0" } }, "sha512-u0SKOUHnJ1wqeqXsDFq2+kASCBj9xxbG0g9XZWPy9SOmU4wXtp6b/wiYpm6oH6/5fBTQsLqnLhIvqLBRpgHJlA=="],
+
+    "@tauri-apps/plugin-opener": ["@tauri-apps/plugin-opener@2.5.4", "", { "dependencies": { "@tauri-apps/api": "^2.11.0" } }, "sha512-1HnPkb+AmgO29HBazm4uPLKB+r7zzcTBW1d0fyYp1uP+jwtpoiNDGKMMzz58SFp49nOIrxdE3aUJtT57lfO9CQ=="],
 
     "@testing-library/dom": ["@testing-library/dom@10.4.1", "", { "dependencies": { "@babel/code-frame": "^7.10.4", "@babel/runtime": "^7.12.5", "@types/aria-query": "^5.0.1", "aria-query": "5.3.0", "dom-accessibility-api": "^0.5.9", "lz-string": "^1.5.0", "picocolors": "1.1.1", "pretty-format": "^27.0.2" } }, "sha512-o4PXJQidqJl82ckFaXUeoAW+XysPLauYI43Abki5hABd853iMhitooc6znOnczgbTYmEP6U6/y1ZyKAIsvMKGg=="],
 
