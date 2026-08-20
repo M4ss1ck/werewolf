@@ -122,12 +122,12 @@ test("with no session, GET /api/auth-handoff answers UNAUTHENTICATED as a page, 
   expect(await guarded.json()).toEqual({ error: { code: "UNAUTHENTICATED" } });
 });
 
-test("the ott from the handoff is genuinely usable: it verifies to the seeded user", async () => {
+test("the ott completes the packaged-client HTTP exchange and authenticates the next request", async () => {
   const { client, authDb } = setup();
   await createAuthTables(client);
   const token = await seedSession(authDb);
   const auth = createAuth(authDb as unknown as Db, env);
-  const app = createApp({ auth });
+  const app = createApp({ auth, trustedOrigins: ["tauri://localhost"] });
 
   const response = await app.request("/api/auth-handoff", {
     headers: bearerHeaders(token),
@@ -136,6 +136,19 @@ test("the ott from the handoff is genuinely usable: it verifies to the seeded us
   const href = html.match(/href="(werewolf:\/\/auth\?ott=[^"]+)"/)?.[1] ?? "";
   const ott = new URLSearchParams(href.split("?")[1] ?? "").get("ott") ?? "";
 
-  const verified = await auth.api.verifyOneTimeToken({ body: { token: ott } });
-  expect(verified?.user?.id).toBe("user-1");
+  const verified = await app.request("/api/auth/one-time-token/verify", {
+    method: "POST",
+    headers: { "content-type": "application/json", origin: "tauri://localhost" },
+    body: JSON.stringify({ token: ott }),
+  });
+  expect(verified.status).toBe(200);
+  const authToken = verified.headers.get("set-auth-token") ?? "";
+  expect(authToken.length).toBeGreaterThan(0);
+
+  const session = await app.request("/api/auth/get-session", {
+    headers: { authorization: `Bearer ${authToken}`, origin: "tauri://localhost" },
+  });
+  expect(session.status).toBe(200);
+  const sessionBody = (await session.json()) as { user: { id: string } };
+  expect(sessionBody.user.id).toBe("user-1");
 });
