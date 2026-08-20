@@ -13,18 +13,19 @@ services:
       replicas: 1
     ports:
       - "${PORT:-3000}:3000"
+    # Every variable from .env, so adding one to .env.example never means
+    # editing this file too. Listing them explicitly was both a maintenance
+    # burden and a trap: an unset ${VAR} resolves to an EMPTY STRING rather than
+    # being absent, and an empty string defeats a schema default — the bot
+    # settings would have come up with BOT_MIN_DELAY_MS=0, and
+    # BOT_MAX_CONCURRENT_CALLS would fail its positive() check and stop the
+    # server booting at all.
+    env_file:
+      - .env
     environment:
+      # The container always listens on 3000. ${PORT} chooses only the host side
+      # of the mapping below, so it must not reach the process itself.
       PORT: 3000
-      TURSO_DATABASE_URL: ${TURSO_DATABASE_URL}
-      TURSO_AUTH_TOKEN: ${TURSO_AUTH_TOKEN}
-      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
-      BETTER_AUTH_URL: ${BETTER_AUTH_URL}
-      # Optional. Only for origins that genuinely vary per deployment, such as a
-      # web frontend on its own domain. The packaged desktop and Android clients
-      # are trusted without configuration (apps/server/src/auth/origins.ts).
-      BETTER_AUTH_TRUSTED_ORIGINS: ${BETTER_AUTH_TRUSTED_ORIGINS:-}
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:3000/health"]
       interval: 30s

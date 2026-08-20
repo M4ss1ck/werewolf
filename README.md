@@ -230,6 +230,13 @@ One container, one replica, built from the committed `Dockerfile` and
 The single replica is a hard constraint while the game hub, the per-game locks
 and event fanout live in-process.
 
+The container reads its whole environment from `.env` via `env_file`, so a
+variable added to `.env.example` needs no change here. That file must exist on
+the host; copy `.env.example` and fill it in. Anything left out of it stays
+*absent* rather than empty, which is what lets the code's own defaults apply —
+listing variables explicitly instead would pass `""` for the unset ones, and an
+empty string is not the same as unset to a schema with defaults.
+
 ## Releasing
 
 Releases are cut locally with `scripts/release.sh`. The root `package.json` is
