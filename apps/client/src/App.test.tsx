@@ -300,13 +300,21 @@ test("a game that finishes while it is open swaps to the game-over screen", asyn
 
   await screen.findByRole("button", { name: "Village" });
 
-  const live = StubWebSocket.instances.find((socket) => socket.url.endsWith("/api/games/g1/live"));
-  expect(live).toBeDefined();
+  // The socket is opened in an effect, which does not necessarily flush in the
+  // same turn as the render that findByRole above waited on. Reading instances
+  // synchronously made this test fail intermittently under load.
+  const live = await vi.waitFor(() => {
+    const socket = StubWebSocket.instances.find((candidate) =>
+      candidate.url.endsWith("/api/games/g1/live"),
+    );
+    expect(socket).toBeDefined();
+    return socket!;
+  });
   // The sync frame carries the finished snapshot; the socket's handler lifts
   // it to the shell, which swaps the in-game screen for the game-over one.
   await act(async () => {
-    live!.onopen?.();
-    live!.onmessage?.({
+    live.onopen?.();
+    live.onmessage?.({
       data: JSON.stringify({ type: "sync", snapshot: finished, events: [], cursor: 0 }),
     } as MessageEvent);
   });
