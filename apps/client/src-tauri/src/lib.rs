@@ -1,6 +1,15 @@
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-  tauri::Builder::default()
+  let builder = tauri::Builder::default();
+
+  // Must be the FIRST plugin registered. Without it the OS starts a second
+  // instance to deliver a werewolf:// deep link and the window the user is
+  // looking at never receives the session; with it, the URL is forwarded to the
+  // running instance instead. Desktop only — Android delivers links via intents.
+  #[cfg(desktop)]
+  let builder = builder.plugin(tauri_plugin_single_instance::init(|_app, _argv, _cwd| {}));
+
+  builder
     // Google refuses OAuth inside an embedded webview, so sign-in opens the
     // system browser (opener) and the server deep-links the result back into
     // the app (deep-link). See apps/server/src/routes/auth-handoff.ts.
