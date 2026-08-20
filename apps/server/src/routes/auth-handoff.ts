@@ -28,6 +28,11 @@
 import { Hono } from "hono";
 import { deleteCookie, getCookie } from "hono/cookie";
 import type { createAuth } from "../auth/auth.ts";
+import {
+  HANDOFF_STATE_PATTERN,
+  type HandoffClaims,
+  TELEGRAM_HANDOFF_COOKIE,
+} from "./auth-claim.ts";
 
 // Must match the scheme registered by the Tauri app.
 export const APP_SCHEME = "werewolf";
@@ -54,8 +59,18 @@ export function resolveHandoffLocale(
 }
 
 const COPY = {
-  en: { open: "Open Werewolf", body: "Click to finish signing in." },
-  es: { open: "Abrir Werewolf", body: "Haz clic para terminar de iniciar sesión." },
+  en: {
+    open: "Open Werewolf",
+    body: "Click to finish signing in.",
+    returned: "Signed in. You can close this tab and go back to Telegram.",
+    returnFailed: "Sign-in did not complete. Go back to Telegram and try again.",
+  },
+  es: {
+    open: "Abrir Werewolf",
+    body: "Haz clic para terminar de iniciar sesión.",
+    returned: "Sesión iniciada. Puedes cerrar esta pestaña y volver a Telegram.",
+    returnFailed: "No se pudo iniciar sesión. Vuelve a Telegram e inténtalo de nuevo.",
+  },
 };
 
 function escapeHtml(value: string): string {
@@ -85,6 +100,23 @@ font-weight:600;text-decoration:none}
 <body><main><p>${copy.body}</p><a href="${href}">${copy.open}</a></main></body></html>`;
 }
 
+/** The page the Telegram Mini App's browser leg shows when it is done. Same
+ * document shape as appHandoffPage, but there is no anchor: the Mini App is
+ * still running and polling, so the user just closes this tab and goes back. */
+export function telegramReturnPage(locale: HandoffLocale, failed: boolean): string {
+  const copy = COPY[locale];
+  return `<!doctype html>
+<html lang="${locale}">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Werewolf</title>
+<style>
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+background:#14110f;color:#e9e5da;font:16px/1.5 system-ui,sans-serif;text-align:center}
+main{padding:2rem}p{color:#a49c8e;margin:0}
+</style></head>
+<body><main><p>${failed ? copy.returnFailed : copy.returned}</p></main></body></html>`;
+}
+
 /** Read back what auth-start.ts stored. Shape is re-validated here rather than
  * trusted: the cookie is ours, but the port still ends up in a redirect. */
 export function readHandoffCookie(
@@ -109,22 +141,34 @@ export function loopbackUrl(port: number, state: string, params: Record<string, 
   return url.toString();
 }
 
-export function authHandoffRoutes(auth: ReturnType<typeof createAuth>) {
+export function authHandoffRoutes(auth: ReturnType<typeof createAuth>, claims: HandoffClaims) {
   const app = new Hono();
 
   app.get("/auth-handoff", async (c) => {
     const handoff = readHandoffCookie(getCookie(c, HANDOFF_COOKIE));
     if (handoff) deleteCookie(c, HANDOFF_COOKIE, { path: "/" });
+    const telegramCookie = getCookie(c, TELEGRAM_HANDOFF_COOKIE);
+    const telegram =
+      telegramCookie && HANDOFF_STATE_PATTERN.test(telegramCookie) ? telegramCookie : null;
+    if (telegramCookie) deleteCookie(c, TELEGRAM_HANDOFF_COOKIE, { path: "/" });
     const locale = resolveHandoffLocale(
       getCookie(c, HANDOFF_LOCALE_COOKIE),
       c.req.header("accept-language"),
     );
     deleteCookie(c, HANDOFF_LOCALE_COOKIE, { path: "/" });
 
-    // One reply, two shapes: a loopback redirect for desktop, the clickable
-    // page for Android. Both carry the same outcome.
+    // One reply, three shapes: a loopback redirect for desktop, the clickable
+    // page for Android, and a parked claim for the Telegram Mini App. All three
+    // carry the same outcome.
     const answer = (params: Record<string, string>) => {
       c.header("cache-control", "no-store");
+      if (telegram) {
+        claims.set(
+          telegram,
+          params.ott ? { ott: params.ott } : { code: params.error ?? "HANDOFF_FAILED" },
+        );
+        return c.html(telegramReturnPage(locale, !params.ott));
+      }
       if (handoff) return c.redirect(loopbackUrl(handoff.port, handoff.state, params), 302);
       const query = params.ott
         ? `ott=${encodeURIComponent(params.ott)}`

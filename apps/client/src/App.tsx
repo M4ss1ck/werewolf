@@ -14,6 +14,7 @@ import { api } from "./api/client.ts";
 import { type AuthDeepLinkResult, listenForAuthDeepLinks } from "./auth/deep-link.ts";
 import { listenForLoopbackCallback } from "./auth/loopback.ts";
 import { getSession, type Session } from "./auth/session.ts";
+import { listenForTelegramCallback } from "./auth/telegram.ts";
 import { TabBar } from "./components.tsx";
 import { i18n } from "./i18n/i18n.ts";
 import { currentRoute, navigate } from "./routes.tsx";
@@ -119,13 +120,16 @@ function Shell() {
         setSignInError(result.code);
       }
     };
-    // Two ways the token can arrive: the desktop loopback listener and the
-    // Android deep link. Only one of them ever fires on a given platform.
+    // Three ways the token can arrive: the desktop loopback listener, the
+    // Android deep link, and the Telegram Mini App poll. Only one of them ever
+    // fires on a given platform.
     const stopDeepLinks = listenForAuthDeepLinks(onResult);
     const stopLoopback = listenForLoopbackCallback(onResult);
+    const stopTelegram = listenForTelegramCallback(onResult);
     return () => {
       stopDeepLinks();
       stopLoopback();
+      stopTelegram();
     };
   }, []);
   const sendChatMessage = (text: string) =>

@@ -16,7 +16,7 @@ import { drizzle } from "drizzle-orm/libsql";
 import { createApp } from "../app.ts";
 import { createAuth } from "../auth/auth.ts";
 import { authSchema, createAuthTables } from "../auth/schema.ts";
-import { parseLoopbackHandoff } from "./auth-start.ts";
+import { parseLoopbackHandoff, parseTelegramHandoff } from "./auth-start.ts";
 
 const cleanups: (() => void)[] = [];
 afterEach(() => {
@@ -151,4 +151,52 @@ test("GET /api/auth-start ignores a malformed handoff and sets no cookie", async
   expect(response.headers.getSetCookie().some((c) => c.startsWith("werewolf.handoff="))).toBe(
     false,
   );
+});
+
+// The Telegram Mini App: a webview with no loopback listener and no custom
+// scheme, so it parks a nonce and polls for the token. The nonce rides in a
+// cookie across the Google round trip, exactly like the loopback handoff.
+
+test("GET /api/auth-start with a valid tg nonce sets the tg-handoff cookie and still forwards the OAuth state cookie", async () => {
+  const { client, authDb } = setup();
+  await createAuthTables(client);
+  const auth = createAuth(authDb as unknown as Db, env);
+  const app = createApp({ auth });
+
+  const state = "abcdefghijklmnopqrstuvwxyz012345";
+  const response = await app.request(`/api/auth-start?tg=${state}`);
+
+  expect(response.status).toBe(302);
+  const cookies = response.headers.getSetCookie();
+  const tg = cookies.find((cookie) => cookie.startsWith("werewolf.tg-handoff="));
+  expect(tg).toBeDefined();
+  expect(tg).toContain(`werewolf.tg-handoff=${state}`);
+  expect(tg).toContain("HttpOnly");
+  expect(tg).toContain("SameSite=Lax");
+  // The Google leg's own state cookie must still be forwarded alongside it —
+  // the regression the loopback test above already guards.
+  expect(cookies.some((cookie) => cookie.includes("better-auth.state"))).toBe(true);
+});
+
+test("GET /api/auth-start with an invalid tg nonce sets no tg-handoff cookie", async () => {
+  const { client, authDb } = setup();
+  await createAuthTables(client);
+  const auth = createAuth(authDb as unknown as Db, env);
+  const app = createApp({ auth });
+
+  const response = await app.request("/api/auth-start?tg=not-a-valid-nonce");
+
+  expect(response.status).toBe(302);
+  expect(response.headers.getSetCookie().some((c) => c.startsWith("werewolf.tg-handoff="))).toBe(
+    false,
+  );
+});
+
+test("parseTelegramHandoff accepts only a valid nonce", () => {
+  const state = "abcdefghijklmnopqrstuvwxyz012345";
+  expect(parseTelegramHandoff(state)).toBe(state);
+  expect(parseTelegramHandoff(undefined)).toBeNull();
+  // Too short to be unguessable, or carrying punctuation.
+  expect(parseTelegramHandoff("short")).toBeNull();
+  expect(parseTelegramHandoff(`${state}/../`)).toBeNull();
 });

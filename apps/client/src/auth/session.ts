@@ -3,6 +3,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { apiUrl } from "../api/origin.ts";
 import { i18n } from "../i18n/i18n.ts";
 import { startLoopbackHandoff } from "./loopback.ts";
+import { startTelegramHandoff, telegramWebApp } from "./telegram.ts";
 import { captureAuthToken, clearAuthToken, getAuthToken } from "./token.ts";
 
 export interface SessionUser {
@@ -44,6 +45,15 @@ export async function signInWithGoogle() {
     // renders outside the app and cannot read its i18n.
     const handoff = await startLoopbackHandoff(i18n.language);
     await openUrl(apiUrl(handoff ? `/api/auth-start?${handoff}` : "/api/auth-start"));
+    return;
+  }
+
+  // A Telegram Mini App is an embedded webview too, and Google answers OAuth in
+  // one with 403 disallowed_useragent. Same problem as the packaged app, same
+  // answer: run the leg in a real browser. There is no loopback listener here
+  // and no custom scheme, so the token comes back through a polled claim.
+  if (telegramWebApp()) {
+    await startTelegramHandoff(i18n.language);
     return;
   }
 

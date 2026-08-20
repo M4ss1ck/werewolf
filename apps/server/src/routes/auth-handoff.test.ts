@@ -16,7 +16,9 @@ import { drizzle } from "drizzle-orm/libsql";
 import { createApp } from "../app.ts";
 import { createAuth } from "../auth/auth.ts";
 import { authSchema, createAuthTables } from "../auth/schema.ts";
+import { createHandoffClaims, TELEGRAM_HANDOFF_COOKIE } from "./auth-claim.ts";
 import {
+  authHandoffRoutes,
   HANDOFF_COOKIE,
   HANDOFF_LOCALE_COOKIE,
   loopbackUrl,
@@ -282,4 +284,63 @@ test("with a Spanish app locale the page is Spanish even for an English browser"
   const html = await response.text();
   expect(html).toContain('lang="es"');
   expect(html).toContain("Abrir Werewolf");
+});
+
+// The Telegram Mini App: a webview with no loopback listener and no custom
+// scheme, so the token is parked under the nonce it polls for. The route is
+// driven directly with a claims instance so the parked claim can be asserted.
+
+const TG_STATE = "abcdefghijklmnopqrstuvwxyz012345";
+
+test("with a tg-handoff cookie and a session, the response is HTML and the claim is parked with the ott", async () => {
+  const { client, authDb } = setup();
+  await createAuthTables(client);
+  const token = await seedSession(authDb);
+  const auth = createAuth(authDb as unknown as Db, env);
+  const claims = createHandoffClaims();
+  const app = authHandoffRoutes(auth, claims);
+
+  const response = await app.request("/auth-handoff", {
+    headers: { ...bearerHeaders(token), cookie: `${TELEGRAM_HANDOFF_COOKIE}=${TG_STATE}` },
+  });
+
+  // A page, not a redirect: the Mini App is still running and polling.
+  expect(response.status).toBe(200);
+  expect(response.headers.get("location")).toBeNull();
+  expect(response.headers.get("content-type")).toContain("text/html");
+  const claim = claims.take(TG_STATE);
+  expect(claim).not.toBeNull();
+  expect("ott" in claim!).toBe(true);
+  expect((claim as { ott: string }).ott.length).toBeGreaterThan(0);
+});
+
+test("with a tg-handoff cookie and no session, the claim is parked with UNAUTHENTICATED and the response is HTML", async () => {
+  const { client, authDb } = setup();
+  await createAuthTables(client);
+  const auth = createAuth(authDb as unknown as Db, env);
+  const claims = createHandoffClaims();
+  const app = authHandoffRoutes(auth, claims);
+
+  const response = await app.request("/auth-handoff", {
+    headers: { cookie: `${TELEGRAM_HANDOFF_COOKIE}=${TG_STATE}` },
+  });
+
+  expect(response.status).toBe(200);
+  expect(response.headers.get("content-type")).toContain("text/html");
+  expect(claims.take(TG_STATE)).toEqual({ code: "UNAUTHENTICATED" });
+});
+
+test("the tg-handoff cookie is cleared on the response", async () => {
+  const { client, authDb } = setup();
+  await createAuthTables(client);
+  const token = await seedSession(authDb);
+  const auth = createAuth(authDb as unknown as Db, env);
+  const claims = createHandoffClaims();
+  const app = authHandoffRoutes(auth, claims);
+
+  const response = await app.request("/auth-handoff", {
+    headers: { ...bearerHeaders(token), cookie: `${TELEGRAM_HANDOFF_COOKIE}=${TG_STATE}` },
+  });
+
+  expect(response.headers.get("set-cookie") ?? "").toContain(TELEGRAM_HANDOFF_COOKIE);
 });

@@ -19,11 +19,17 @@
 import { Hono } from "hono";
 import type { createAuth } from "../auth/auth.ts";
 import {
+  HANDOFF_STATE_PATTERN,
+  type HandoffClaims,
+  TELEGRAM_HANDOFF_COOKIE,
+} from "./auth-claim.ts";
+import {
   APP_SCHEME,
   appHandoffPage,
   HANDOFF_COOKIE,
   HANDOFF_LOCALE_COOKIE,
   resolveHandoffLocale,
+  telegramReturnPage,
 } from "./auth-handoff.ts";
 
 /** The loopback listener's port and the nonce it will demand back, as the
@@ -45,11 +51,19 @@ export function parseLoopbackHandoff(
   return { port: parsed, state };
 }
 
-export function authStartRoutes(auth: ReturnType<typeof createAuth>) {
+/** The Telegram Mini App's nonce, as the client sent it. Same shape as the
+ * loopback nonce: length and charset only, never interpreted. */
+export function parseTelegramHandoff(state: string | undefined): string | null {
+  if (typeof state !== "string" || !HANDOFF_STATE_PATTERN.test(state)) return null;
+  return state;
+}
+
+export function authStartRoutes(auth: ReturnType<typeof createAuth>, claims: HandoffClaims) {
   const app = new Hono();
 
   app.get("/auth-start", async (c) => {
     const handoff = parseLoopbackHandoff(c.req.query("port"), c.req.query("state"));
+    const telegram = parseTelegramHandoff(c.req.query("tg"));
     // The language the user picked in the app, not the one their browser is in.
     const appLocale = c.req.query("locale");
     const locale = resolveHandoffLocale(appLocale, c.req.header("accept-language"));
@@ -64,6 +78,13 @@ export function authStartRoutes(auth: ReturnType<typeof createAuth>) {
       // A page, not a redirect, for the same reason as auth-handoff: a browser
       // drops a gesture-less redirect into a custom scheme.
       c.header("cache-control", "no-store");
+      if (telegram) {
+        // The Mini App is already polling, so it learns the outcome from the
+        // claim; this browser tab only needs a page that does not offer it a
+        // werewolf:// link it has no app to open.
+        claims.set(telegram, { code: "HANDOFF_FAILED" });
+        return c.html(telegramReturnPage(locale, true));
+      }
       return c.html(appHandoffPage(`${APP_SCHEME}://auth?error=HANDOFF_FAILED`, locale));
     }
 
@@ -90,6 +111,18 @@ export function authStartRoutes(auth: ReturnType<typeof createAuth>) {
       redirect.headers.append(
         "set-cookie",
         `${HANDOFF_COOKIE}=${handoff.port}.${handoff.state}` +
+          `; Max-Age=600; Path=/; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`,
+      );
+    }
+
+    if (telegram) {
+      // Same hand-made Response, same reason as the loopback cookie above: the
+      // Better Auth state cookie must survive, so this is appended directly and
+      // never via hono/cookie. The value is already validated to [A-Za-z0-9_-].
+      const secure = new URL(c.req.url).protocol === "https:";
+      redirect.headers.append(
+        "set-cookie",
+        `${TELEGRAM_HANDOFF_COOKIE}=${telegram}` +
           `; Max-Age=600; Path=/; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`,
       );
     }

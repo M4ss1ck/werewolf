@@ -11,6 +11,7 @@ import {
 import { GameCoordinator } from "./game/coordinator.ts";
 import type { GameHub } from "./live/game-hub.ts";
 import type { GlobalChatHub } from "./live/global-chat-hub.ts";
+import { authClaimRoutes, createHandoffClaims } from "./routes/auth-claim.ts";
 import { authHandoffRoutes } from "./routes/auth-handoff.ts";
 import { authStartRoutes } from "./routes/auth-start.ts";
 import type { BotRoutesOptions } from "./routes/bots.ts";
@@ -86,13 +87,16 @@ export function createApp(options: AppOptions = {}) {
 
   if (options.auth) app.on(["GET", "POST"], "/api/auth/*", (c) => options.auth!.handler(c.req.raw));
 
-  // The auth-handoff and auth-start routes must be mounted here, BEFORE the
-  // block below: the later block runs every /api/* request through
+  // The auth-handoff, auth-start and auth-claim routes must be mounted here,
+  // BEFORE the block below: the later block runs every /api/* request through
   // sessionMiddleware and requireViewer, and requireViewer would answer these
   // routes with a 401 JSON body instead of letting them complete the browser-to-app
-  // handoff.
-  if (options.auth) app.route("/api", authHandoffRoutes(options.auth));
-  if (options.auth) app.route("/api", authStartRoutes(options.auth));
+  // handoff. auth-claim in particular is polled by a Telegram Mini App that has
+  // no session yet, so it must never be gated behind requireViewer.
+  const handoffClaims = createHandoffClaims();
+  if (options.auth) app.route("/api", authHandoffRoutes(options.auth, handoffClaims));
+  if (options.auth) app.route("/api", authStartRoutes(options.auth, handoffClaims));
+  app.route("/api", authClaimRoutes(handoffClaims));
 
   if (options.repository || options.coordinator) {
     const coordinator = options.coordinator ?? new GameCoordinator(options.repository!);
