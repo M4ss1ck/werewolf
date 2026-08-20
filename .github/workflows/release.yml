@@ -20,6 +20,27 @@ jobs:
       version: ${{ steps.get_version.outputs.version }}
       changelog: ${{ steps.changelog.outputs.notes }}
     steps:
+      # The desktop and Android clients bake their server origin in at build
+      # time. Empty ships artifacts that resolve /api against tauri://localhost
+      # and reach nothing — no error on screen, no failing job, just a release
+      # nobody can sign in to. Check it before a single artifact is built.
+      - name: Verify the client has a server origin
+        env:
+          VITE_SERVER_ORIGIN: ${{ vars.VITE_SERVER_ORIGIN }}
+        run: |
+          if [ -z "$VITE_SERVER_ORIGIN" ]; then
+            echo "::error::VITE_SERVER_ORIGIN is not set. Set the repository variable (Settings > Secrets and variables > Actions > Variables) to the deployed server origin, e.g. https://werewolf.example.com"
+            exit 1
+          fi
+          case "$VITE_SERVER_ORIGIN" in
+            https://*|http://*) ;;
+            *)
+              echo "::error::VITE_SERVER_ORIGIN must be an absolute origin including the scheme, got '$VITE_SERVER_ORIGIN'"
+              exit 1
+              ;;
+          esac
+          echo "Clients in this release will talk to $VITE_SERVER_ORIGIN"
+
       - name: Checkout repository
         uses: actions/checkout@v6
 
