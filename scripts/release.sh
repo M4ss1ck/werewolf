@@ -336,7 +336,9 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo
     print_status "Next steps:"
     print_status "  1. Open a PR from $RELEASE_BRANCH into main and merge it."
-    print_status "  2. Review the release notes (they come from CHANGELOG.md)."
+    print_status "  2. Watch the Release workflow. It builds into a draft and"
+    print_status "     publishes it only once every artifact has uploaded, so a"
+    print_status "     failed run leaves a draft you can delete and re-run."
 else
     print_warning "Release cancelled. No changes were pushed."
     print_warning "To undo local changes, run:"

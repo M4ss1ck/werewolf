@@ -410,3 +410,19 @@ jobs:
           generate_release_notes: ${{ needs.prepare.outputs.changelog == '' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Every upload above lands in a draft, so the release is never visible with a
+  # partial set of artifacts and a half-built release can simply be deleted.
+  # Publishing is the last step, and only once all five builds have succeeded.
+  publish:
+    needs: [prepare, build-linux, build-windows, build-android, build-docker, build-arch]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: v${{ needs.prepare.outputs.version }}
+        run: gh release edit "$TAG" --draft=false --latest
