@@ -5,6 +5,22 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.6] - 2026-08-20
+
+### Fixed
+- Fixed a flaky game-over test by waiting for the live socket instead of reading it synchronously
+- Raised the app window when a deep link arrives so sign-in completion is visible to the user
+- Enabled logging in release builds so packaged artifacts can produce diagnostics
+- Surfaced failed sign-in handoff codes on the sign-in screen instead of silently dropping them
+- Prevented caching of app-handoff pages that embed one-time tokens
+- Encoded the WebSocket bearer subprotocol as base64url to fix authentication for packaged clients
+- Changed the browser-to-app handoff to require a user click rather than a server redirect
+
+### Changed
+- Release workflow now publishes only after all artifacts have uploaded, avoiding partial releases
+- Release workflow fails early if the server origin is not configured, preventing unusable builds
+- Updated documentation to describe the handoff as a click, not a redirect
+
 ## [0.1.5] - 2026-08-20
 
 ### Fixed
