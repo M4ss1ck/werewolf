@@ -13,6 +13,7 @@ class FakeWebSocket {
   static readonly CLOSED = 3;
 
   url: string;
+  protocols: string | string[] | undefined;
   readyState = FakeWebSocket.CONNECTING;
   sent: string[] = [];
   onopen: (() => void) | null = null;
@@ -20,8 +21,9 @@ class FakeWebSocket {
   onclose: (() => void) | null = null;
   onerror: (() => void) | null = null;
 
-  constructor(url: string) {
+  constructor(url: string, protocols?: string | string[]) {
     this.url = url;
+    this.protocols = protocols;
     FakeWebSocket.instances.push(this);
   }
 
@@ -82,6 +84,31 @@ test("a cold open subscribes with cursor 0 by default", () => {
   expect(sentFrame(socket)).toMatchObject({ type: "subscribe", cursor: 0 });
 
   conn.close();
+});
+
+test("passes the bearer subprotocol when a token is stored and no second argument when none is", () => {
+  vi.stubGlobal("WebSocket", FakeWebSocket);
+  vi.stubGlobal("localStorage", {
+    getItem: () => "token-6",
+    setItem: vi.fn(),
+    removeItem: vi.fn(),
+  });
+
+  const withToken = new GlobalChatConnection();
+  withToken.connect();
+  expect(lastSocket().protocols).toEqual(["bearer", "token-6"]);
+  withToken.close();
+
+  vi.stubGlobal("localStorage", {
+    getItem: () => null,
+    setItem: vi.fn(),
+    removeItem: vi.fn(),
+  });
+
+  const withoutToken = new GlobalChatConnection();
+  withoutToken.connect();
+  expect(lastSocket().protocols).toBeUndefined();
+  withoutToken.close();
 });
 
 test("a connection seeded with a cursor subscribes from it, not from 0", () => {

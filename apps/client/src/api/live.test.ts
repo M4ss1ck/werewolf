@@ -13,6 +13,7 @@ class FakeWebSocket {
   static readonly CLOSED = 3;
 
   url: string;
+  protocols: string | string[] | undefined;
   readyState = FakeWebSocket.CONNECTING;
   sent: string[] = [];
   onopen: (() => void) | null = null;
@@ -20,8 +21,9 @@ class FakeWebSocket {
   onclose: (() => void) | null = null;
   onerror: (() => void) | null = null;
 
-  constructor(url: string) {
+  constructor(url: string, protocols?: string | string[]) {
     this.url = url;
+    this.protocols = protocols;
     FakeWebSocket.instances.push(this);
   }
 
@@ -122,6 +124,31 @@ test("subscribes with the current cursor and applies a sync frame's snapshot", (
   );
   expect(onSnapshot).toHaveBeenCalledWith(expect.objectContaining({ cursor: 9 }));
   expect(conn.getSnapshot()).toMatchObject({ cursor: 9 });
+});
+
+test("passes the bearer subprotocol when a token is stored and no second argument when none is", () => {
+  vi.stubGlobal("WebSocket", FakeWebSocket);
+  vi.stubGlobal("localStorage", {
+    getItem: () => "token-5",
+    setItem: vi.fn(),
+    removeItem: vi.fn(),
+  });
+
+  const withToken = new LiveGameConnection(gameId, 0 as EventId);
+  withToken.connect();
+  expect(lastSocket().protocols).toEqual(["bearer", "token-5"]);
+  withToken.close();
+
+  vi.stubGlobal("localStorage", {
+    getItem: () => null,
+    setItem: vi.fn(),
+    removeItem: vi.fn(),
+  });
+
+  const withoutToken = new LiveGameConnection(gameId, 0 as EventId);
+  withoutToken.connect();
+  expect(lastSocket().protocols).toBeUndefined();
+  withoutToken.close();
 });
 
 test("advances the cursor as events arrive, so a reconnect subscribes from the newer cursor", () => {

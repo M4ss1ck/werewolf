@@ -10,6 +10,7 @@ import type {
   ViewerGameSnapshot,
 } from "@werewolf/protocol";
 
+import { captureAuthToken, getAuthToken } from "../auth/token.ts";
 import { apiUrl } from "./origin.ts";
 
 export class ApiError extends Error {
@@ -35,11 +36,17 @@ export interface CreateGameInput {
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const token = getAuthToken();
   const response = await fetch(apiUrl(path), {
     ...init,
     credentials: "include",
-    headers: { "content-type": "application/json", ...init.headers },
+    headers: {
+      "content-type": "application/json",
+      ...init.headers,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
   });
+  captureAuthToken(response);
   if (!response.ok) {
     let code = "UNKNOWN_ERROR";
     try {

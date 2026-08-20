@@ -39,6 +39,56 @@ describe("api client", () => {
     );
   });
 
+  test("sends the bearer token when one is stored and omits it entirely when none is", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(() => Promise.resolve(new Response("[]", { status: 200 })));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("localStorage", {
+      getItem: () => "token-9",
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+    });
+
+    await api.listGames();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/games",
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: "Bearer token-9" }),
+      }),
+    );
+
+    vi.stubGlobal("localStorage", {
+      getItem: () => null,
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+    });
+    fetchMock.mockClear();
+
+    await api.listGames();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/games",
+      expect.objectContaining({ headers: { "content-type": "application/json" } }),
+    );
+  });
+
+  test("captures a set-auth-token header from an API response", async () => {
+    const storage = { getItem: vi.fn(() => null), setItem: vi.fn(), removeItem: vi.fn() };
+    vi.stubGlobal("localStorage", storage);
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response("[]", { status: 200, headers: { "set-auth-token": "token-7" } }),
+        ),
+    );
+
+    await api.listGames();
+
+    expect(storage.setItem).toHaveBeenCalledWith("werewolf.auth-token", "token-7");
+  });
+
   test("a command carries a generated commandId, different on every post", async () => {
     const fetchMock = vi
       .fn()

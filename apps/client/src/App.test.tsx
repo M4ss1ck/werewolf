@@ -115,7 +115,9 @@ test("opens the chat socket once signed in with a username", async () => {
   render(<App />);
 
   await screen.findByRole("heading", { name: "Open games" });
-  expect(StubWebSocket.instances.length).toBeGreaterThan(0);
+  // The socket opens in an effect, which is not guaranteed to have run by the
+  // time the heading renders, so settle rather than assume the ordering.
+  await waitFor(() => expect(StubWebSocket.instances.length).toBeGreaterThan(0));
 });
 
 test("renders the cancelled screen for a cancelled game", async () => {
