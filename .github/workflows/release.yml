@@ -136,10 +136,14 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      # The packaged client bakes its server origin in at build time, so a
+      # desktop bundle built without it reaches nothing. Set the
+      # VITE_SERVER_ORIGIN repository variable to the deployed server origin.
       - name: Build the app
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VITE_SERVER_ORIGIN: ${{ vars.VITE_SERVER_ORIGIN }}
         with:
           projectPath: apps/client
           tagName: v${{ needs.prepare.outputs.version }}
@@ -198,10 +202,14 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      # The packaged client bakes its server origin in at build time, so a
+      # desktop bundle built without it reaches nothing. Set the
+      # VITE_SERVER_ORIGIN repository variable to the deployed server origin.
       - name: Build the app
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VITE_SERVER_ORIGIN: ${{ vars.VITE_SERVER_ORIGIN }}
         with:
           projectPath: apps/client
           tagName: v${{ needs.prepare.outputs.version }}

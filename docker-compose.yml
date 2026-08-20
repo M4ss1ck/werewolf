@@ -19,6 +19,10 @@ services:
       TURSO_AUTH_TOKEN: ${TURSO_AUTH_TOKEN}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL}
+      # Optional. Only for origins that genuinely vary per deployment, such as a
+      # web frontend on its own domain. The packaged desktop and Android clients
+      # are trusted without configuration (apps/server/src/auth/origins.ts).
+      BETTER_AUTH_TRUSTED_ORIGINS: ${BETTER_AUTH_TRUSTED_ORIGINS:-}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
     healthcheck:
