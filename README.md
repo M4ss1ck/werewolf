@@ -278,6 +278,46 @@ grouped commit list.
 
 Use `--dry-run` to preview the generated changelog before committing anything.
 
+## Authentication on packaged clients
+
+The web build signs in with cookies and nothing below applies to it. The
+packaged desktop and Android builds cannot use cookies at all: their webview is
+cross-site to the server and never returns the session cookie, which was
+confirmed by driving a real packaged Linux build against an instrumented server.
+They authenticate with a bearer token instead.
+
+Signing in cannot happen in the webview either — Google refuses OAuth inside an
+embedded one — so it moves to the system browser and comes back through a deep
+link:
+
+1. The app asks the server for the Google URL and opens it in the **system
+   browser**, passing `/api/auth-handoff` as the callback.
+2. Google returns to the server, which establishes the session — as a cookie in
+   that browser, where the app cannot reach it.
+3. `/api/auth-handoff` mints a **one-time token** for that session and redirects
+   to `werewolf://auth?ott=...`.
+4. The OS hands the link to the running app, which exchanges the token at
+   `/api/auth/one-time-token/verify` and keeps the `set-auth-token` it gets back.
+
+From then on the token goes out as `Authorization: Bearer` on every request, and
+as a `["bearer", token]` subprotocol on the live sockets, because a WebSocket
+handshake cannot carry a header. It lives in `localStorage`, which — unlike the
+cookie jar — survives an app restart.
+
+Two things a deployment must get right, or the packaged apps fail:
+
+- `BETTER_AUTH_TRUSTED_ORIGINS` must list `tauri://localhost` and
+  `http://tauri.localhost`. It gates CORS and the socket handshake, so without
+  them every request from a packaged client is refused.
+- `VITE_SERVER_ORIGIN` must be set when building the client, or the app has no
+  server to reach.
+
+The `werewolf://` scheme is declared in `tauri.conf.json` and must stay in step
+with `APP_SCHEME` in `apps/server/src/routes/auth-handoff.ts`. On desktop the
+single-instance plugin forwards the link to the app already running; without it
+the OS starts a second copy and the window the user is looking at never sees the
+session.
+
 ## Android
 
 The Android build is a Tauri target, driven by three package scripts:
