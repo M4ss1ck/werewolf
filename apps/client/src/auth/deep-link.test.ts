@@ -63,20 +63,30 @@ describe("completeAuthFromUrl", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  test("a non-2xx response returns HANDOFF_FAILED", async () => {
+  // These three used to share one HANDOFF_FAILED, which is why a failed
+  // sign-in could not be told apart from a server that never answered.
+  test("a rejected token says so, distinctly from a broken server", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 400 })));
+
+    const result = await completeAuthFromUrl("werewolf://auth?ott=abc123");
+
+    expect(result).toEqual({ ok: false, code: "TOKEN_REJECTED" });
+  });
+
+  test("a 5xx is reported as the server failing, not the token", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 500 })));
 
     const result = await completeAuthFromUrl("werewolf://auth?ott=abc123");
 
-    expect(result).toEqual({ ok: false, code: "HANDOFF_FAILED" });
+    expect(result).toEqual({ ok: false, code: "VERIFY_FAILED" });
   });
 
-  test("a rejecting fetch returns HANDOFF_FAILED rather than throwing", async () => {
+  test("a rejecting fetch is reported as unreachable rather than throwing", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
 
     const result = await completeAuthFromUrl("werewolf://auth?ott=abc123");
 
-    expect(result).toEqual({ ok: false, code: "HANDOFF_FAILED" });
+    expect(result).toEqual({ ok: false, code: "VERIFY_UNREACHABLE" });
   });
 });
 
