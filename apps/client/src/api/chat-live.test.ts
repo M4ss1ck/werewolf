@@ -86,17 +86,17 @@ test("a cold open subscribes with cursor 0 by default", () => {
   conn.close();
 });
 
-test("passes the bearer subprotocol when a token is stored and no second argument when none is", () => {
+test("passes a browser-safe bearer subprotocol when a token is stored and no second argument when none is", () => {
   vi.stubGlobal("WebSocket", FakeWebSocket);
   vi.stubGlobal("localStorage", {
-    getItem: () => "token-6",
+    getItem: () => "session/token=",
     setItem: vi.fn(),
     removeItem: vi.fn(),
   });
 
   const withToken = new GlobalChatConnection();
   withToken.connect();
-  expect(lastSocket().protocols).toEqual(["bearer", "token-6"]);
+  expect(lastSocket().protocols).toEqual(["bearer", "c2Vzc2lvbi90b2tlbj0"]);
   withToken.close();
 
   vi.stubGlobal("localStorage", {

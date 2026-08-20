@@ -35,3 +35,8 @@ export function captureAuthToken(response: Response): void {
   const token = response.headers.get("set-auth-token");
   if (token) setAuthToken(token);
 }
+
+/** Encode the opaque ASCII session token as a WebSocket-safe subprotocol. */
+export function webSocketBearerProtocols(token: string): ["bearer", string] {
+  return ["bearer", btoa(token).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "")];
+}

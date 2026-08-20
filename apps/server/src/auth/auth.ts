@@ -87,17 +87,26 @@ export const requireViewer = createMiddleware(async (c, next) => {
 });
 
 // A browser cannot set an Authorization header on a WebSocket handshake, so the
-// live sockets carry the token in the subprotocol instead: the client opens
-// `new WebSocket(url, ["bearer", token])`, which arrives as the request header
-// `sec-websocket-protocol: "bearer, <token>"`. When that is present (and no
-// Authorization header is), rebuild the headers with the token as a bearer
-// credential so the bearer plugin can authenticate the handshake.
+// live sockets carry a base64url encoding of the token in the subprotocol
+// instead. The encoding matters: Better Auth tokens contain `/` and `=`, which
+// browsers reject in WebSocket protocol names. When the protocol is present
+// (and no Authorization header is), rebuild the headers with the decoded token
+// as a bearer credential so the bearer plugin can authenticate the handshake.
 function withWebSocketBearer(request: Request): Headers {
   if (request.headers.has("authorization")) return request.headers;
   const protocol = request.headers.get("sec-websocket-protocol");
   if (!protocol) return request.headers;
-  const [scheme, token, ...rest] = protocol.split(",").map((part) => part.trim());
-  if (scheme?.toLowerCase() !== "bearer" || !token || rest.length > 0) return request.headers;
+  const [scheme, encodedToken, ...rest] = protocol.split(",").map((part) => part.trim());
+  if (scheme?.toLowerCase() !== "bearer" || !encodedToken || rest.length > 0)
+    return request.headers;
+  const base64 = encodedToken.replaceAll("-", "+").replaceAll("_", "/");
+  if (base64.length % 4 === 1) return request.headers;
+  let token: string;
+  try {
+    token = atob(base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "="));
+  } catch {
+    return request.headers;
+  }
   const headers = new Headers(request.headers);
   headers.set("authorization", `Bearer ${token}`);
   return headers;

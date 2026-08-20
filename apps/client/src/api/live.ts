@@ -7,7 +7,7 @@ import type {
 } from "@werewolf/protocol";
 import { ServerFrameSchema, SubscribeFrameSchema } from "@werewolf/protocol";
 
-import { getAuthToken } from "../auth/token.ts";
+import { getAuthToken, webSocketBearerProtocols } from "../auth/token.ts";
 import { api } from "./client.ts";
 import { wsUrl } from "./origin.ts";
 
@@ -41,11 +41,11 @@ export class LiveGameConnection {
   connect() {
     this.closed = false;
     this.setStatus(this.retry ? "reconnecting" : "connecting");
-    // A handshake cannot carry an Authorization header, so the token rides in
-    // the subprotocol when one is stored.
+    // A handshake cannot carry an Authorization header, so a browser-safe
+    // encoding of the token rides in the subprotocol when one is stored.
     const token = getAuthToken();
     this.socket = token
-      ? new WebSocket(wsUrl(`/api/games/${this.gameId}/live`), ["bearer", token])
+      ? new WebSocket(wsUrl(`/api/games/${this.gameId}/live`), webSocketBearerProtocols(token))
       : new WebSocket(wsUrl(`/api/games/${this.gameId}/live`));
     this.socket.onopen = () => {
       this.retry = 0;

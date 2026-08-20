@@ -126,17 +126,17 @@ test("subscribes with the current cursor and applies a sync frame's snapshot", (
   expect(conn.getSnapshot()).toMatchObject({ cursor: 9 });
 });
 
-test("passes the bearer subprotocol when a token is stored and no second argument when none is", () => {
+test("passes a browser-safe bearer subprotocol when a token is stored and no second argument when none is", () => {
   vi.stubGlobal("WebSocket", FakeWebSocket);
   vi.stubGlobal("localStorage", {
-    getItem: () => "token-5",
+    getItem: () => "session/token=",
     setItem: vi.fn(),
     removeItem: vi.fn(),
   });
 
   const withToken = new LiveGameConnection(gameId, 0 as EventId);
   withToken.connect();
-  expect(lastSocket().protocols).toEqual(["bearer", "token-5"]);
+  expect(lastSocket().protocols).toEqual(["bearer", "c2Vzc2lvbi90b2tlbj0"]);
   withToken.close();
 
   vi.stubGlobal("localStorage", {

@@ -39,7 +39,10 @@ const env = {
   GOOGLE_CLIENT_SECRET: "google-secret",
 };
 
-async function seedSession(authDb: ReturnType<typeof drizzle<typeof authSchema>>) {
+async function seedSession(
+  authDb: ReturnType<typeof drizzle<typeof authSchema>>,
+  token = "session-token-1",
+) {
   const now = Date.now();
   await authDb.insert(authSchema.user).values({
     id: "user-1",
@@ -52,13 +55,13 @@ async function seedSession(authDb: ReturnType<typeof drizzle<typeof authSchema>>
   });
   await authDb.insert(authSchema.session).values({
     id: "session-1",
-    token: "session-token-1",
+    token,
     expiresAt: new Date(now + 60_000),
     createdAt: new Date(now),
     updatedAt: new Date(now),
     userId: "user-1",
   });
-  return "session-token-1";
+  return token;
 }
 
 test("an Authorization: Bearer header authenticates one of werewolf's own routes", async () => {
@@ -77,16 +80,16 @@ test("an Authorization: Bearer header authenticates one of werewolf's own routes
   expect(viewer).toEqual({ userId: "user-1", username: "alice" });
 });
 
-test("the same token as a WebSocket subprotocol resolves to the same viewer", async () => {
+test("a browser-safe WebSocket bearer subprotocol resolves to the same viewer", async () => {
   const { client, authDb } = setup();
   await createAuthTables(client);
-  const token = await seedSession(authDb);
+  await seedSession(authDb, "session/token=");
   const auth = createAuth(authDb as unknown as Db, env);
 
   const viewer = await resolveAuthSession(
     auth,
     new Request("http://localhost/api/games/g-1/live", {
-      headers: { "sec-websocket-protocol": `bearer, ${token}` },
+      headers: { "sec-websocket-protocol": "bearer, c2Vzc2lvbi90b2tlbj0" },
     }),
   );
 

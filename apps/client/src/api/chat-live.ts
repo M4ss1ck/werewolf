@@ -1,7 +1,7 @@
 import type { ChatMessage, ChatMessageId, ChatServerFrame } from "@werewolf/protocol";
 import { ChatServerFrameSchema, ChatSubscribeFrameSchema } from "@werewolf/protocol";
 
-import { getAuthToken } from "../auth/token.ts";
+import { getAuthToken, webSocketBearerProtocols } from "../auth/token.ts";
 import { wsUrl } from "./origin.ts";
 
 export interface ChatHandlers {
@@ -26,11 +26,11 @@ export class GlobalChatConnection {
 
   connect() {
     this.closed = false;
-    // A handshake cannot carry an Authorization header, so the token rides in
-    // the subprotocol when one is stored.
+    // A handshake cannot carry an Authorization header, so a browser-safe
+    // encoding of the token rides in the subprotocol when one is stored.
     const token = getAuthToken();
     this.socket = token
-      ? new WebSocket(wsUrl("/api/chat/live"), ["bearer", token])
+      ? new WebSocket(wsUrl("/api/chat/live"), webSocketBearerProtocols(token))
       : new WebSocket(wsUrl("/api/chat/live"));
     this.socket.onopen = () => {
       this.retry = 0;
