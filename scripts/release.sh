@@ -172,6 +172,7 @@ EOF
 call_chat_completions() {
     local base_url="$1" api_key="$2" model="$3" prompt="$4"
     local payload response
+    base_url="${base_url%/}"
     payload="$(jq -n --arg model "$model" --arg content "$prompt" \
         '{model: $model, temperature: 0.3, messages: [{role: "user", content: $content}]}')"
     response="$(curl -sS --fail "$base_url/chat/completions" \
@@ -212,8 +213,14 @@ if [ -n "$LAST_TAG" ]; then
     RANGE="$LAST_TAG..HEAD"
     print_status "Generating changelog for commits in $RANGE"
 else
-    RANGE="HEAD"
-    print_warning "No previous tag found; using full history."
+    LAST_CHANGELOG_COMMIT="$(git log -n1 --format='%H' -- CHANGELOG.md)"
+    if [ -n "$LAST_CHANGELOG_COMMIT" ]; then
+        RANGE="$LAST_CHANGELOG_COMMIT..HEAD"
+        print_warning "No previous tag found; using commits since the last CHANGELOG.md update."
+    else
+        RANGE="HEAD"
+        print_warning "No previous tag or changelog history found; using full history."
+    fi
 fi
 
 CHANGELOG_SECTION="$(generate_changelog "$RANGE")"
@@ -291,7 +298,14 @@ fi
 
 # --- Commit, tag, push -----------------------------------------------------
 print_status "Creating git commit"
-git add package.json apps/client/src-tauri/Cargo.toml apps/client/src-tauri/Cargo.lock apps/client/src-tauri/tauri.conf.json CHANGELOG.md
+git add \
+    package.json \
+    apps/*/package.json \
+    packages/*/package.json \
+    apps/client/src-tauri/Cargo.toml \
+    apps/client/src-tauri/Cargo.lock \
+    apps/client/src-tauri/tauri.conf.json \
+    CHANGELOG.md
 git commit -m "chore: bump version to $VERSION"
 
 print_status "Creating git tag $TAG"

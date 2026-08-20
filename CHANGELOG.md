@@ -5,6 +5,28 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2026-08-20
+
+### Fixed
+- Corrected Linux artifact layout so Arch packaging finds the expected target and icon paths
+
+## [0.1.3] - 2026-08-20
+
+### Fixed
+- Ensure release commits include all workspace manifests for a complete version bump
+- Add integration test coverage for the full release workflow
+
+## [0.1.2] - 2026-08-20
+
+### Fixed
+- Prevent duplicate changelog entries when the previous release has no Git tag
+- Normalize the AI provider URL for consistent behavior
+
+## [0.1.1] - 2026-08-19
+
+### Changed
+- Prepare the first packaged release with synchronized version metadata and release automation
+
 ## [0.1.0] - 2026-08-19
 
 ### Added
