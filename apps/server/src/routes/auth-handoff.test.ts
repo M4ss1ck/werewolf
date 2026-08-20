@@ -5,7 +5,7 @@
 // session cookie on the request headers, exactly as the packaged client would).
 //
 // The route is mounted before the requireViewer block, so an unauthenticated
-// call must redirect to the app scheme rather than answer a 401 JSON body.
+// call must answer its app-handoff page rather than a 401 JSON body.
 
 import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";

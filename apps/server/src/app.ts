@@ -89,8 +89,8 @@ export function createApp(options: AppOptions = {}) {
   // The auth-handoff and auth-start routes must be mounted here, BEFORE the
   // block below: the later block runs every /api/* request through
   // sessionMiddleware and requireViewer, and requireViewer would answer these
-  // routes with a 401 JSON body instead of letting them redirect the browser
-  // tab to the app.
+  // routes with a 401 JSON body instead of letting them complete the browser-to-app
+  // handoff.
   if (options.auth) app.route("/api", authHandoffRoutes(options.auth));
   if (options.auth) app.route("/api", authStartRoutes(options.auth));
 

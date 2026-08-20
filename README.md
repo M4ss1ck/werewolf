@@ -318,9 +318,11 @@ link:
    browser**, passing `/api/auth-handoff` as the callback.
 2. Google returns to the server, which establishes the session — as a cookie in
    that browser, where the app cannot reach it.
-3. `/api/auth-handoff` mints a **one-time token** for that session and redirects
-   to `werewolf://auth?ott=...`.
-4. The OS hands the link to the running app, which exchanges the token at
+3. `/api/auth-handoff` mints a **one-time token** for that session and shows a
+   page linking to `werewolf://auth?ott=...`. A direct server redirect cannot be
+   used here because browsers refuse to launch a custom scheme without a user
+   gesture.
+4. The user clicks the link, and the OS hands it to the running app, which exchanges the token at
    `/api/auth/one-time-token/verify` and keeps the `set-auth-token` it gets back.
 
 From then on the token goes out as `Authorization: Bearer` on every request, and
