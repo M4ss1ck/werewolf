@@ -311,19 +311,48 @@ confirmed by driving a real packaged Linux build against an instrumented server.
 They authenticate with a bearer token instead.
 
 Signing in cannot happen in the webview either — Google refuses OAuth inside an
-embedded one — so it moves to the system browser and comes back through a deep
-link:
+embedded one — so it moves to the system browser and comes back through a
+**loopback redirect**, which is the shape [RFC 8252 §7.3](https://datatracker.ietf.org/doc/html/rfc8252#section-7.3)
+prescribes for native apps and what desktop CLIs that log in through a browser
+all do:
 
-1. The app asks the server for the Google URL and opens it in the **system
-   browser**, passing `/api/auth-handoff` as the callback.
-2. Google returns to the server, which establishes the session — as a cookie in
+1. The desktop app binds a one-shot HTTP listener on `127.0.0.1:<port>` and
+   generates a random `state`. It opens `/api/auth-start?port=…&state=…` in the
+   **system browser**.
+2. The server remembers the port and state in a short-lived `HttpOnly` cookie on
+   that browser, then redirects it to Google with `/api/auth-handoff` as the
+   callback.
+3. Google returns to the server, which establishes the session — as a cookie in
    that browser, where the app cannot reach it.
-3. `/api/auth-handoff` mints a **one-time token** for that session and shows a
-   page linking to `werewolf://auth?ott=...`. A direct server redirect cannot be
-   used here because browsers refuse to launch a custom scheme without a user
-   gesture.
-4. The user clicks the link, and the OS hands it to the running app, which exchanges the token at
+4. `/api/auth-handoff` mints a **one-time token**, reads the cookie back, and
+   redirects the browser to `http://127.0.0.1:<port>/callback?ott=…&state=…`.
+5. The app's listener checks the `state`, takes the token, exchanges it at
    `/api/auth/one-time-token/verify` and keeps the `set-auth-token` it gets back.
+
+The redirect in step 4 is an ordinary HTTP navigation, so the browser simply
+follows it: nothing to register with the OS, no user gesture, no permission
+prompt. That is the whole reason for this shape. The `werewolf://` scheme it
+replaced needed all three, each of which fails silently and differently per
+browser — Chrome would show its prompt, the user would accept, and nothing would
+happen.
+
+**Android still uses the deep link.** An intent is the platform norm there, and
+loopback is the option Google is deprecating for mobile client types. When the
+app sends no `port`, `/api/auth-handoff` falls back to the clickable
+`werewolf://auth?ott=…` page.
+
+Two things carry the security of the loopback leg, and both are tested:
+
+- The listener binds `127.0.0.1` only, **never** `0.0.0.0`, so nothing off the
+  machine can reach it.
+- The `state` is a 256-bit nonce the app generates and its listener demands
+  back, so no other local process can complete a sign-in with a token of its
+  choosing. The server only ever accepts a **port number** — never a URL — so
+  `/api/auth-start` cannot be turned into an open redirect.
+
+Google's configuration does not change: its `redirect_uri` is still the server's
+own `/api/auth/callback/google`. The loopback is our handoff, not an OAuth
+redirect URI.
 
 From then on the token goes out as `Authorization: Bearer` on every request, and
 as a `["bearer", token]` subprotocol on the live sockets, because a WebSocket
