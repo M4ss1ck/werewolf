@@ -2,6 +2,7 @@ import type { Db } from "@werewolf/db";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { bearer } from "better-auth/plugins/bearer";
+import { oneTimeToken } from "better-auth/plugins/one-time-token";
 import type { MiddlewareHandler } from "hono";
 import { createMiddleware } from "hono/factory";
 import type { Env } from "../env.ts";
@@ -34,7 +35,15 @@ export function createAuth(db: Db, env: Env) {
     // API routes too, not just /api/auth/*. sessionMiddleware needs no change.
     // The plugin also sets a `set-auth-token` response header whenever a Better
     // Auth response sets the session cookie; that is how a client learns its token.
-    plugins: [bearer()],
+    plugins: [
+      bearer(),
+      // One-time tokens let the packaged app exchange the session cookie the
+      // system browser holds for a credential of its own (see
+      // routes/auth-handoff.ts). Exposes auth.api.generateOneTimeToken and
+      // auth.api.verifyOneTimeToken, plus the /api/auth/one-time-token/*
+      // endpoints.
+      oneTimeToken(),
+    ],
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,
     trustedOrigins: env.BETTER_AUTH_TRUSTED_ORIGINS,
