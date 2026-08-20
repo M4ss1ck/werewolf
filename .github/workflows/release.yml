@@ -368,30 +368,11 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: linux-build-artifacts
-          path: ./artifacts
+          path: apps/client/src-tauri
 
-      - name: Prepare artifacts for Arch build
+      - name: Restore executable permission
         run: |
-          # Debug: Show what was downloaded
-          echo "=== Downloaded artifacts structure ==="
-          find ./artifacts -type f
-
-          # Create the expected directory structure
-          mkdir -p apps/client/src-tauri/target/release/bundle/deb
-          mkdir -p apps/client/src-tauri/icons
-
-          # Move artifacts to expected locations
-          cp ./artifacts/apps/client/src-tauri/target/x86_64-unknown-linux-gnu/release/werewolf apps/client/src-tauri/target/release/werewolf
-          cp -r ./artifacts/apps/client/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/* apps/client/src-tauri/target/release/bundle/deb/
-          cp ./artifacts/apps/client/src-tauri/icons/128x128.png apps/client/src-tauri/icons/
-
-          # Make binary executable
-          chmod +x apps/client/src-tauri/target/release/werewolf
-
-          # List what we have
-          echo "=== Prepared artifacts ==="
-          find apps/client/src-tauri/target/release -type f | head -20
-          ls -la apps/client/src-tauri/icons/
+          chmod +x apps/client/src-tauri/target/x86_64-unknown-linux-gnu/release/werewolf
 
       - name: Build Arch Linux package
         run: |

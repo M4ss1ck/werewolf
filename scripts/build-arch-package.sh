@@ -28,10 +28,9 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-# Locate the Tauri build artifacts. A local `bun run build:arch` builds with an
-# explicit --target, so everything lands under the target-triple directory; CI
-# instead stages the downloaded artifacts in the plain release directory. Accept
-# whichever exists rather than forcing one of the two to be wrong.
+# Locate the Tauri build artifacts. Current builds use an explicit --target and
+# land under the target-triple directory; keep accepting the plain release
+# directory for artifacts produced by older builds.
 TAURI_DIR="$PROJECT_ROOT/apps/client/src-tauri"
 if [[ -f "$TAURI_DIR/target/x86_64-unknown-linux-gnu/release/werewolf" ]]; then
     RELEASE_DIR="$TAURI_DIR/target/x86_64-unknown-linux-gnu/release"
