@@ -298,7 +298,14 @@ fi
 
 # --- Commit, tag, push -----------------------------------------------------
 print_status "Creating git commit"
-git add package.json apps/client/src-tauri/Cargo.toml apps/client/src-tauri/Cargo.lock apps/client/src-tauri/tauri.conf.json CHANGELOG.md
+git add \
+    package.json \
+    apps/*/package.json \
+    packages/*/package.json \
+    apps/client/src-tauri/Cargo.toml \
+    apps/client/src-tauri/Cargo.lock \
+    apps/client/src-tauri/tauri.conf.json \
+    CHANGELOG.md
 git commit -m "chore: bump version to $VERSION"
 
 print_status "Creating git tag $TAG"
