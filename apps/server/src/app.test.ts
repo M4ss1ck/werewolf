@@ -29,6 +29,24 @@ test("an OPTIONS preflight from a trusted origin is allowed with credentials", a
   expect(response.headers.get("access-control-allow-credentials")).toBe("true");
 });
 
+test("the CORS preflight advertises authorization and set-auth-token", async () => {
+  const app = createApp({ trustedOrigins: ["https://werewolf.example.com"] });
+  const response = await app.request("/api/games", {
+    method: "OPTIONS",
+    headers: {
+      origin: "https://werewolf.example.com",
+      "access-control-request-method": "GET",
+    },
+  });
+
+  expect(response.status).toBe(204);
+  const allowHeaders = response.headers.get("access-control-allow-headers") ?? "";
+  expect(allowHeaders.toLowerCase()).toContain("authorization");
+  expect(allowHeaders.toLowerCase()).toContain("content-type");
+  const exposeHeaders = response.headers.get("access-control-expose-headers") ?? "";
+  expect(exposeHeaders.toLowerCase()).toContain("set-auth-token");
+});
+
 test("a request from an untrusted origin does not get an allow-origin for it", async () => {
   const app = createApp({ trustedOrigins: ["https://werewolf.example.com"] });
   const response = await app.request("/api/games", {

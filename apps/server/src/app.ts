@@ -58,7 +58,10 @@ export function createApp(options: AppOptions = {}) {
         origin: options.trustedOrigins,
         credentials: true,
         allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-        allowHeaders: ["content-type"],
+        allowHeaders: ["content-type", "authorization"],
+        // The bearer plugin answers a session request with a `set-auth-token`
+        // header carrying the client's token; expose it so the client can read it.
+        exposeHeaders: ["set-auth-token"],
       }),
     );
   }

@@ -1,6 +1,7 @@
 import type { Db } from "@werewolf/db";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { bearer } from "better-auth/plugins/bearer";
 import type { MiddlewareHandler } from "hono";
 import { createMiddleware } from "hono/factory";
 import type { Env } from "../env.ts";
@@ -25,6 +26,15 @@ export function createAuth(db: Db, env: Env) {
 
   return betterAuth({
     database: drizzleAdapter(db, { provider: "sqlite", schema: authSchema }),
+    // Accept an `Authorization: Bearer <token>` header as a session credential
+    // so the packaged desktop/Android clients can authenticate without cookies.
+    // Our own routes resolve the viewer through auth.api.getSession({ headers }),
+    // and the bearer plugin's before-hook turns that header into the session
+    // cookie on those headers — so this single line authenticates werewolf's own
+    // API routes too, not just /api/auth/*. sessionMiddleware needs no change.
+    // The plugin also sets a `set-auth-token` response header whenever a Better
+    // Auth response sets the session cookie; that is how a client learns its token.
+    plugins: [bearer()],
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,
     trustedOrigins: env.BETTER_AUTH_TRUSTED_ORIGINS,
@@ -62,8 +72,25 @@ export const requireViewer = createMiddleware(async (c, next) => {
   await next();
 });
 
+// A browser cannot set an Authorization header on a WebSocket handshake, so the
+// live sockets carry the token in the subprotocol instead: the client opens
+// `new WebSocket(url, ["bearer", token])`, which arrives as the request header
+// `sec-websocket-protocol: "bearer, <token>"`. When that is present (and no
+// Authorization header is), rebuild the headers with the token as a bearer
+// credential so the bearer plugin can authenticate the handshake.
+function withWebSocketBearer(request: Request): Headers {
+  if (request.headers.has("authorization")) return request.headers;
+  const protocol = request.headers.get("sec-websocket-protocol");
+  if (!protocol) return request.headers;
+  const [scheme, token, ...rest] = protocol.split(",").map((part) => part.trim());
+  if (scheme?.toLowerCase() !== "bearer" || !token || rest.length > 0) return request.headers;
+  const headers = new Headers(request.headers);
+  headers.set("authorization", `Bearer ${token}`);
+  return headers;
+}
+
 export async function resolveAuthSession(auth: ReturnType<typeof createAuth>, request: Request) {
-  const session = await auth.api.getSession({ headers: request.headers });
+  const session = await auth.api.getSession({ headers: withWebSocketBearer(request) });
   return session?.user?.id
     ? {
         userId: session.user.id,
