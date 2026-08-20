@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "0.1.5"
+version = "0.1.6"
 description = "Server-authoritative live social deduction game"
 authors = ["Andy Palmero"]
 license = "MIT"
