@@ -294,6 +294,7 @@ export const es: TranslationResource = {
   },
   ui: {
     signIn: "Iniciar sesión",
+    signInFailed: "No se pudo completar el inicio de sesión.",
     signOut: "Cerrar sesión",
     createGame: "Crear partida",
     join: "Unirse",

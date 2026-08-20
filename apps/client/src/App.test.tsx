@@ -28,6 +28,11 @@ vi.mock("react-virtuoso", () => ({
   ),
 }));
 
+// The deep-link listener reaches for Tauri APIs that do not exist under jsdom.
+vi.mock("./auth/deep-link.ts", () => ({
+  listenForAuthDeepLinks: vi.fn(() => () => {}),
+}));
+
 const { App } = await import("./App.tsx");
 
 // A stand-in for the browser API: records what was constructed but never
@@ -63,6 +68,52 @@ test("renders the sign-in screen when signed out", () => {
   render(<App />);
   expect(screen.getByRole("heading", { name: "Werewolf" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: /Sign in/ })).toBeInTheDocument();
+});
+
+test("a failed sign-in handoff is shown on the sign-in screen, not swallowed", async () => {
+  // The handoff can fail for reasons only the server knows (no session, a token
+  // it could not mint). Dropping those left the app sitting on the sign-in
+  // screen with nothing to show for it, which is unreportable and undebuggable.
+  const { listenForAuthDeepLinks } = await import("./auth/deep-link.ts");
+  vi.mocked(listenForAuthDeepLinks).mockImplementation((onResult) => {
+    onResult({ ok: false, code: "HANDOFF_FAILED" });
+    return () => {};
+  });
+
+  render(<App />);
+
+  expect(await screen.findByText(/HANDOFF_FAILED/)).toBeInTheDocument();
+});
+
+test("a successful sign-in handoff leaves the sign-in screen", async () => {
+  const { listenForAuthDeepLinks } = await import("./auth/deep-link.ts");
+  let onResult: Parameters<typeof listenForAuthDeepLinks>[0] | undefined;
+  vi.mocked(listenForAuthDeepLinks).mockImplementation((callback) => {
+    onResult = callback;
+    return () => {};
+  });
+  let signedIn = false;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>((input) =>
+      Promise.resolve(
+        new Response(
+          String(input) === "/api/auth/get-session"
+            ? JSON.stringify(signedIn ? { user: { id: "me", username: "wren" } } : null)
+            : JSON.stringify([]),
+          { status: 200 },
+        ),
+      ),
+    ),
+  );
+  render(<App />);
+  await screen.findByRole("button", { name: /Sign in/ });
+  await waitFor(() => expect(onResult).toBeDefined());
+
+  signedIn = true;
+  act(() => onResult?.({ ok: true }));
+
+  expect(await screen.findByRole("heading", { name: "Open games" })).toBeInTheDocument();
 });
 
 test("does not open the chat socket for a signed-out visitor", async () => {

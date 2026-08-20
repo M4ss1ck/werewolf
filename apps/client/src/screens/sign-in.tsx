@@ -6,7 +6,7 @@ import { changeLocale } from "../i18n/i18n.ts";
 
 /** Design 01 · full-bleed sign-in. No session yet, so the language pair only
  * stores the preference — there is nothing on the server to patch. */
-export function SignInScreen() {
+export function SignInScreen({ error }: { error?: string | undefined }) {
   const { t, i18n } = useTranslation();
   return (
     <div className="screen">
@@ -24,6 +24,14 @@ export function SignInScreen() {
           </div>
         </div>
         <div className="flex flex-col gap-3.5">
+          {error ? (
+            <p
+              className="rounded-md border border-blood/50 bg-blood/15 px-3 py-2 text-sm text-paper"
+              role="alert"
+            >
+              {t("ui.signInFailed")} ({error})
+            </p>
+          ) : null}
           <button
             className="btn btn--primary w-full"
             onClick={() =>

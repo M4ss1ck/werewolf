@@ -106,10 +106,18 @@ function Shell() {
   // latest refreshSession, which is recreated on every render.
   const refreshSessionRef = useRef(refreshSession);
   refreshSessionRef.current = refreshSession;
+  // A handoff that fails has to say so. Swallowing the code left the app on the
+  // sign-in screen looking idle, with the reason known only to the server.
+  const [signInError, setSignInError] = useState<string | undefined>(undefined);
   useEffect(
     () =>
       listenForAuthDeepLinks((result) => {
-        if (result.ok) refreshSessionRef.current();
+        if (result.ok) {
+          setSignInError(undefined);
+          refreshSessionRef.current();
+        } else if (result.code !== "IGNORED") {
+          setSignInError(result.code);
+        }
       }),
     [],
   );
@@ -139,7 +147,7 @@ function Shell() {
       });
   };
 
-  if (session === null) return <SignInScreen />;
+  if (session === null) return <SignInScreen error={signInError} />;
   if (!session.user.username) return <UsernameScreen onSaved={refreshSession} />;
 
   if (
