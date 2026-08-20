@@ -55,23 +55,16 @@ test("on the web it assigns location.href, does not call openUrl, and uses locat
   expect(JSON.parse(init.body).callbackURL).toBe("http://localhost:1420/");
 });
 
-test("in Tauri it calls openUrl and uses the auth-handoff callbackURL", async () => {
+test("in Tauri it opens /api/auth-start in the system browser and does not fetch", async () => {
   mocks.isTauri.mockReturnValue(true);
-  const oauthUrl = "https://accounts.google.com/o/oauth2/v2/auth?state=tauri";
   const location = { href: "http://localhost:1420/" };
   vi.stubGlobal("location", location);
-  const fetchMock = vi.fn().mockResolvedValue(
-    new Response(JSON.stringify({ url: oauthUrl, redirect: true }), {
-      headers: { "content-type": "application/json" },
-      status: 200,
-    }),
-  );
+  const fetchMock = vi.fn();
   vi.stubGlobal("fetch", fetchMock);
 
   await signInWithGoogle();
 
-  expect(mocks.openUrl).toHaveBeenCalledWith(oauthUrl);
+  expect(mocks.openUrl).toHaveBeenCalledWith(expect.stringMatching(/\/api\/auth-start$/));
+  expect(fetchMock).not.toHaveBeenCalled();
   expect(location.href).toBe("http://localhost:1420/");
-  const [, init] = fetchMock.mock.calls[0]!;
-  expect(JSON.parse(init.body).callbackURL).toMatch(/\/api\/auth-handoff$/);
 });
