@@ -2,6 +2,7 @@ import { applyMigrations, createDb, GameRepository, GlobalChatRepository } from 
 import { websocket } from "hono/bun";
 import { createApp } from "./app.ts";
 import { createAuth, resolveAuthSession } from "./auth/auth.ts";
+import { allowedOrigins } from "./auth/origins.ts";
 import { createAuthTables } from "./auth/schema.ts";
 import { LlmBotAgent } from "./bots/agent.ts";
 import { loadBotConfig } from "./bots/config.ts";
@@ -71,7 +72,7 @@ const app = createApp({
   bots: { roster: botRoster, catalog: botCatalog, config: botConfig },
   auth,
   sessionResolver: (request) => resolveAuthSession(auth, request),
-  trustedOrigins: env.BETTER_AUTH_TRUSTED_ORIGINS,
+  trustedOrigins: allowedOrigins(env.BETTER_AUTH_URL, env.BETTER_AUTH_TRUSTED_ORIGINS),
 });
 
 const server = Bun.serve({

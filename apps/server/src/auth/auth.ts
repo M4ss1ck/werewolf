@@ -6,6 +6,7 @@ import { oneTimeToken } from "better-auth/plugins/one-time-token";
 import type { MiddlewareHandler } from "hono";
 import { createMiddleware } from "hono/factory";
 import type { Env } from "../env.ts";
+import { allowedOrigins } from "./origins.ts";
 import { authSchema } from "./schema.ts";
 
 export type ViewerContext = { userId: string; username: string | null };
@@ -17,6 +18,10 @@ export function createAuth(db: Db, env: Env) {
   // origin is http://localhost:1420 — a different origin but the same site —
   // and dev must keep working exactly as it does today. Only a real cross-site
   // deployment needs SameSite=None + Secure cookies.
+  // Deliberately the CONFIGURED origins only, not the packaged-app ones: the
+  // packaged clients authenticate with a bearer token and never rely on this
+  // cookie, so their always-present origins must not drag every deployment
+  // (including local development) onto SameSite=None.
   const crossSite = env.BETTER_AUTH_TRUSTED_ORIGINS.some((origin) => {
     try {
       return new URL(origin).hostname !== new URL(env.BETTER_AUTH_URL).hostname;
@@ -46,7 +51,7 @@ export function createAuth(db: Db, env: Env) {
     ],
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,
-    trustedOrigins: env.BETTER_AUTH_TRUSTED_ORIGINS,
+    trustedOrigins: allowedOrigins(env.BETTER_AUTH_URL, env.BETTER_AUTH_TRUSTED_ORIGINS),
     socialProviders: {
       google: { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET },
     },

@@ -304,13 +304,19 @@ as a `["bearer", token]` subprotocol on the live sockets, because a WebSocket
 handshake cannot carry a header. It lives in `localStorage`, which — unlike the
 cookie jar — survives an app restart.
 
-Two things a deployment must get right, or the packaged apps fail:
+One thing a deployment must get right, or the packaged apps fail:
 
-- `BETTER_AUTH_TRUSTED_ORIGINS` must list `tauri://localhost` and
-  `http://tauri.localhost`. It gates CORS and the socket handshake, so without
-  them every request from a packaged client is refused.
-- `VITE_SERVER_ORIGIN` must be set when building the client, or the app has no
-  server to reach.
+- `VITE_SERVER_ORIGIN` must be set when building the packaged client, or the app
+  has no server to reach. The release workflow passes it from a repository
+  variable of the same name; a local build needs it in the environment. The web
+  bundle wants it empty, because the server serves the SPA from its own origin.
+
+You do **not** need to configure the packaged clients' origins. They are
+constants of the client rather than of a deployment, so the server trusts them
+unconditionally, along with its own origin
+(`apps/server/src/auth/origins.ts`). `BETTER_AUTH_TRUSTED_ORIGINS` is only for
+origins that genuinely vary per deployment, such as the Vite dev server or a web
+frontend on its own domain.
 
 The `werewolf://` scheme is declared in `tauri.conf.json` and must stay in step
 with `APP_SCHEME` in `apps/server/src/routes/auth-handoff.ts`. On desktop the
