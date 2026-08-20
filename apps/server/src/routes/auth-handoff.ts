@@ -13,7 +13,7 @@ import { Hono } from "hono";
 import type { createAuth } from "../auth/auth.ts";
 
 // Must match the scheme registered by the Tauri app.
-const APP_SCHEME = "werewolf";
+export const APP_SCHEME = "werewolf";
 
 export function authHandoffRoutes(auth: ReturnType<typeof createAuth>) {
   const app = new Hono();

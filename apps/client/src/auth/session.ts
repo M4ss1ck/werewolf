@@ -31,8 +31,17 @@ export async function getSession(): Promise<Session | null> {
 }
 
 export async function signInWithGoogle() {
+  // The packaged app runs the whole OAuth leg in the system browser and comes
+  // back via the werewolf://auth deep link (see routes/auth-start.ts), so it
+  // just opens that route and returns. The web path keeps the POST below
+  // because there the cookie and the callback are in the same browser.
+  if (isTauri()) {
+    await openUrl(apiUrl("/api/auth-start"));
+    return;
+  }
+
   const token = getAuthToken();
-  const callbackURL = isTauri() ? apiUrl("/api/auth-handoff") : globalThis.location.href;
+  const callbackURL = globalThis.location.href;
   const response = await fetch(apiUrl("/api/auth/sign-in/social"), {
     method: "POST",
     credentials: "include",
@@ -47,8 +56,7 @@ export async function signInWithGoogle() {
 
   const result = (await response.json()) as { redirect?: boolean; url?: string };
   if (result.redirect && result.url) {
-    if (isTauri()) await openUrl(result.url);
-    else globalThis.location.href = result.url;
+    globalThis.location.href = result.url;
   }
 }
 

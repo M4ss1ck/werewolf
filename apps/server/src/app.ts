@@ -12,6 +12,7 @@ import { GameCoordinator } from "./game/coordinator.ts";
 import type { GameHub } from "./live/game-hub.ts";
 import type { GlobalChatHub } from "./live/global-chat-hub.ts";
 import { authHandoffRoutes } from "./routes/auth-handoff.ts";
+import { authStartRoutes } from "./routes/auth-start.ts";
 import type { BotRoutesOptions } from "./routes/bots.ts";
 import { botRoutes } from "./routes/bots.ts";
 import { chatRoutes } from "./routes/chat.ts";
@@ -85,11 +86,13 @@ export function createApp(options: AppOptions = {}) {
 
   if (options.auth) app.on(["GET", "POST"], "/api/auth/*", (c) => options.auth!.handler(c.req.raw));
 
-  // The auth-handoff route must be mounted here, BEFORE the block below: the
-  // later block runs every /api/* request through sessionMiddleware and
-  // requireViewer, and requireViewer would answer this route with a 401 JSON
-  // body instead of letting it redirect the browser tab to the app.
+  // The auth-handoff and auth-start routes must be mounted here, BEFORE the
+  // block below: the later block runs every /api/* request through
+  // sessionMiddleware and requireViewer, and requireViewer would answer these
+  // routes with a 401 JSON body instead of letting them redirect the browser
+  // tab to the app.
   if (options.auth) app.route("/api", authHandoffRoutes(options.auth));
+  if (options.auth) app.route("/api", authStartRoutes(options.auth));
 
   if (options.repository || options.coordinator) {
     const coordinator = options.coordinator ?? new GameCoordinator(options.repository!);
