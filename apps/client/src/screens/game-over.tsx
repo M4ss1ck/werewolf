@@ -92,14 +92,14 @@ export function GameOverScreen({
   ).length;
   const villagers = snapshot.players.length - wolves;
   return (
-    <div className="flex min-h-0 flex-1 overflow-y-auto flex-col gap-[22px] bg-[radial-gradient(100%_45%_at_50%_0%,rgba(179,58,54,.18),transparent_70%)] px-[18px] pb-5 pt-9">
+    <div className="flex min-h-0 flex-1 overflow-y-auto flex-col gap-5.5 bg-[radial-gradient(100%_45%_at_50%_0%,rgba(179,58,54,.18),transparent_70%)] px-4.5 pb-5 pt-9">
       <section className="flex flex-col items-center gap-3.5 text-center">
         <span className="h-14 w-14 rounded-full bg-blood shadow-[0_0_60px_rgba(179,58,54,.5)]" />
         <div>
           <p className="eyebrow text-blood-light">{t(reasonKey)}</p>
           <h1 className="mt-2 text-[36px] font-semibold tracking-[-0.035em]">{t(winTitleKey)}</h1>
         </div>
-        <p className="max-w-[280px] text-sm text-fog">
+        <p className="max-w-70 text-sm text-fog">
           {t("ui.over.summary", {
             wolves: t("ui.over.wolvesCount.count", { count: wolves }),
             villagers: t("ui.over.villagersCount.count", { count: villagers }),

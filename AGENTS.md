@@ -50,6 +50,15 @@ the domain (`resolveWolfBallot`, not `processStage3`). Prefer a plain `if` chain
 a reader can follow over a clever lookup table. Someone debugging a live game at
 2am should be able to read the resolution path top to bottom.
 
+**Canonical Tailwind classes.** The client styles with Tailwind v4. Reach for the
+scale, not an arbitrary value: `px-4.5`, not `px-[18px]`; `gap-5.5`, not
+`gap-[22px]`; `tracking-tight`, not `tracking-[-0.025em]`. The spacing scale is
+`0.25rem` a step and takes quarter steps, so nearly every padding, gap, size and
+margin already has a name. Arbitrary values are for what the scale genuinely does
+not cover — a one-off shadow, a gradient, a font size off the type scale. Don't
+swap one for a near-miss scale class: `text-*` also sets `line-height`, so
+`text-[30px]` is not `text-3xl` and trading them changes the render.
+
 **Surgical changes.** Touch only what the task requires. Don't reformat, rename
 or "improve" adjacent code. Match the surrounding style. If you notice unrelated
 dead code, mention it rather than deleting it. Do clean up imports and helpers

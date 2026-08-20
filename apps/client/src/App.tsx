@@ -210,7 +210,7 @@ function Shell() {
 
   return (
     <main className="screen">
-      <div className="flex px-[18px] pt-2">
+      <div className="flex px-4.5 pt-2">
         <BackToGames />
       </div>
       {snapshot ? (
@@ -226,7 +226,7 @@ function Shell() {
           <GameScreen initial={snapshot} onUpdate={setSnapshot} />
         )
       ) : (
-        <p className="px-[18px] text-fog">{"…"}</p>
+        <p className="px-4.5 text-fog">{"…"}</p>
       )}
     </main>
   );

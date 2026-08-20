@@ -85,11 +85,9 @@ function VotingBranch({
   const eligible = snapshot.players.filter((player) => player.status === "alive").length;
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="screen__scroll flex flex-col gap-4 px-[18px] pb-5">
+      <div className="screen__scroll flex flex-col gap-4 px-4.5 pb-5">
         <div className="flex items-baseline justify-between gap-3">
-          <h2 className="text-2xl font-semibold tracking-[-0.025em] text-paper">
-            {t("ui.vote.title")}
-          </h2>
+          <h2 className="text-2xl font-semibold tracking-tight text-paper">{t("ui.vote.title")}</h2>
         </div>
         <ul className="flex flex-col gap-2.5">
           {rows.map((player) => {
@@ -164,7 +162,7 @@ function VotingBranch({
         )}
       </div>
       {alive && shown !== null && (
-        <div className="border-t border-paper/10 bg-bar px-[18px] py-3">
+        <div className="border-t border-paper/10 bg-bar px-4.5 py-3">
           <button
             className="btn btn--primary w-full"
             disabled={unchanged}
@@ -310,7 +308,7 @@ function ActionList({
   })();
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="screen__scroll flex flex-col gap-5 px-[18px] pb-5">
+      <div className="screen__scroll flex flex-col gap-5 px-4.5 pb-5">
         {heading}
         {actions.map((action) => (
           <section className="flex flex-col gap-3" key={action.id}>
@@ -403,7 +401,7 @@ function ActionList({
         {footnote}
       </div>
       {confirm !== null && (
-        <div className="border-t border-paper/10 bg-bar px-[18px] py-3">
+        <div className="border-t border-paper/10 bg-bar px-4.5 py-3">
           <button className="btn btn--pale w-full" onClick={confirm.send} type="button">
             {t(confirm.caption, { player: confirm.label })}
           </button>
@@ -428,7 +426,7 @@ function NightBranch({
   const actions = snapshot.availableActions;
   if (actions.length === 0) {
     return (
-      <div className="screen__scroll flex flex-col gap-4 px-[18px] pb-5">
+      <div className="screen__scroll flex flex-col gap-4 px-4.5 pb-5">
         {role !== undefined && (
           <p className="eyebrow">{t("ui.night.yourMove", { role: t(`roles.${role}.name`) })}</p>
         )}
@@ -472,7 +470,7 @@ function DiscussionBranch({
   const actions = snapshot.availableActions;
   if (actions.length === 0) {
     return (
-      <div className="screen__scroll flex flex-col gap-4 px-[18px] pb-5">
+      <div className="screen__scroll flex flex-col gap-4 px-4.5 pb-5">
         {role !== undefined && (
           <p className="eyebrow">{t("ui.dayAction.yourMove", { role: t(`roles.${role}.name`) })}</p>
         )}

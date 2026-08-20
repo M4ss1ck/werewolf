@@ -96,7 +96,7 @@ export function GamesScreen({ username }: { username: string }) {
         : game.status === "running",
   );
   return (
-    <div className="screen__scroll flex flex-col gap-5 px-[18px] pb-5 pt-6">
+    <div className="screen__scroll flex flex-col gap-5 px-4.5 pb-5 pt-6">
       <header className="flex items-center justify-between gap-3">
         <h1 className="text-[30px] font-semibold tracking-[-0.03em]">{t("ui.openGames")}</h1>
         <button

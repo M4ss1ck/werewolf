@@ -60,9 +60,7 @@ export function ChatBubble({
     <div className={`flex gap-2.5 ${mine ? "justify-end" : ""}`}>
       {!mine && <Avatar name={author} size="sm" />}
       <div className={`flex max-w-[82%] flex-col ${mine ? "items-end" : ""}`}>
-        {!mine && (
-          <span className="mb-[5px] truncate font-mono text-[11px] text-fog">{author}</span>
-        )}
+        {!mine && <span className="mb-1.25 truncate font-mono text-[11px] text-fog">{author}</span>}
         <div className={`bubble ${mine ? "bubble--mine" : "bubble--theirs"}`}>{text}</div>
       </div>
     </div>
@@ -116,7 +114,7 @@ export function ChatComposer({
         {label}
       </label>
       <input
-        className="min-h-12 flex-1 rounded-full bg-surface-raised px-[18px] text-paper placeholder:text-fog-dim disabled:cursor-not-allowed disabled:opacity-50"
+        className="min-h-12 flex-1 rounded-full bg-surface-raised px-4.5 text-paper placeholder:text-fog-dim disabled:cursor-not-allowed disabled:opacity-50"
         disabled={disabled}
         id={inputId}
         onChange={(event) => setText(event.target.value)}

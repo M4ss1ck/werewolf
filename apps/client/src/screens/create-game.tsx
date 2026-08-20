@@ -59,7 +59,7 @@ export function CreateGameScreen() {
     setDurations((current) => ({ ...current, [key]: value }));
   return (
     <form className="flex min-h-0 flex-1 flex-col" onSubmit={(event) => void create(event)}>
-      <div className="screen__scroll flex flex-col gap-6 px-[18px] pb-5 pt-6">
+      <div className="screen__scroll flex flex-col gap-6 px-4.5 pb-5 pt-6">
         <h1 className="text-[30px] font-semibold tracking-[-0.03em]">{t("ui.createGame")}</h1>
         <div className="flex flex-col gap-2.5">
           <label className="field-label" htmlFor="create-name">
@@ -83,7 +83,7 @@ export function CreateGameScreen() {
           ]}
           value={visibility}
         />
-        <div className="flex items-center justify-between gap-4 rounded-[14px] border border-paper/10 bg-surface px-[18px] py-4">
+        <div className="flex items-center justify-between gap-4 rounded-[14px] border border-paper/10 bg-surface px-4.5 py-4">
           <div>
             <div className="text-base font-medium">{t("ui.allowSpectating")}</div>
             <div className="mt-0.5 text-[13px] text-fog">{t("ui.allowSpectatingHint")}</div>
@@ -160,7 +160,7 @@ export function CreateGameScreen() {
         </fieldset>
         <ErrorMessage error={error} />
       </div>
-      <div className="border-t border-paper/8 bg-bar px-[18px] py-3 pb-4">
+      <div className="border-t border-paper/8 bg-bar px-4.5 py-3 pb-4">
         <button className="btn btn--primary w-full" type="submit">
           {t("ui.createGame")}
         </button>

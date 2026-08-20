@@ -161,7 +161,7 @@ export function GameScreen({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* The phase header stays put; only the open tab scrolls under it. */}
-      <div className="flex flex-col gap-5 px-[18px] pb-5 pt-6">
+      <div className="flex flex-col gap-5 px-4.5 pb-5 pt-6">
         {status === "reconnecting" && (
           <p className="flex justify-center">
             <Chip tone="running">{t("ui.reconnecting")}</Chip>

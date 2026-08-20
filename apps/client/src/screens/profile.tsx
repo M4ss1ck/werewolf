@@ -74,7 +74,7 @@ export function ProfileScreen({
     }
   };
   return (
-    <div className="screen__scroll flex flex-col gap-6 px-[18px] pb-5 pt-6">
+    <div className="screen__scroll flex flex-col gap-6 px-4.5 pb-5 pt-6">
       <header className="flex items-center gap-4">
         <Avatar name={displayName} size="xl" />
         <div className="min-w-0 flex-1">
@@ -144,7 +144,7 @@ export function ProfileScreen({
       <div className="flex flex-col gap-3">
         <div className="eyebrow">{t("ui.profile.settings")}</div>
         <div className="overflow-hidden rounded-[14px] border border-paper/10 bg-surface">
-          <div className="flex items-center justify-between gap-4 border-b border-paper/5 px-[18px] py-4">
+          <div className="flex items-center justify-between gap-4 border-b border-paper/5 px-4.5 py-4">
             <span className="text-base">{t("ui.profile.language")}</span>
             <Segmented
               label={t("ui.profile.language")}
@@ -156,7 +156,7 @@ export function ProfileScreen({
               value={i18n.language}
             />
           </div>
-          <div className="flex items-center justify-between gap-4 border-b border-paper/5 px-[18px] py-4">
+          <div className="flex items-center justify-between gap-4 border-b border-paper/5 px-4.5 py-4">
             <div>
               <div className="text-base">{t("ui.profile.phaseNotifications")}</div>
               <div className="mt-0.5 text-[13px] text-fog">
@@ -173,7 +173,7 @@ export function ProfileScreen({
               }}
             />
           </div>
-          <div className="flex items-center justify-between gap-4 px-[18px] py-4">
+          <div className="flex items-center justify-between gap-4 px-4.5 py-4">
             <div>
               <div className="text-base">{t("ui.profile.reducedMotion")}</div>
               <div className="mt-0.5 text-[13px] text-fog">{t("ui.profile.reducedMotionHint")}</div>

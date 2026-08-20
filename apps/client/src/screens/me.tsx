@@ -48,13 +48,13 @@ export function Me({
     }
   };
   return (
-    <div className="screen__scroll flex flex-col gap-[22px] px-[18px] pb-5">
+    <div className="screen__scroll flex flex-col gap-5.5 px-4.5 pb-5">
       {role !== undefined && (
         <section className="card border-sage/30 bg-gradient-to-b from-sage/15 to-sage/[0.02]">
           <p className="eyebrow text-sage-light">{t("ui.yourRole")}</p>
-          <div className="mt-4 flex items-center gap-[18px]">
-            <span className="flex h-[72px] w-[72px] items-center justify-center rounded-full border border-sage/50 bg-night">
-              <span className="h-[26px] w-[26px] rounded-full bg-sage-light shadow-[0_0_22px_rgba(159,188,173,.6)]" />
+          <div className="mt-4 flex items-center gap-4.5">
+            <span className="flex h-18 w-18 items-center justify-center rounded-full border border-sage/50 bg-night">
+              <span className="h-6.5 w-6.5 rounded-full bg-sage-light shadow-[0_0_22px_rgba(159,188,173,.6)]" />
             </span>
             <div>
               <h1 className="text-[36px] font-semibold tracking-[-0.035em]">

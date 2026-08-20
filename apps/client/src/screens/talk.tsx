@@ -41,7 +41,7 @@ export function Talk({
   );
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="screen__scroll global-chat-scrollbar flex flex-col gap-4 px-[18px] pb-5">
+      <div className="screen__scroll global-chat-scrollbar flex flex-col gap-4 px-4.5 pb-5">
         <div className="flex gap-1.5">
           <button
             aria-pressed={channel === "public"}
@@ -115,7 +115,7 @@ export function Talk({
         </ul>
       </div>
       <ChatComposer
-        className="flex items-center gap-2.5 border-t border-paper/10 bg-bar px-[14px] py-2.5"
+        className="flex items-center gap-2.5 border-t border-paper/10 bg-bar px-3.5 py-2.5"
         disabled={readOnly}
         inputId="talk-message"
         label={t("ui.messageLabel")}

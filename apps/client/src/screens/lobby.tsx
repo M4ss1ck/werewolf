@@ -74,7 +74,7 @@ export function LobbyScreen({
   };
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="screen__scroll flex flex-col gap-5 px-[18px] pb-5 pt-6">
+      <div className="screen__scroll flex flex-col gap-5 px-4.5 pb-5 pt-6">
         <header>
           <p className="eyebrow">
             {t("ui.lobby.label")} ·{" "}
@@ -87,7 +87,7 @@ export function LobbyScreen({
           </h1>
         </header>
         <ErrorMessage error={error} />
-        <section className="card flex flex-col gap-[14px]">
+        <section className="card flex flex-col gap-3.5">
           <div className="flex items-baseline justify-between gap-3">
             <h2 className="text-base text-paper-dim">{t("ui.lobby.waitingForPlayers")}</h2>
             <span className="font-mono text-base">
@@ -136,12 +136,12 @@ export function LobbyScreen({
             })}
             {emptySeatNumbers.map((seat) => (
               <li
-                className="flex items-center gap-[14px] rounded-[14px] border border-dashed border-paper/15 px-3.5 py-3 text-fog-dim"
+                className="flex items-center gap-3.5 rounded-[14px] border border-dashed border-paper/15 px-3.5 py-3 text-fog-dim"
                 key={`empty-${seat}`}
               >
                 <span
                   aria-hidden="true"
-                  className="h-[42px] w-[42px] rounded-full border border-dashed border-paper/20"
+                  className="h-10.5 w-10.5 rounded-full border border-dashed border-paper/20"
                 />
                 <span className="text-[17px]">{t("ui.lobby.emptySeat")}</span>
               </li>
@@ -152,7 +152,7 @@ export function LobbyScreen({
               <p className="eyebrow">{t("ui.lobby.addBot")}</p>
               {bots.map((bot) => (
                 <button
-                  className="flex items-center gap-[14px] rounded-[14px] border border-dashed border-paper/20 px-3.5 py-3 text-left text-[17px] text-fog transition-colors enabled:hover:border-paper/40 enabled:hover:text-paper disabled:opacity-40"
+                  className="flex items-center gap-3.5 rounded-[14px] border border-dashed border-paper/20 px-3.5 py-3 text-left text-[17px] text-fog transition-colors enabled:hover:border-paper/40 enabled:hover:text-paper disabled:opacity-40"
                   disabled={!bot.available}
                   key={bot.id}
                   onClick={() => void act(() => api.addBot(snapshot.game.id, bot.id))}
@@ -160,7 +160,7 @@ export function LobbyScreen({
                 >
                   <span
                     aria-hidden="true"
-                    className="flex h-[42px] w-[42px] items-center justify-center rounded-full border border-dashed border-paper/20"
+                    className="flex h-10.5 w-10.5 items-center justify-center rounded-full border border-dashed border-paper/20"
                   >
                     +
                   </span>
@@ -178,7 +178,7 @@ export function LobbyScreen({
           )}
         </section>
       </div>
-      <div className="flex gap-2.5 border-t border-paper/8 bg-bar px-[18px] py-3 pb-4">
+      <div className="flex gap-2.5 border-t border-paper/8 bg-bar px-4.5 py-3 pb-4">
         <button
           className="btn btn--danger"
           onClick={() => void (isOwner ? act(() => api.cancel(snapshot.game.id)) : leave())}

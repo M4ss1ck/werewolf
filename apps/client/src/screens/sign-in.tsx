@@ -18,7 +18,7 @@ export function SignInScreen({ error }: { error?: string | undefined }) {
           />
           <div>
             <h1 className="text-[44px] font-semibold leading-none tracking-[-0.035em]">Werewolf</h1>
-            <p className="mt-3.5 max-w-[300px] text-[17px] leading-relaxed text-fog">
+            <p className="mt-3.5 max-w-75 text-[17px] leading-relaxed text-fog">
               {t("ui.homeTagline")}
             </p>
           </div>
