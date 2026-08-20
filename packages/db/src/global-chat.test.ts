@@ -104,4 +104,6 @@ test("the trim keeps the newest CHAT_RETENTION messages and drops older ones", a
   // The oldest surviving message is number 6; 1-5 were trimmed away.
   const oldest = await repo.listBefore(7);
   expect(oldest.map((message) => message.text)).toEqual(["message 6"]);
-});
+  // Seeding past the retention cap is a thousand round trips against a file
+  // database, which outruns the default 5s timeout on a CI runner.
+}, 30_000);
