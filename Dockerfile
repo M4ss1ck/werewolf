@@ -24,11 +24,17 @@ COPY apps/client apps/client
 RUN bun run --cwd apps/client build
 
 # --- runtime ----------------------------------------------------------------
-FROM base AS runtime
+# Built FROM deps, not from base, and that is load-bearing. Bun installs a
+# workspace's links into that workspace's own node_modules (apps/server/
+# node_modules, packages/db/node_modules, ...), not into the root one. Copying
+# only the root node_modules and then laying the sources on top left no way to
+# resolve @werewolf/*, and the server died on boot with "Cannot find module
+# '@werewolf/db'". Starting from deps keeps every one of those directories, and
+# the COPYs below merge the sources over them rather than replacing them.
+FROM deps AS runtime
 ENV NODE_ENV=production
 ENV PORT=3000
 
-COPY --from=deps /app/node_modules node_modules
 COPY package.json bun.lock tsconfig.base.json ./
 # The bot roster is resolved relative to the repo root, so it must ship too.
 COPY bots.json ./

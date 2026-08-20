@@ -1,0 +1,32 @@
+# Keep the build context to what the image actually needs. Without this the
+# host's node_modules were copied into the image by `COPY packages packages`,
+# which hid a real bug: the workspace links the runtime stage needs were coming
+# from the developer's machine rather than from `bun install`, so the image
+# built here worked and the same commit failed on a clean checkout.
+node_modules
+**/node_modules
+
+# Rust build output. Gigabytes, and rebuilt inside the image anyway.
+apps/client/src-tauri/target
+apps/client/src-tauri/gen/schemas
+
+# Built by the image itself.
+dist
+apps/client/dist
+apps/server/public
+
+# Local state and secrets.
+.env
+.env.*
+!.env.example
+data
+*.db
+*.db-journal
+*.sqlite
+
+.git
+.github
+.vscode
+.idea
+coverage
+*.log
