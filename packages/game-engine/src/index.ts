@@ -4,6 +4,7 @@
 // Drizzle, Better Auth, WebSockets or i18n. Its only internal dependency is
 // @werewolf/protocol. scripts/check-boundaries.ts enforces this.
 
+export * from "./chat.ts";
 export * from "./commands/apply.ts";
 export * from "./commands/validate.ts";
 export * from "./composer/balance-v1.ts";

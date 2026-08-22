@@ -134,6 +134,49 @@ describe("viewer projection security", () => {
     expect(projectSnapshot(state, id("dead-wolf")).availableChannels).toContain("grave");
     expect(projectSnapshot(state, id("seer")).availableChannels).not.toContain("grave");
   });
+
+  test("secret knowledge contains exactly known targets and no public or grave map", () => {
+    const state = makeState();
+    const wolfSnapshot = projectSnapshot(state, id("wolf"));
+    expect(wolfSnapshot.knownChannelMemberIds).toEqual({ wolves: [id("dead-wolf")] });
+    expect(wolfSnapshot.knownChannelMemberIds).not.toHaveProperty("public");
+    expect(wolfSnapshot.knownChannelMemberIds).not.toHaveProperty("grave");
+
+    const nonMemberSnapshot = projectSnapshot(state, id("spectator"));
+    expect(nonMemberSnapshot.knownChannelMemberIds).toBeUndefined();
+    expect(nonMemberSnapshot.availableChannels).toEqual(["public"]);
+  });
+
+  test("a dead secret member keeps secret knowledge while gaining grave chat", () => {
+    const snapshot = projectSnapshot(makeState(), id("dead-wolf"));
+    expect(snapshot.availableChannels).toEqual(["public", "wolves", "grave"]);
+    expect(snapshot.knownChannelMemberIds).toEqual({ wolves: [id("wolf")] });
+  });
+
+  test("a converted member's snapshot lists only equal or later conversions", () => {
+    const state = makeState();
+    state.players[id("wolf")]!.originalRole = "cursed";
+    state.players[id("wolf")]!.channelSince = { wolves: 20 as GameEvent["id"] };
+    delete state.players[id("dead-wolf")]!.channelSince;
+    addPlayer(state, "converted-earlier", "werewolf", "alive");
+    state.players[id("converted-earlier")]!.originalRole = "cursed";
+    state.players[id("converted-earlier")]!.channelSince = { wolves: 19 as GameEvent["id"] };
+    addPlayer(state, "converted-later", "werewolf", "alive");
+    state.players[id("converted-later")]!.originalRole = "cursed";
+    state.players[id("converted-later")]!.channelSince = { wolves: 21 as GameEvent["id"] };
+
+    const snapshot = projectSnapshot(state, id("wolf"));
+    expect(snapshot.availableChannels).toContain("wolves");
+    expect(snapshot.knownChannelMemberIds).toEqual({ wolves: [id("converted-later")] });
+  });
+
+  test("an available secret channel is projected with an empty known list", () => {
+    const state = makeState();
+    delete state.players[id("dead-wolf")];
+    const snapshot = projectSnapshot(state, id("wolf"));
+    expect(snapshot.availableChannels).toEqual(["public", "wolves"]);
+    expect(snapshot.knownChannelMemberIds).toEqual({ wolves: [] });
+  });
 });
 
 describe("finished games reveal roles and expose the winner", () => {

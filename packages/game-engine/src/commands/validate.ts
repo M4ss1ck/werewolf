@@ -1,6 +1,13 @@
-import type { ActionId, GameplayCommand, UserId } from "@werewolf/protocol";
+import {
+  type ActionId,
+  CHAT_MAX_MENTION_RECIPIENTS,
+  type ChatChannel,
+  type ChatMention,
+  type GameplayCommand,
+  type UserId,
+} from "@werewolf/protocol";
+import { hasChatReadEntitlement, knownMentionTargets, projectedPlayerLabel } from "../chat.ts";
 import { getActionSpecsFor } from "../roles/action-spec.ts";
-import { CULT_CHAT_ROLES, WOLF_CHAT_ROLES } from "../roles/registry.ts";
 import { resolveTargets } from "../roles/targets.ts";
 import type { DomainError, GameState, PlayerState } from "../state.ts";
 
@@ -22,26 +29,26 @@ export function validateCommand(
       if (player.status !== "alive" || state.phase.type === "night") {
         return { code: "CHAT_READ_ONLY" };
       }
-      return null;
-    }
-    if (command.payload.channel === "grave") {
+    } else if (command.payload.channel === "grave") {
       // The dead may speak in the graveyard in every phase, including night.
       // A spectator who never played is not dead and must not sit in it.
       if (player.status !== "dead") return { code: "CHANNEL_NOT_AVAILABLE" };
-      return null;
-    }
-    if (command.payload.channel === "cult") {
+    } else if (command.payload.channel === "cult") {
       // The cult channel is for the cult: the leader and converted cultists,
       // alive. Mirrors the wolves channel.
-      if (player.role === null || !CULT_CHAT_ROLES.has(player.role))
-        return { code: "CHANNEL_NOT_AVAILABLE" };
+      if (!hasChatReadEntitlement(player, "cult")) return { code: "CHANNEL_NOT_AVAILABLE" };
       if (player.status !== "alive") return { code: "CHAT_READ_ONLY" };
-      return null;
+    } else {
+      if (!hasChatReadEntitlement(player, "wolves")) return { code: "CHANNEL_NOT_AVAILABLE" };
+      if (player.status !== "alive") return { code: "CHAT_READ_ONLY" };
     }
-    if (player.role === null || !WOLF_CHAT_ROLES.has(player.role))
-      return { code: "CHANNEL_NOT_AVAILABLE" };
-    if (player.status !== "alive") return { code: "CHAT_READ_ONLY" };
-    return null;
+    return validateChatMentions(
+      state,
+      actorId,
+      command.payload.channel,
+      command.payload.text,
+      command.payload.mentions,
+    );
   }
   if (player.status !== "alive") return { code: "NOT_ALIVE" };
   if (command.type === "phase.ready") return null;
@@ -64,6 +71,53 @@ export function validateCommand(
     return validateActionPayload(state, player, command.payload);
   }
   return { code: "ACTION_NOT_AVAILABLE" };
+}
+
+function validateChatMentions(
+  state: GameState,
+  actorId: UserId,
+  channel: ChatChannel,
+  text: string,
+  mentions: ChatMention[] | undefined,
+): DomainError | null {
+  const normalizedMentions = mentions ?? [];
+  if (
+    new Set(normalizedMentions.map((mention) => mention.userId)).size > CHAT_MAX_MENTION_RECIPIENTS
+  )
+    return { code: "INVALID_MENTION" };
+
+  const sorted = [...normalizedMentions].sort(
+    (left, right) => left.start - right.start || left.length - right.length,
+  );
+  for (let index = 0; index < sorted.length; index += 1) {
+    const mention = sorted[index]!;
+    if (
+      !Number.isInteger(mention.start) ||
+      mention.start < 0 ||
+      !Number.isInteger(mention.length) ||
+      mention.length <= 0 ||
+      mention.start + mention.length > text.length
+    )
+      return { code: "INVALID_MENTION" };
+    const previous = sorted[index - 1];
+    if (previous && mention.start < previous.start + previous.length)
+      return { code: "INVALID_MENTION" };
+  }
+
+  const targets = new Map(
+    knownMentionTargets(state, actorId, channel).map((target) => [target.id, target]),
+  );
+  for (const mention of normalizedMentions) {
+    if (mention.userId === actorId) return { code: "INVALID_MENTION" };
+    const target = targets.get(mention.userId);
+    if (!target) return { code: "INVALID_MENTION" };
+    if (
+      text.slice(mention.start, mention.start + mention.length) !==
+      `@${projectedPlayerLabel(target)}`
+    )
+      return { code: "INVALID_MENTION" };
+  }
+  return null;
 }
 
 function validateActionPayload(

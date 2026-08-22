@@ -1,12 +1,7 @@
-import type {
-  ChatChannel,
-  UserId,
-  ViewerGameSnapshot,
-  ViewerIntent,
-  ViewerPlayer,
-} from "@werewolf/protocol";
+import type { UserId, ViewerGameSnapshot, ViewerIntent, ViewerPlayer } from "@werewolf/protocol";
+import { availableChatChannels, knownMentionTargets, projectedPlayerLabel } from "../chat.ts";
 import { getPerceivedRole } from "../roles/perceived.ts";
-import { getRoleDefinition, isCultMember, isPackMember } from "../roles/registry.ts";
+import { getRoleDefinition } from "../roles/registry.ts";
 import type { GameState, PlayerState } from "../state.ts";
 import { getAvailableActions } from "./available-actions.ts";
 
@@ -19,7 +14,7 @@ export interface SnapshotViewer {
 function viewerPlayer(player: PlayerState, finished: boolean): ViewerPlayer {
   return {
     userId: player.id,
-    displayName: player.displayName ?? player.id,
+    displayName: projectedPlayerLabel(player),
     status: player.status,
     ...((player.status === "dead" || finished) && player.role ? { revealedRole: player.role } : {}),
     ...(player.controller?.type === "bot" ? { isBot: true } : {}),
@@ -54,18 +49,6 @@ function voteTallies(state: GameState): { targetId: UserId; count: number }[] | 
     );
 }
 
-function availableChannels(player: PlayerState | undefined): ChatChannel[] {
-  if (!player) return ["public"];
-  const channels: ChatChannel[] = ["public"];
-  // Wolf chat is for the pack and for converted players entitled by marker;
-  // a wolf-faction role like the sorcerer must not see the tab it cannot use.
-  if (isPackMember(player) || player.channelSince?.wolves !== undefined) channels.push("wolves");
-  // Cult chat is for the cult and for converted players entitled by marker.
-  if (isCultMember(player) || player.channelSince?.cult !== undefined) channels.push("cult");
-  if (player.status === "dead") channels.push("grave");
-  return channels;
-}
-
 export function projectSnapshot(
   state: GameState,
   viewer: SnapshotViewer | UserId,
@@ -76,6 +59,18 @@ export function projectSnapshot(
   const member = state.players[userId];
   const actions = member?.status === "alive" ? getAvailableActions(state, userId) : [];
   const tallies = voteTallies(state);
+  const channels = availableChatChannels(member);
+  const knownChannelMemberIds: ViewerGameSnapshot["knownChannelMemberIds"] = {};
+  if (member) {
+    for (const channel of ["wolves", "cult"] as const) {
+      if (channels.includes(channel)) {
+        knownChannelMemberIds[channel] = knownMentionTargets(state, userId, channel).map(
+          (player) => player.id,
+        );
+      }
+    }
+  }
+  const hasKnownChannelMemberIds = Object.keys(knownChannelMemberIds).length > 0;
   const snapshot: ViewerGameSnapshot = {
     game: {
       id: state.id,
@@ -102,7 +97,8 @@ export function projectSnapshot(
     ),
     ...(tallies ? { voteTallies: tallies } : {}),
     availableActions: actions,
-    availableChannels: availableChannels(member),
+    ...(hasKnownChannelMemberIds ? { knownChannelMemberIds } : {}),
+    availableChannels: channels,
     cursor: (cursor ??
       (typeof viewer === "string" ? 0 : (viewer.cursor ?? 0))) as ViewerGameSnapshot["cursor"],
     serverNow: serverNow ?? (typeof viewer === "string" ? 0 : (viewer.serverNow ?? 0)),

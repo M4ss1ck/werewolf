@@ -1,4 +1,5 @@
 import type { GameEvent, UserId } from "@werewolf/protocol";
+import { hasChatReadEntitlement } from "../chat.ts";
 import { CULT_CHAT_ROLES, WOLF_CHAT_ROLES } from "../roles/registry.ts";
 import type { GameState } from "../state.ts";
 
@@ -17,7 +18,7 @@ export function canViewEvent(event: GameEvent, viewer: UserId, state: GameState)
   }
 
   if (event.scopeId === "wolves") {
-    if (player.role === null || !WOLF_CHAT_ROLES.has(player.role)) return false;
+    if (!hasChatReadEntitlement(player, "wolves")) return false;
 
     // A starting wolf sees the whole faction history.
     if (player.originalRole !== null && WOLF_CHAT_ROLES.has(player.originalRole)) return true;
@@ -33,7 +34,7 @@ export function canViewEvent(event: GameEvent, viewer: UserId, state: GameState)
   }
 
   if (event.scopeId === "cult") {
-    if (player.role === null || !CULT_CHAT_ROLES.has(player.role)) return false;
+    if (!hasChatReadEntitlement(player, "cult")) return false;
 
     // A starting cult member (the leader) sees the whole faction history.
     if (player.originalRole !== null && CULT_CHAT_ROLES.has(player.originalRole)) return true;
