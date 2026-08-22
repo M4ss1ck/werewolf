@@ -5,6 +5,22 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.8] - 2026-08-22
+
+### Added
+- Add a shared virtualized chat UI with retained global history and continuity across global and in-game chat
+- Add structured chat mentions with candidate search, persistent metadata, and validation for known in-game mentions
+- Add mention identity support to chat drafts
+- Track persistent unread state
+- Support structured chat mentions for bots
+- Sign in from a Telegram Mini App through a polled claim
+
+### Fixed
+- Preserve exact viewport snapshots when restoring chat history
+- Jump to the latest message when the first message arrives
+- Correct bot chat integration and address remaining chat integration issues
+- Keep long player names inside their row
+
 ## [0.1.7] - 2026-08-20
 
 ### Added
