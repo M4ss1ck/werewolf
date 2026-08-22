@@ -1100,7 +1100,7 @@ test("game: a sync echo after the HTTP response clears and marks only its channe
   expect(read.calls.through).not.toContain("game:g1:wolves");
 });
 
-test("game: a sync echo before the HTTP response still marks once after the row arrives", async () => {
+test("game: a sync echo marks on the row, and the settling post adds no further mark", async () => {
   let resolvePost: (() => void) | undefined;
   const post = vi.spyOn(api, "postCommand").mockImplementation(
     () =>
@@ -1132,9 +1132,18 @@ test("game: a sync echo before the HTTP response still marks once after the row 
     ]),
   );
   expect(read.calls.through).toEqual(["game:g1:public"]);
+
+  // The echo also requests a jump to latest, and a jump marks through the row
+  // it lands on, one animation frame later. Wait for that second mark instead
+  // of racing it: on a fast machine the post below settles first and the frame
+  // never counted, which is the only reason this once read as a single mark.
+  await waitFor(() => expect(read.calls.through).toHaveLength(2));
+  const afterEcho = [...read.calls.through];
+
   resolvePost?.();
   await waitFor(() => expect(screen.getByLabelText("Message")).toHaveValue(""));
-  expect(read.calls.through).toHaveLength(1);
+  expect(read.calls.through).toEqual(afterEcho);
+  expect(read.calls.through).not.toContain("game:g1:wolves");
 });
 
 test("game: a sync-before-HTTP echo performs one actual jump and never jumps twice", async () => {
