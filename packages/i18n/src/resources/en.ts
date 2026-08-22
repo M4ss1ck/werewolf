@@ -238,6 +238,7 @@ export const en = {
     PHASE_CLOSED: "That phase has already ended.",
     ACTION_NOT_AVAILABLE: "That action is not available right now.",
     INVALID_TARGET: "That player is not a valid target.",
+    INVALID_MENTION: "That mention is no longer valid. Refresh suggestions and try again.",
     CHAT_READ_ONLY: "Chat is read-only right now.",
     CHANNEL_NOT_AVAILABLE: "That chat channel is not available.",
     MIN_PLAYERS_NOT_REACHED: "Not enough players have joined to start the game.",

@@ -104,6 +104,15 @@ test("every error code has a message a player can act on, in both locales", () =
   }
 });
 
+test("INVALID_MENTION explains how to recover in both locales", () => {
+  expect(en.errors.INVALID_MENTION).toBe(
+    "That mention is no longer valid. Refresh suggestions and try again.",
+  );
+  expect(es.errors.INVALID_MENTION).toBe(
+    "Esa mención ya no es válida. Actualiza las sugerencias e inténtalo de nuevo.",
+  );
+});
+
 test("every player-facing event kind renders in both locales", () => {
   // Server-scope audit events never reach a viewer, so they have no
   // presentation here; everything else — public, player and faction scopes —

@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { DayActionSetPayloadSchema, NightActionSetPayloadSchema } from "./commands.ts";
+import {
+  ChatSendCommandSchema,
+  DayActionSetPayloadSchema,
+  NightActionSetPayloadSchema,
+} from "./commands.ts";
 import { ACTION_IDS } from "./enums.ts";
 
 /** Every ActionId must be submittable. An action id that exists in the engine
@@ -41,4 +45,14 @@ describe("night and day action payload schemas", () => {
         true,
       );
   });
+});
+
+test("chat.send defaults mentions and emits canonical text", () => {
+  const result = ChatSendCommandSchema.parse({
+    commandId: "chat-1",
+    phaseId: 1,
+    type: "chat.send",
+    payload: { channel: "public", text: "  hello  " },
+  });
+  expect(result.payload).toEqual({ channel: "public", text: "hello", mentions: [] });
 });

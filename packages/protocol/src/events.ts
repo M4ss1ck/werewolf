@@ -4,6 +4,8 @@
 // scope; the `scope` field on the event distinguishes the two.
 
 import { z } from "zod";
+import type { ChatContent } from "./chat.ts";
+import { ChatContentSchema } from "./chat.ts";
 import type {
   ChatChannel,
   ConversionCause,
@@ -117,7 +119,7 @@ export interface EventPayloads {
     winningPlayers: UserId[];
     reason: VictoryReason;
   };
-  "chat.message": { channel: ChatChannel; text: string };
+  "chat.message": { channel: ChatChannel } & ChatContent;
   // Player-private
   "role.assigned": { role: RoleId; faction: FactionId };
   "seer.result": { targetId: UserId; role: RoleId };
@@ -304,7 +306,7 @@ export const GameEventSchema = z.discriminatedUnion("kind", [
     scopeId: z.string().optional(),
     actorUserId: UserIdSchema.optional(),
     createdAt: z.number(),
-    payload: z.object({ channel: ChatChannelSchema, text: z.string() }),
+    payload: z.object({ channel: ChatChannelSchema }).and(ChatContentSchema),
   }),
   z.object({
     id: EventIdSchema,

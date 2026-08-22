@@ -237,6 +237,7 @@ export const es: TranslationResource = {
     PHASE_CLOSED: "Esa fase ya ha terminado.",
     ACTION_NOT_AVAILABLE: "Esa acción no está disponible ahora mismo.",
     INVALID_TARGET: "Ese jugador no es un objetivo válido.",
+    INVALID_MENTION: "Esa mención ya no es válida. Actualiza las sugerencias e inténtalo de nuevo.",
     CHAT_READ_ONLY: "El chat es de solo lectura ahora mismo.",
     CHANNEL_NOT_AVAILABLE: "Ese canal de chat no está disponible.",
     MIN_PLAYERS_NOT_REACHED: "No hay suficientes jugadores para comenzar la partida.",

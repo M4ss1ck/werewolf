@@ -3,8 +3,12 @@ import type { EventId, GameEvent, UserId } from "./index.ts";
 import {
   BALANCE_VERSION,
   ChatSendCommandSchema,
+  ChatSubscribeFrameSchema,
+  ErrorCodeSchema,
   EVENT_KINDS,
+  GameEventSchema,
   GameplayCommandSchema,
+  MentionCandidateSchema,
   MeStatsSchema,
   MIN_PLAYERS,
   NightActionSetCommandSchema,
@@ -193,6 +197,55 @@ test("the subscribe frame rejects a negative cursor", () => {
   expect(result.success).toBe(false);
 });
 
+test("the global chat subscribe frame is exported with an optional read cursor", () => {
+  expect(ChatSubscribeFrameSchema.safeParse({ type: "subscribe", cursor: 0 }).success).toBe(true);
+  expect(
+    ChatSubscribeFrameSchema.safeParse({ type: "subscribe", cursor: 0, readCursor: 0 }).success,
+  ).toBe(true);
+});
+
+test("legacy chat.message events default mentions and new events expose them", () => {
+  const event = GameEventSchema.parse({
+    id: 1,
+    kind: "chat.message",
+    scope: "public",
+    createdAt: 1,
+    payload: { channel: "public", text: "hello" },
+  });
+  expect(event.payload).toEqual({ channel: "public", text: "hello", mentions: [] });
+  const withMention = GameEventSchema.parse({
+    id: 2,
+    kind: "chat.message",
+    scope: "public",
+    createdAt: 1,
+    payload: {
+      channel: "public",
+      text: "@Ada",
+      mentions: [{ userId: "u1", start: 0, length: 4 }],
+    },
+  });
+  if (withMention.kind !== "chat.message") throw new Error("expected a chat.message event");
+  expect(withMention.payload.mentions).toEqual([{ userId: "u1" as UserId, start: 0, length: 4 }]);
+});
+
+test("MentionCandidateSchema is strict and keeps only public candidate fields", () => {
+  expect(MentionCandidateSchema.safeParse({ userId: "u1", displayName: "Ada" }).success).toBe(true);
+  expect(
+    MentionCandidateSchema.safeParse({
+      userId: "u1",
+      displayName: "Ada",
+      role: "seer",
+      faction: "village",
+      email: "ada@example.com",
+      channelSince: { wolves: 1 },
+    }).success,
+  ).toBe(false);
+});
+
+test("INVALID_MENTION is in the error-code vocabulary", () => {
+  expect(ErrorCodeSchema.safeParse("INVALID_MENTION").success).toBe(true);
+});
+
 test("EVENT_KINDS covers the initial protocol vocabulary", () => {
   expect(EVENT_KINDS).toEqual([
     "game.started",
@@ -298,6 +351,21 @@ test("the snapshot schema keeps voteTallies during a voting phase", () => {
       { targetId: "user-3" as UserId, count: 1 },
     ]);
   }
+});
+
+test("the snapshot schema exposes only optional secret-channel knowledge", () => {
+  const input = snapshotInput();
+  input.knownChannelMemberIds = { wolves: ["user-2"], cult: ["user-3"] };
+  const result = ViewerGameSnapshotSchema.safeParse(input);
+  expect(result.success).toBe(true);
+  if (result.success) {
+    expect(result.data.knownChannelMemberIds).toEqual({
+      wolves: ["user-2" as UserId],
+      cult: ["user-3" as UserId],
+    });
+  }
+  input.knownChannelMemberIds = { public: ["user-2"] };
+  expect(ViewerGameSnapshotSchema.safeParse(input).success).toBe(false);
 });
 
 test("the snapshot schema keeps a typed currentIntent", () => {

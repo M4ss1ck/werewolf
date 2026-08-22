@@ -3,7 +3,7 @@
 // must not produce two events); `phaseId` must equal the current phase's id.
 
 import { z } from "zod";
-
+import { ChatContentSchema } from "./chat.ts";
 import { ActionIdSchema, ChatChannelSchema } from "./enums.ts";
 import { PhaseIdSchema, UserIdSchema } from "./ids.ts";
 
@@ -129,10 +129,7 @@ export const ChatSendCommandSchema = z.object({
   commandId: z.string().min(1),
   phaseId: PhaseIdSchema,
   type: z.literal("chat.send"),
-  payload: z.object({
-    channel: ChatChannelSchema,
-    text: z.string(),
-  }),
+  payload: z.object({ channel: ChatChannelSchema }).and(ChatContentSchema),
 });
 export type ChatSendCommand = z.infer<typeof ChatSendCommandSchema>;
 

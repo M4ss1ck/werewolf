@@ -86,6 +86,8 @@ export interface ViewerGameSnapshot {
     };
   };
   players: ViewerPlayer[];
+  /** Secret-channel members already known to this viewer. */
+  knownChannelMemberIds?: Partial<Record<"wolves" | "cult", UserId[]>>;
   /** Aggregate live tally. Voter identities are deliberately absent. */
   voteTallies?: { targetId: UserId; count: number }[];
   /** Present only when the viewer is a member of the game. */
@@ -112,6 +114,16 @@ export const ViewerPlayerSchema = z.object({
   revealedRole: RoleIdSchema.optional(),
   isBot: z.boolean().optional(),
 });
+
+export const MentionCandidateSchema = z
+  .object({
+    userId: UserIdSchema,
+    displayName: z.string(),
+    status: GamePlayerStatusSchema.optional(),
+    isBot: z.boolean().optional(),
+  })
+  .strict();
+export type MentionCandidate = z.infer<typeof MentionCandidateSchema>;
 
 export const ViewerIntentSchema = z.object({
   vote: z
@@ -167,6 +179,13 @@ export const ViewerGameSnapshotSchema = z.object({
       .optional(),
   }),
   players: z.array(ViewerPlayerSchema),
+  knownChannelMemberIds: z
+    .object({
+      wolves: z.array(UserIdSchema).optional(),
+      cult: z.array(UserIdSchema).optional(),
+    })
+    .strict()
+    .optional(),
   voteTallies: z.array(z.object({ targetId: UserIdSchema, count: z.number() })).optional(),
   me: z
     .object({
