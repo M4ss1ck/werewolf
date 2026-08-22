@@ -1,8 +1,18 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { UserId } from "@werewolf/protocol";
-import { createContext, forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import {
+  createContext,
+  forwardRef,
+  StrictMode,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
+import { flushSync } from "react-dom";
+import { createRoot } from "react-dom/client";
 import { I18nextProvider } from "react-i18next";
-import { VirtuosoMockContext } from "react-virtuoso";
+import { type StateSnapshot, VirtuosoMockContext } from "react-virtuoso";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { i18n } from "../i18n/i18n.ts";
@@ -24,7 +34,10 @@ type MockProps = {
 const control = vi.hoisted(() => ({
   props: undefined as MockProps | undefined,
   scrolls: [] as unknown[],
-  state: { ranges: [], scrollTop: 37 } as { ranges: never[]; scrollTop: number },
+  state: { ranges: [], scrollTop: 37 } as StateSnapshot,
+  getStateMode: "sync" as "sync" | "defer" | "none",
+  handleAvailable: true,
+  deferredStates: [] as Array<(state: StateSnapshot) => void>,
   setAtBottom: undefined as ((value: boolean) => void) | undefined,
 }));
 
@@ -35,14 +48,23 @@ vi.mock("react-virtuoso", () => {
   const Virtuoso = forwardRef<unknown, MockProps>((props, ref) => {
     const scroller = useRef<HTMLDivElement>(null);
     const mounted = useRef(false);
-    useImperativeHandle(ref, () => ({
-      getState(callback: (state: typeof control.state) => void) {
-        callback(control.state);
-      },
-      scrollToIndex(location: unknown) {
-        control.scrolls.push(location);
-      },
-    }));
+    useImperativeHandle(ref, () =>
+      control.handleAvailable
+        ? {
+            getState(callback: (state: typeof control.state) => void) {
+              if (control.getStateMode === "none") return;
+              if (control.getStateMode === "defer") {
+                control.deferredStates.push(callback);
+                return;
+              }
+              callback(control.state);
+            },
+            scrollToIndex(location: unknown) {
+              control.scrolls.push(location);
+            },
+          }
+        : null,
+    );
     useEffect(() => {
       control.props = props;
       control.setAtBottom = props.atBottomStateChange;
@@ -52,6 +74,26 @@ vi.mock("react-virtuoso", () => {
         props.atBottomStateChange?.(true);
       }
     }, [props]);
+    const restoreScrollTop = props.restoreStateFrom?.scrollTop;
+    useEffect(() => {
+      if (restoreScrollTop === undefined) return;
+      const frames: number[] = [];
+      const restoreAfterFrame = (remaining: number) => {
+        frames.push(
+          requestAnimationFrame(() => {
+            if (remaining === 1) {
+              if (scroller.current) scroller.current.scrollTop = 0;
+              return;
+            }
+            restoreAfterFrame(remaining - 1);
+          }),
+        );
+      };
+      restoreAfterFrame(4);
+      return () => {
+        for (const frame of frames) cancelAnimationFrame(frame);
+      };
+    }, [restoreScrollTop]);
     return (
       <div data-testid="virtuoso">
         <div data-testid="virtuoso-scroller" ref={scroller}>
@@ -160,6 +202,10 @@ beforeEach(() => {
   vi.useFakeTimers();
   control.props = undefined;
   control.scrolls = [];
+  control.state = { ranges: [], scrollTop: 37 };
+  control.getStateMode = "sync";
+  control.handleAvailable = true;
+  control.deferredStates = [];
   control.setAtBottom = undefined;
   ControlledIntersectionObserver.instances = [];
   vi.stubGlobal("IntersectionObserver", ControlledIntersectionObserver);
@@ -270,6 +316,7 @@ describe("ChatList viewport and unread mechanics", () => {
         </VirtuosoMockContext.Provider>
       </I18nextProvider>,
     );
+    flushArm();
     view.rerender(
       <I18nextProvider i18n={i18n}>
         <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
@@ -761,7 +808,12 @@ describe("ChatList viewport and unread mechanics", () => {
     });
     flushArm();
     const observer = ControlledIntersectionObserver.instances.at(-1)!;
+    const root = screen.getByTestId("virtuoso-scroller");
+    root.getBoundingClientRect = () => ({ top: 0, bottom: 300 }) as DOMRect;
     const firstRow = document.querySelector<HTMLElement>("[data-message-id='1']")!;
+    const secondRow = document.querySelector<HTMLElement>("[data-message-id='2']")!;
+    firstRow.getBoundingClientRect = () => ({ top: 80, bottom: 120 }) as DOMRect;
+    secondRow.getBoundingClientRect = () => ({ top: 160, bottom: 200 }) as DOMRect;
     act(() => observer.trigger(firstRow, 80));
     view.rerender(
       <I18nextProvider i18n={i18n}>
@@ -1004,8 +1056,97 @@ describe("ChatList viewport and unread mechanics", () => {
       readState: { readThrough: 4, seenAfter: [] },
       snapshot,
     });
-    expect(control.props?.initialTopMostItemIndex).toBe(20);
+    expect(control.props?.initialTopMostItemIndex).toBe(0);
     expect(control.props?.firstItemIndex).toBe(20);
+  });
+
+  test("retries an absent snapshot anchor after older history prepends", () => {
+    const snapshot: ChatViewportSnapshot = {
+      virtuoso: { ranges: [], scrollTop: 4600 },
+      messageIds: [2, 3, 4],
+      anchorId: 2,
+      anchorOffset: 12,
+    };
+    const view = renderList({
+      hasOlder: true,
+      messages: [message(3), message(4)],
+      readState: { readThrough: 4, seenAfter: [] },
+      snapshot,
+    });
+    act(() => vi.runAllTimers());
+    expect(control.scrolls.at(-1)).toMatchObject({ index: 0 });
+
+    control.scrolls = [];
+    view.rerender(
+      <I18nextProvider i18n={i18n}>
+        <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
+          <ChatList
+            conversationKey="global"
+            hasOlder
+            messages={[message(1), message(2), message(3), message(4)]}
+            identityCohort={[]}
+            viewerId={viewerId}
+            readState={{ readThrough: 4, seenAfter: [] }}
+            jumpToLatestToken={0}
+            emptyLabel="No messages"
+            snapshot={snapshot}
+            onSnapshot={vi.fn()}
+            onVisible={vi.fn()}
+            onMarkThrough={vi.fn()}
+          />
+        </VirtuosoMockContext.Provider>
+      </I18nextProvider>,
+    );
+    act(() => vi.runAllTimers());
+
+    expect(control.scrolls.at(-1)).toMatchObject({
+      index: 1,
+      align: "start",
+      offset: 12,
+      behavior: "auto",
+    });
+    view.unmount();
+  });
+
+  test("finalizes an absent snapshot fallback when no older history remains", () => {
+    const snapshot: ChatViewportSnapshot = {
+      virtuoso: { ranges: [], scrollTop: 4600 },
+      messageIds: [2, 3, 4],
+      anchorId: 2,
+      anchorOffset: 12,
+    };
+    const view = renderList({
+      messages: [message(3), message(4)],
+      readState: { readThrough: 4, seenAfter: [] },
+      snapshot,
+    });
+    act(() => vi.runAllTimers());
+    expect(control.scrolls.at(-1)).toMatchObject({ index: 0 });
+    control.scrolls = [];
+
+    view.rerender(
+      <I18nextProvider i18n={i18n}>
+        <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
+          <ChatList
+            conversationKey="global"
+            messages={[message(3), message(4)]}
+            identityCohort={[]}
+            viewerId={viewerId}
+            readState={{ readThrough: 4, seenAfter: [] }}
+            jumpToLatestToken={0}
+            emptyLabel="No messages"
+            snapshot={{ ...snapshot }}
+            onSnapshot={vi.fn()}
+            onVisible={vi.fn()}
+            onMarkThrough={vi.fn()}
+          />
+        </VirtuosoMockContext.Provider>
+      </I18nextProvider>,
+    );
+    act(() => vi.runAllTimers());
+
+    expect(control.scrolls).toHaveLength(0);
+    view.unmount();
   });
 
   test("restores a retained anchor offset across append, prepend, and trim", () => {
@@ -1033,7 +1174,7 @@ describe("ChatList viewport and unread mechanics", () => {
       snapshot,
     });
     act(() => vi.runAllTimers());
-    expect(control.scrolls.at(-1)).toMatchObject({ index: 11, offset: 12 });
+    expect(control.scrolls.at(-1)).toMatchObject({ index: 2, offset: 12 });
     prepended.unmount();
     cleanup();
 
@@ -1046,6 +1187,312 @@ describe("ChatList viewport and unread mechanics", () => {
     act(() => vi.runAllTimers());
     expect(control.scrolls.at(-1)).toMatchObject({ index: 0, offset: 12 });
     trimmed.unmount();
+  });
+
+  test("repositions a retained anchor when exact initial IDs later diverge", () => {
+    const snapshot: ChatViewportSnapshot = {
+      virtuoso: { ranges: [], scrollTop: 4600 },
+      messageIds: [1, 2, 3],
+      anchorId: 2,
+      anchorOffset: 12,
+    };
+    const view = renderList({
+      firstItemIndex: 9,
+      messages: [message(1), message(2), message(3)],
+      readState: { readThrough: 4, seenAfter: [] },
+      snapshot,
+    });
+    act(() => vi.runAllTimers());
+    control.scrolls = [];
+
+    view.rerender(
+      <I18nextProvider i18n={i18n}>
+        <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
+          <ChatList
+            conversationKey="global"
+            firstItemIndex={9}
+            messages={[message(1), message(2), message(3), message(4)]}
+            identityCohort={[]}
+            viewerId={viewerId}
+            readState={{ readThrough: 4, seenAfter: [] }}
+            jumpToLatestToken={0}
+            emptyLabel="No messages"
+            snapshot={snapshot}
+            onSnapshot={vi.fn()}
+            onVisible={vi.fn()}
+            onMarkThrough={vi.fn()}
+          />
+        </VirtuosoMockContext.Provider>
+      </I18nextProvider>,
+    );
+    act(() => vi.runAllTimers());
+
+    expect(control.scrolls.at(-1)).toMatchObject({
+      index: 1,
+      offset: 12,
+      align: "start",
+      behavior: "auto",
+    });
+    view.unmount();
+  });
+
+  test("does not restart divergent anchor correction on identical rerenders", () => {
+    const snapshot = (): ChatViewportSnapshot => ({
+      virtuoso: { ranges: [], scrollTop: 4600 },
+      messageIds: [1, 2, 3],
+      anchorId: 2,
+      anchorOffset: 12,
+    });
+    const renderDiverged = (view: ReturnType<typeof render>) =>
+      view.rerender(
+        <I18nextProvider i18n={i18n}>
+          <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
+            <ChatList
+              conversationKey="global"
+              firstItemIndex={9}
+              messages={[message(1), message(2), message(3), message(4)]}
+              identityCohort={[]}
+              viewerId={viewerId}
+              readState={{ readThrough: 4, seenAfter: [] }}
+              jumpToLatestToken={0}
+              emptyLabel="No messages"
+              snapshot={snapshot()}
+              onSnapshot={vi.fn()}
+              onVisible={vi.fn()}
+              onMarkThrough={vi.fn()}
+            />
+          </VirtuosoMockContext.Provider>
+        </I18nextProvider>,
+      );
+    const view = renderList({
+      firstItemIndex: 9,
+      messages: [message(1), message(2), message(3)],
+      readState: { readThrough: 4, seenAfter: [] },
+      snapshot: snapshot(),
+    });
+    act(() => vi.runAllTimers());
+    control.scrolls = [];
+
+    const pendingFrames = new Map<number, (time: number) => void>();
+    let nextFrame = 1;
+    const requestFrame = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback) => {
+        const id = nextFrame++;
+        pendingFrames.set(id, callback);
+        return id;
+      });
+    const cancelFrame = vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => {
+      pendingFrames.delete(id);
+    });
+    act(() => renderDiverged(view));
+    for (let frame = 0; frame < 3; frame += 1) {
+      const framesBeforeRerender = [...pendingFrames.entries()];
+      act(() => renderDiverged(view));
+      for (const [id, callback] of framesBeforeRerender) {
+        if (pendingFrames.get(id) !== callback) continue;
+        pendingFrames.delete(id);
+        act(() => callback(0));
+      }
+    }
+
+    expect(control.scrolls).toHaveLength(1);
+    expect(control.scrolls[0]).toMatchObject({
+      index: 1,
+      offset: 12,
+      align: "start",
+      behavior: "auto",
+    });
+    requestFrame.mockRestore();
+    cancelFrame.mockRestore();
+    view.unmount();
+  });
+
+  test("does not retarget a retained anchor to a new unread row", () => {
+    const snapshot: ChatViewportSnapshot = {
+      virtuoso: { ranges: [], scrollTop: 4600 },
+      messageIds: [1, 2, 3],
+      anchorId: 2,
+      anchorOffset: 12,
+    };
+    const view = renderList({
+      messages: [message(1), message(2), message(3)],
+      readState: { readThrough: 3, seenAfter: [] },
+      snapshot,
+    });
+
+    view.rerender(
+      <I18nextProvider i18n={i18n}>
+        <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
+          <ChatList
+            conversationKey="global"
+            messages={[message(1), message(2), message(3), message(4)]}
+            identityCohort={[]}
+            viewerId={viewerId}
+            readState={{ readThrough: 3, seenAfter: [] }}
+            jumpToLatestToken={0}
+            emptyLabel="No messages"
+            snapshot={snapshot}
+            onSnapshot={vi.fn()}
+            onVisible={vi.fn()}
+            onMarkThrough={vi.fn()}
+          />
+        </VirtuosoMockContext.Provider>
+      </I18nextProvider>,
+    );
+    act(() => vi.runAllTimers());
+
+    expect(control.scrolls.at(-1)).toMatchObject({
+      index: 1,
+      offset: 12,
+      align: "start",
+      behavior: "auto",
+    });
+    view.unmount();
+  });
+
+  test("delays exact snapshot restoration until after Virtuoso and read arm", () => {
+    const snapshot: ChatViewportSnapshot = {
+      virtuoso: { ranges: [], scrollTop: 826 },
+      messageIds: [1, 2, 3],
+      anchorId: 2,
+      anchorOffset: 12,
+    };
+    const onVisible = vi.fn();
+    const view = render(
+      <StrictMode>
+        <I18nextProvider i18n={i18n}>
+          <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
+            <ChatList
+              conversationKey="global"
+              firstItemIndex={100000}
+              messages={[message(1), message(2), message(3)]}
+              identityCohort={[]}
+              viewerId={viewerId}
+              readState={{ readThrough: 3, seenAfter: [] }}
+              jumpToLatestToken={0}
+              emptyLabel="No messages"
+              snapshot={snapshot}
+              onSnapshot={vi.fn()}
+              onVisible={onVisible}
+              onMarkThrough={vi.fn()}
+            />
+          </VirtuosoMockContext.Provider>
+        </I18nextProvider>
+      </StrictMode>,
+    );
+
+    expect(control.props?.restoreStateFrom).toEqual(snapshot.virtuoso);
+    const scroller = screen.getByTestId("virtuoso-scroller");
+    const firstRow = document.querySelector<HTMLElement>('[data-message-id="1"]')!;
+    const observer = ControlledIntersectionObserver.instances.at(-1)!;
+    act(() => observer.trigger(firstRow, 0));
+    expect(onVisible).not.toHaveBeenCalled();
+
+    for (let frame = 0; frame < 6; frame += 1) {
+      act(() => vi.advanceTimersByTime(16));
+      act(() => observer.trigger(firstRow, 0));
+      expect(onVisible).not.toHaveBeenCalled();
+    }
+    expect(scroller.scrollTop).toBe(826);
+    expect(control.scrolls).toHaveLength(0);
+    act(() => vi.advanceTimersByTime(16));
+    act(() => observer.trigger(firstRow, 0));
+    expect(onVisible).toHaveBeenCalledWith([1]);
+    view.unmount();
+  });
+
+  test("completes exact restoration through identical-content rerenders", () => {
+    const onVisible = vi.fn();
+    const renderExact = (snapshot: ChatViewportSnapshot) => (
+      <I18nextProvider i18n={i18n}>
+        <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
+          <ChatList
+            conversationKey="global"
+            firstItemIndex={100000}
+            messages={[message(1), message(2), message(3)]}
+            identityCohort={[]}
+            viewerId={viewerId}
+            readState={{ readThrough: 3, seenAfter: [] }}
+            jumpToLatestToken={0}
+            emptyLabel="No messages"
+            snapshot={snapshot}
+            onSnapshot={vi.fn()}
+            onVisible={onVisible}
+            onMarkThrough={vi.fn()}
+          />
+        </VirtuosoMockContext.Provider>
+      </I18nextProvider>
+    );
+    const snapshot = (): ChatViewportSnapshot => ({
+      virtuoso: { ranges: [], scrollTop: 826 },
+      messageIds: [1, 2, 3],
+      anchorId: 2,
+      anchorOffset: 12,
+    });
+    const view = render(renderExact(snapshot()));
+    const scroller = screen.getByTestId("virtuoso-scroller");
+    const firstRow = document.querySelector<HTMLElement>('[data-message-id="1"]')!;
+    const observer = ControlledIntersectionObserver.instances.at(-1)!;
+
+    for (let frame = 0; frame < 6; frame += 1) {
+      act(() => {
+        view.rerender(renderExact(snapshot()));
+        vi.advanceTimersByTime(16);
+      });
+      act(() => observer.trigger(firstRow, 0));
+      expect(onVisible).not.toHaveBeenCalled();
+    }
+    expect(scroller.scrollTop).toBe(826);
+
+    act(() => {
+      view.rerender(renderExact(snapshot()));
+      vi.advanceTimersByTime(16);
+    });
+    act(() => observer.trigger(firstRow, 0));
+    expect(onVisible).toHaveBeenCalledWith([1]);
+    view.unmount();
+  });
+
+  test("keeps exact snapshot restoration when read state later adds an unread row", () => {
+    const snapshot: ChatViewportSnapshot = {
+      virtuoso: { ranges: [], scrollTop: 4600 },
+      messageIds: [1, 2, 3],
+      anchorId: 2,
+      anchorOffset: 12,
+    };
+    const view = renderList({
+      messages: [message(1), message(2), message(3)],
+      readState: { readThrough: 3, seenAfter: [] },
+      snapshot,
+    });
+    expect(control.props?.restoreStateFrom).toEqual(snapshot.virtuoso);
+
+    view.rerender(
+      <I18nextProvider i18n={i18n}>
+        <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
+          <ChatList
+            conversationKey="global"
+            messages={[message(1), message(2), message(3)]}
+            identityCohort={[]}
+            viewerId={viewerId}
+            readState={{ readThrough: 2, seenAfter: [] }}
+            jumpToLatestToken={0}
+            emptyLabel="No messages"
+            snapshot={snapshot}
+            onSnapshot={vi.fn()}
+            onVisible={vi.fn()}
+            onMarkThrough={vi.fn()}
+          />
+        </VirtuosoMockContext.Provider>
+      </I18nextProvider>,
+    );
+
+    expect(control.props?.restoreStateFrom).toEqual(snapshot.virtuoso);
+    act(() => vi.runAllTimers());
+    expect(screen.getByTestId("virtuoso-scroller").scrollTop).toBe(4600);
+    expect(control.scrolls).toHaveLength(0);
+    view.unmount();
   });
 
   test("trimmed rows leave no expired geometry for a later snapshot", () => {
@@ -1084,9 +1531,12 @@ describe("ChatList viewport and unread mechanics", () => {
     const view = renderList({ onSnapshot });
     flushArm();
     const root = screen.getByTestId("virtuoso-scroller");
-    root.getBoundingClientRect = () => ({ top: 100 }) as DOMRect;
+    root.getBoundingClientRect = () => ({ top: 100, bottom: 200 }) as DOMRect;
     const observer = ControlledIntersectionObserver.instances[0]!;
     const rows = [...document.querySelectorAll<HTMLElement>("[data-message-id]")];
+    rows[0]!.getBoundingClientRect = () => ({ top: 90, bottom: 130 }) as DOMRect;
+    rows[1]!.getBoundingClientRect = () => ({ top: 112, bottom: 152 }) as DOMRect;
+    rows[2]!.getBoundingClientRect = () => ({ top: 180, bottom: 220 }) as DOMRect;
     act(() => {
       observer.trigger(rows[0]!, 90);
       observer.trigger(rows[1]!, 112);
@@ -1112,14 +1562,289 @@ describe("ChatList viewport and unread mechanics", () => {
     );
     const snapshot = onSnapshot.mock.lastCall?.[0] as ChatViewportSnapshot;
     expect(snapshot.messageIds).toEqual([1, 2, 3]);
+    expect(snapshot.anchorId).toBe(2);
+    expect(snapshot.anchorOffset).toBe(12);
+  });
+
+  test("snapshot capture prefers fresh DOM geometry over stale observer rows", () => {
+    const onSnapshot = vi.fn();
+    const view = renderList({ onSnapshot });
+    flushArm();
+    const root = screen.getByTestId("virtuoso-scroller");
+    root.getBoundingClientRect = () => ({ top: 100, bottom: 200 }) as DOMRect;
+    const rows = [...document.querySelectorAll<HTMLElement>("[data-message-id]")];
+    rows[0]!.getBoundingClientRect = () => ({ top: 180, bottom: 220 }) as DOMRect;
+    rows[1]!.getBoundingClientRect = () => ({ top: 90, bottom: 130 }) as DOMRect;
+    rows[2]!.getBoundingClientRect = () => ({ top: 150, bottom: 190 }) as DOMRect;
+    const observer = ControlledIntersectionObserver.instances.at(-1)!;
+    act(() => observer.trigger(rows[0]!, 90));
+
+    view.rerender(
+      <I18nextProvider i18n={i18n}>
+        <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
+          <ChatList
+            conversationKey={"game:g1:public" as ConversationKey}
+            messages={[message(1), message(2), message(3)]}
+            identityCohort={[]}
+            viewerId={viewerId}
+            readState={{ readThrough: 3, seenAfter: [] }}
+            jumpToLatestToken={0}
+            emptyLabel="No messages"
+            onSnapshot={onSnapshot}
+            onVisible={vi.fn()}
+            onMarkThrough={vi.fn()}
+          />
+        </VirtuosoMockContext.Provider>
+      </I18nextProvider>,
+    );
+
+    const snapshot = onSnapshot.mock.lastCall?.[0] as ChatViewportSnapshot;
+    expect(snapshot.anchorId).toBe(3);
+    expect(snapshot.anchorOffset).toBe(50);
+    view.unmount();
+  });
+
+  test("snapshot capture ignores mounted rows outside the viewport", () => {
+    const onSnapshot = vi.fn();
+    const view = renderList({ onSnapshot, messages: [message(1), message(2)] });
+    flushArm();
+    const root = screen.getByTestId("virtuoso-scroller");
+    root.getBoundingClientRect = () => ({ top: 100, bottom: 200 }) as DOMRect;
+    const rows = [...document.querySelectorAll<HTMLElement>("[data-message-id]")];
+    rows[0]!.getBoundingClientRect = () => ({ top: 50, bottom: 250 }) as DOMRect;
+    rows[1]!.getBoundingClientRect = () => ({ top: 300, bottom: 340 }) as DOMRect;
+    const observer = ControlledIntersectionObserver.instances.at(-1)!;
+    act(() => observer.trigger(rows[0]!, 50));
+
+    view.rerender(
+      <I18nextProvider i18n={i18n}>
+        <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
+          <ChatList
+            conversationKey={"game:g1:public" as ConversationKey}
+            messages={[message(1), message(2)]}
+            identityCohort={[]}
+            viewerId={viewerId}
+            readState={{ readThrough: 0, seenAfter: [] }}
+            jumpToLatestToken={0}
+            emptyLabel="No messages"
+            onSnapshot={onSnapshot}
+            onVisible={vi.fn()}
+            onMarkThrough={vi.fn()}
+          />
+        </VirtuosoMockContext.Provider>
+      </I18nextProvider>,
+    );
+
+    const snapshot = onSnapshot.mock.lastCall?.[0] as ChatViewportSnapshot;
     expect(snapshot.anchorId).toBe(1);
-    expect(snapshot.anchorOffset).toBe(-10);
+    expect(snapshot.anchorOffset).toBe(-50);
+    view.unmount();
+  });
+
+  test("deferred state falls back and ignores a late callback after cleanup", () => {
+    control.getStateMode = "defer";
+    const onSnapshot = vi.fn();
+    const fallback: ChatViewportSnapshot = {
+      virtuoso: { ranges: [], scrollTop: 0 },
+      messageIds: [1, 2, 3],
+      anchorId: 1,
+      anchorOffset: 0,
+    };
+    const view = renderList({ onSnapshot, fallbackSnapshot: fallback });
+
+    flushArm();
+    view.unmount();
+
+    expect(onSnapshot).toHaveBeenCalledWith(fallback);
+    const calls = onSnapshot.mock.calls.length;
+    act(() => {
+      for (const callback of control.deferredStates) callback(control.state);
+    });
+    expect(onSnapshot).toHaveBeenCalledTimes(calls);
+  });
+
+  test("unavailable Virtuoso handle uses the fallback snapshot", () => {
+    control.handleAvailable = false;
+    const onSnapshot = vi.fn();
+    const fallback: ChatViewportSnapshot = {
+      virtuoso: { ranges: [], scrollTop: 0 },
+      messageIds: [1, 2, 3],
+      anchorId: 1,
+      anchorOffset: 0,
+    };
+    const view = renderList({ onSnapshot, fallbackSnapshot: fallback });
+
+    flushArm();
+    view.unmount();
+
+    expect(onSnapshot).toHaveBeenCalledWith(fallback);
+  });
+
+  test("StrictMode cleanup keeps the latest synchronous snapshot", () => {
+    const onSnapshot = vi.fn();
+    const props: React.ComponentProps<typeof ChatList> = {
+      conversationKey: "global",
+      messages: [message(1), message(2), message(3)],
+      identityCohort: [],
+      viewerId,
+      readState: { readThrough: 0, seenAfter: [] },
+      jumpToLatestToken: 0,
+      emptyLabel: "No messages",
+      onSnapshot,
+      onVisible: vi.fn(),
+      onMarkThrough: vi.fn(),
+    };
+    const view = render(
+      <StrictMode>
+        <I18nextProvider i18n={i18n}>
+          <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
+            <ChatList {...props} />
+          </VirtuosoMockContext.Provider>
+        </I18nextProvider>
+      </StrictMode>,
+    );
+
+    flushArm();
+    const root = screen.getByTestId("virtuoso-scroller");
+    root.getBoundingClientRect = () => ({ top: 100, bottom: 200 }) as DOMRect;
+    const rows = [...document.querySelectorAll<HTMLElement>("[data-message-id]")];
+    rows[0]!.getBoundingClientRect = () => ({ top: 180, bottom: 220 }) as DOMRect;
+    rows[1]!.getBoundingClientRect = () => ({ top: 90, bottom: 130 }) as DOMRect;
+    rows[2]!.getBoundingClientRect = () => ({ top: 150, bottom: 190 }) as DOMRect;
+    view.unmount();
+
+    expect(onSnapshot).toHaveBeenCalledTimes(1);
+    expect(onSnapshot.mock.lastCall?.[0]).toMatchObject({
+      messageIds: [1, 2, 3],
+      anchorId: 3,
+      anchorOffset: 50,
+      virtuoso: control.state,
+    });
+  });
+
+  test("StrictMode does not snapshot before the positioning arm", () => {
+    const onSnapshot = vi.fn();
+    const onVisible = vi.fn();
+    const fallback: ChatViewportSnapshot = {
+      virtuoso: { ranges: [], scrollTop: 0 },
+      messageIds: [1, 2, 3],
+      anchorId: 1,
+      anchorOffset: 0,
+    };
+    control.state = fallback.virtuoso;
+    const incoming: ChatViewportSnapshot = {
+      virtuoso: { ranges: [], scrollTop: 4960 },
+      messageIds: [1, 2, 3],
+      anchorId: 2,
+      anchorOffset: -12,
+    };
+    const strictList = (rows: ClientChatMessage[]) => (
+      <StrictMode>
+        <I18nextProvider i18n={i18n}>
+          <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
+            <ChatList
+              conversationKey="global"
+              messages={rows}
+              identityCohort={[]}
+              viewerId={viewerId}
+              readState={{ readThrough: 3, seenAfter: [] }}
+              jumpToLatestToken={0}
+              emptyLabel="No messages"
+              snapshot={incoming}
+              fallbackSnapshot={fallback}
+              onSnapshot={onSnapshot}
+              onVisible={onVisible}
+              onMarkThrough={vi.fn()}
+            />
+          </VirtuosoMockContext.Provider>
+        </I18nextProvider>
+      </StrictMode>
+    );
+    const view = render(strictList([message(1), message(2), message(3)]));
+
+    expect(onSnapshot).not.toHaveBeenCalled();
+
+    flushArm();
+    control.state = incoming.virtuoso;
+    view.rerender(strictList([message(1), message(20), message(3)]));
+    view.rerender(strictList([message(1), message(2), message(3)]));
+    act(() => vi.runAllTimers());
+    const root = screen.getByTestId("virtuoso-scroller");
+    root.getBoundingClientRect = () => ({ top: 100, bottom: 200 }) as DOMRect;
+    const secondRow = document.querySelector<HTMLElement>("[data-message-id='2']")!;
+    act(() => {
+      for (const observer of ControlledIntersectionObserver.instances) {
+        observer.triggerStale(secondRow, 112);
+      }
+    });
+    expect(onVisible).toHaveBeenCalledWith([2]);
+    view.unmount();
+
+    expect(onSnapshot.mock.lastCall?.[0]).toMatchObject({
+      messageIds: incoming.messageIds,
+      virtuoso: control.state,
+    });
+  });
+
+  test("unmount before the positioning arm preserves the supplied snapshot", () => {
+    const onSnapshot = vi.fn();
+    const fallback: ChatViewportSnapshot = {
+      virtuoso: { ranges: [], scrollTop: 0 },
+      messageIds: [1, 2, 3],
+      anchorId: 1,
+      anchorOffset: 0,
+    };
+    const incoming: ChatViewportSnapshot = {
+      virtuoso: { ranges: [], scrollTop: 4960 },
+      messageIds: [1, 2, 3],
+      anchorId: 2,
+      anchorOffset: -12,
+    };
+    const view = renderList({ onSnapshot, snapshot: incoming, fallbackSnapshot: fallback });
+
+    view.unmount();
+
+    expect(onSnapshot).not.toHaveBeenCalled();
+  });
+
+  test("cleanup captures message IDs changed immediately before unmount", () => {
+    const onSnapshot = vi.fn();
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    const renderMessages = (messages: ClientChatMessage[]) =>
+      root.render(
+        <I18nextProvider i18n={i18n}>
+          <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
+            <ChatList
+              conversationKey="global"
+              messages={messages}
+              identityCohort={[]}
+              viewerId={viewerId}
+              readState={{ readThrough: 0, seenAfter: [] }}
+              jumpToLatestToken={0}
+              emptyLabel="No messages"
+              onSnapshot={onSnapshot}
+              onVisible={vi.fn()}
+              onMarkThrough={vi.fn()}
+            />
+          </VirtuosoMockContext.Provider>
+        </I18nextProvider>,
+      );
+    flushSync(() => renderMessages([message(1)]));
+    flushSync(() => renderMessages([message(2)]));
+    flushArm();
+    root.unmount();
+    host.remove();
+
+    expect(onSnapshot.mock.lastCall?.[0]).toMatchObject({ messageIds: [2] });
   });
 
   test("conversation cleanup snapshots use the old IDs and callback", () => {
     const oldSnapshot = vi.fn();
     const newSnapshot = vi.fn();
     const view = renderList({ messages: [message(1)], onSnapshot: oldSnapshot });
+    flushArm();
     view.rerender(
       <I18nextProvider i18n={i18n}>
         <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
@@ -1139,6 +1864,7 @@ describe("ChatList viewport and unread mechanics", () => {
       </I18nextProvider>,
     );
     expect(oldSnapshot).toHaveBeenCalledWith(expect.objectContaining({ messageIds: [1] }));
+    flushArm();
     view.rerender(
       <I18nextProvider i18n={i18n}>
         <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
@@ -1448,7 +2174,11 @@ describe("ChatList viewport and unread mechanics", () => {
 
   test("up navigation targets oldest unread without marking through", () => {
     const onMarkThrough = vi.fn();
-    renderList({ onMarkThrough, readState: { readThrough: 1, seenAfter: [] } });
+    renderList({
+      firstItemIndex: 9,
+      onMarkThrough,
+      readState: { readThrough: 1, seenAfter: [] },
+    });
     const up = screen.getByRole("button", { name: /Jump to first unread/ });
     fireEvent.click(up);
     expect(control.scrolls.at(-1)).toMatchObject({ index: 1, align: "start" });
@@ -1457,13 +2187,14 @@ describe("ChatList viewport and unread mechanics", () => {
 
   test("success jump waits for a newly present row and then marks latest", () => {
     const onMarkThrough = vi.fn();
-    const view = renderList({ onMarkThrough, jumpToLatestToken: 0 });
+    const view = renderList({ firstItemIndex: 9, onMarkThrough, jumpToLatestToken: 0 });
     act(() => control.setAtBottom?.(false));
     view.rerender(
       <I18nextProvider i18n={i18n}>
         <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
           <ChatList
             conversationKey="global"
+            firstItemIndex={9}
             messages={[message(1), message(2)]}
             identityCohort={[]}
             viewerId={viewerId}
@@ -1483,6 +2214,7 @@ describe("ChatList viewport and unread mechanics", () => {
         <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
           <ChatList
             conversationKey="global"
+            firstItemIndex={9}
             messages={[message(1), message(2), message(3)]}
             identityCohort={[]}
             viewerId={viewerId}
@@ -1497,6 +2229,7 @@ describe("ChatList viewport and unread mechanics", () => {
       </I18nextProvider>,
     );
     act(() => vi.runAllTimers());
+    expect(control.scrolls.at(-1)).toMatchObject({ index: 2, align: "end" });
     expect(onMarkThrough).toHaveBeenCalledWith(3);
   });
 

@@ -1,5 +1,4 @@
 import type { ChatContent, UserId } from "@werewolf/protocol";
-import { useCallback, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { ChatState } from "../api/chat-state.ts";
@@ -54,28 +53,16 @@ export function GlobalChatScreen({
 }) {
   const { t } = useTranslation();
   const messages = state.messages.map(globalChatRow);
-  const latestMessages = useRef(messages);
-  latestMessages.current = messages;
-  const snapshotCaptured = useRef(false);
-  const captureSnapshot = useCallback(
-    (snapshot: ChatViewportSnapshot) => {
-      snapshotCaptured.current = true;
-      onSnapshot(snapshot);
-    },
-    [onSnapshot],
-  );
-  useEffect(() => {
-    return () => {
-      if (snapshotCaptured.current || latestMessages.current.length === 0) return;
-      const first = latestMessages.current[0]!;
-      onSnapshot({
-        virtuoso: { ranges: [], scrollTop: 0 },
-        messageIds: latestMessages.current.map((message) => message.id),
-        anchorId: first.id,
-        anchorOffset: 0,
-      });
-    };
-  }, [onSnapshot]);
+  const fallbackSnapshot = (() => {
+    const first = messages[0];
+    if (!first) return undefined;
+    return {
+      virtuoso: { ranges: [], scrollTop: 0 },
+      messageIds: messages.map((message) => message.id),
+      anchorId: first.id,
+      anchorOffset: 0,
+    } satisfies ChatViewportSnapshot;
+  })();
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <h1 className="px-4.5 pt-6 pb-4 text-[30px] font-semibold tracking-[-0.03em]">
@@ -92,9 +79,10 @@ export function GlobalChatScreen({
         messages={messages}
         onLoadOlder={onLoadOlder}
         onMarkThrough={onMarkThrough}
-        onSnapshot={captureSnapshot}
+        onSnapshot={onSnapshot}
         onVisible={onVisible}
         readState={readState}
+        {...(fallbackSnapshot === undefined ? {} : { fallbackSnapshot })}
         {...(viewport === undefined ? {} : { snapshot: viewport })}
         viewerId={viewerId}
       />

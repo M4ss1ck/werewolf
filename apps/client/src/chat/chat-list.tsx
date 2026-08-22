@@ -1,6 +1,6 @@
 import type { UserId } from "@werewolf/protocol";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { type StateSnapshot, Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 
@@ -30,6 +30,7 @@ export type ChatListProps = {
   jumpToLatestToken: number;
   emptyLabel: string;
   snapshot?: ChatViewportSnapshot;
+  fallbackSnapshot?: ChatViewportSnapshot;
   onSnapshot(snapshot: ChatViewportSnapshot): void;
   onVisible(ids: number[]): void;
   onMarkThrough(latestId: number): void;
@@ -65,6 +66,7 @@ export function ChatList({
   jumpToLatestToken,
   emptyLabel,
   snapshot,
+  fallbackSnapshot,
   onSnapshot,
   onVisible,
   onMarkThrough,
@@ -77,7 +79,9 @@ export function ChatList({
   const rowElements = useRef(new Map<number, HTMLElement>());
   const rowRefCallbacks = useRef(new Map<number, (element: HTMLElement | null) => void>());
   const rowRects = useRef(new Map<number, RowRect>());
-  const emitSnapshotRef = useRef<(() => void) | undefined>(undefined);
+  const emitSnapshotRef = useRef<(() => boolean) | undefined>(undefined);
+  const conversationEmitSnapshotRef = useRef<(() => boolean) | undefined>(undefined);
+  const snapshotEpochRef = useRef(0);
   const snapshotCapturedRef = useRef(false);
   const visibleIdsRef = useRef(new Set<number>());
   const focusRef = useRef(
@@ -85,8 +89,10 @@ export function ChatList({
   );
   const armedRef = useRef(false);
   const rafsRef = useRef<number[]>([]);
+  const positioningRafsRef = useRef<number[]>([]);
   const conversationRef = useRef(conversationKey);
   const positionedConversationRef = useRef<string | null>(null);
+  const exactRestoreIdsRef = useRef<number[] | undefined>(undefined);
   const previousToken = useRef(jumpToLatestToken);
   const pendingJumpToken = useRef<number | undefined>(undefined);
   const scheduledJump = useRef<{ conversationKey: string; token: number } | undefined>(undefined);
@@ -99,8 +105,14 @@ export function ChatList({
   onVisibleRef.current = onVisible;
   const isVisibleRef = useRef(isVisible);
   isVisibleRef.current = isVisible;
+  const fallbackSnapshotRef = useRef(fallbackSnapshot);
+  fallbackSnapshotRef.current = fallbackSnapshot;
 
   const ids = useMemo(() => messages.map((message) => message.id), [messages]);
+  const idsRef = useRef(ids);
+  idsRef.current = ids;
+  const snapshotRef = useRef(snapshot);
+  snapshotRef.current = snapshot;
   const hasMessages = messages.length > 0;
   const jumpIdsRef = useRef(ids);
   jumpIdsRef.current = ids;
@@ -126,12 +138,29 @@ export function ChatList({
     conversationRef.current = conversationKey;
     initialMessagesRef.current = messages.length > 0;
     frozenUnreadRef.current = oldestUnread;
+  } else if (messages.length === 0) {
+    initialMessagesRef.current = false;
+    frozenUnreadRef.current = undefined;
   } else if (!initialMessagesRef.current && messages.length > 0) {
     initialMessagesRef.current = true;
     frozenUnreadRef.current = oldestUnread;
   }
   const frozenUnread = frozenUnreadRef.current;
   const frozenMentioned = frozenUnread !== undefined && viewerMentionIds.has(frozenUnread);
+  const exactSnapshotRestore =
+    snapshot !== undefined && frozenUnread === undefined && sameIds(snapshot.messageIds, ids);
+  const exactRestoreKey =
+    exactSnapshotRestore && snapshot !== undefined
+      ? JSON.stringify({
+          conversationKey,
+          messageIds: snapshot.messageIds,
+          anchorId: snapshot.anchorId,
+          anchorOffset: snapshot.anchorOffset,
+          virtuoso: snapshot.virtuoso,
+        })
+      : undefined;
+  const exactRestoreKeyRef = useRef(exactRestoreKey);
+  exactRestoreKeyRef.current = exactRestoreKey;
 
   const marks = useMemo(() => {
     const participants = [...identityCohort];
@@ -214,9 +243,13 @@ export function ChatList({
     observerRef.current = observer;
     for (const element of rowElements.current.values()) observer.observe(element);
     return () => {
-      if (conversationRef.current !== activeConversation) {
-        emitSnapshotRef.current?.();
-        snapshotCapturedRef.current = true;
+      if (
+        conversationRef.current !== activeConversation &&
+        armedRef.current &&
+        !snapshotCapturedRef.current
+      ) {
+        snapshotEpochRef.current += 1;
+        snapshotCapturedRef.current = conversationEmitSnapshotRef.current?.() ?? false;
       }
       observer.disconnect();
       if (observerRef.current !== observer) return;
@@ -278,12 +311,14 @@ export function ChatList({
     conversationRef.current = conversationKey;
     armedRef.current = false;
     for (const frame of rafsRef.current) cancelAnimationFrame(frame);
+    for (const frame of positioningRafsRef.current) cancelAnimationFrame(frame);
+    positioningRafsRef.current = [];
     rafsRef.current = [
       requestAnimationFrame(() => {
         visibleIdsRef.current.clear();
         rafsRef.current.push(
           requestAnimationFrame(() => {
-            armedRef.current = true;
+            if (!exactSnapshotRestore) armedRef.current = true;
           }),
         );
       }),
@@ -291,50 +326,93 @@ export function ChatList({
     return () => {
       for (const frame of rafsRef.current) cancelAnimationFrame(frame);
       rafsRef.current = [];
+      for (const frame of positioningRafsRef.current) cancelAnimationFrame(frame);
+      positioningRafsRef.current = [];
       armedRef.current = false;
     };
-  }, [conversationKey, hasMessages, scrollerElement]);
+  }, [conversationKey, exactSnapshotRestore, hasMessages, scrollerElement]);
 
-  const emitSnapshot = useCallback(() => {
-    virtuosoRef.current?.getState((state) => {
-      const viewportTop = scrollerRef.current?.getBoundingClientRect().top ?? 0;
-      const snapshotIds = ids;
-      const candidates = [...rowRects.current.values()].filter((candidate) =>
-        snapshotIds.includes(candidate.id),
-      );
-      const crossingTop = candidates
-        .filter((candidate) => candidate.top < viewportTop && candidate.bottom > viewportTop)
-        .sort((left, right) => right.top - left.top);
-      const belowTop = candidates
-        .filter((candidate) => candidate.top >= viewportTop)
-        .sort((left, right) => left.top - right.top);
-      const anchor = crossingTop[0] ??
-        belowTop[0] ??
-        candidates.sort((left, right) => right.top - left.top)[0] ?? {
-          id:
-            [...rowElements.current.keys()].find((id) => snapshotIds.includes(id)) ??
-            snapshotIds[0] ??
-            0,
-          top: viewportTop,
-          bottom: viewportTop,
-        };
-      onSnapshot({
-        virtuoso: state,
-        messageIds: [...snapshotIds],
-        anchorId: anchor.id,
-        anchorOffset: anchor.top - viewportTop,
+  const emitSnapshot = useCallback(
+    (snapshotIds: number[] = ids) => {
+      const virtuoso = virtuosoRef.current;
+      if (!virtuoso) {
+        const fallback = fallbackSnapshotRef.current;
+        if (fallback) onSnapshot(fallback);
+        return fallback !== undefined;
+      }
+      const epoch = snapshotEpochRef.current;
+      let synchronous = true;
+      let captured = false;
+      virtuoso.getState((state) => {
+        if (!synchronous || snapshotEpochRef.current !== epoch) return;
+        captured = true;
+        const viewport = scrollerRef.current?.getBoundingClientRect();
+        const viewportTop = viewport?.top ?? 0;
+        const viewportBottom = viewport?.bottom ?? viewportTop;
+        const candidates = [...rowElements.current.entries()]
+          .filter(([id]) => snapshotIds.includes(id))
+          .map(([id, element]) => {
+            const rect = element.getBoundingClientRect();
+            return { id, top: rect.top, bottom: rect.bottom };
+          })
+          .filter(
+            (candidate) =>
+              candidate.bottom > candidate.top &&
+              candidate.bottom > viewportTop &&
+              candidate.top < viewportBottom,
+          );
+        const crossingTop = candidates
+          .filter((candidate) => candidate.top < viewportTop && candidate.bottom > viewportTop)
+          .sort((left, right) => right.top - left.top);
+        const belowTop = candidates
+          .filter((candidate) => candidate.top >= viewportTop)
+          .sort((left, right) => left.top - right.top);
+        const anchor = belowTop[0] ??
+          crossingTop[0] ??
+          candidates.sort((left, right) => right.top - left.top)[0] ?? {
+            id:
+              [...rowElements.current.keys()].find((id) => snapshotIds.includes(id)) ??
+              snapshotIds[0] ??
+              0,
+            top: viewportTop,
+            bottom: viewportTop,
+          };
+        onSnapshot({
+          virtuoso: state,
+          messageIds: [...snapshotIds],
+          anchorId: anchor.id,
+          anchorOffset: anchor.top - viewportTop,
+        });
       });
-    });
-  }, [ids, onSnapshot]);
+      synchronous = false;
+      if (captured) return true;
+      const fallback = fallbackSnapshotRef.current;
+      if (fallback) onSnapshot(fallback);
+      return fallback !== undefined;
+    },
+    [ids, onSnapshot],
+  );
 
+  emitSnapshotRef.current = () => emitSnapshot(idsRef.current);
   useEffect(() => {
-    emitSnapshotRef.current = emitSnapshot;
-  }, [emitSnapshot]);
+    const activeConversation = conversationKey;
+    conversationEmitSnapshotRef.current = () =>
+      activeConversation.length > 0 ? emitSnapshot(ids) : false;
+  }, [conversationKey, emitSnapshot, ids]);
+  useLayoutEffect(() => {
+    return () => {
+      if (!snapshotCapturedRef.current && conversationRef.current.length > 0 && armedRef.current) {
+        snapshotEpochRef.current += 1;
+        snapshotCapturedRef.current = emitSnapshotRef.current?.() ?? false;
+      }
+    };
+  }, []);
   useEffect(() => {
     const activeConversation = conversationKey;
     return () => {
-      if (!snapshotCapturedRef.current && activeConversation.length > 0) {
-        emitSnapshotRef.current?.();
+      if (!snapshotCapturedRef.current && activeConversation.length > 0 && armedRef.current) {
+        snapshotEpochRef.current += 1;
+        snapshotCapturedRef.current = emitSnapshotRef.current?.() ?? false;
       }
       snapshotCapturedRef.current = false;
       visibleIdsRef.current.clear();
@@ -352,7 +430,7 @@ export function ChatList({
     ) => {
       if (index === "LAST" ? messages.length === 0 : index < 0 || index >= messages.length) return;
       virtuosoRef.current?.scrollToIndex({
-        index: index === "LAST" ? firstItemIndex + messages.length - 1 : firstItemIndex + index,
+        index: index === "LAST" ? messages.length - 1 : index,
         align,
         offset,
         behavior,
@@ -362,51 +440,133 @@ export function ChatList({
         if (latest !== undefined) onMarkThrough(latest);
       }
     },
-    [firstItemIndex, messages, onMarkThrough],
+    [messages, onMarkThrough],
   );
+  const scrollToRef = useRef(scrollTo);
+  scrollToRef.current = scrollTo;
 
   const initialTarget = useMemo(() => {
-    if (oldestUnread !== undefined)
-      return messages.findIndex((message) => message.id === oldestUnread);
+    if (frozenUnread !== undefined)
+      return messages.findIndex((message) => message.id === frozenUnread);
     if (snapshot && sameIds(snapshot.messageIds, ids)) return -1;
     if (snapshot && ids.includes(snapshot.anchorId))
       return messages.findIndex((message) => message.id === snapshot.anchorId);
     if (snapshot) return 0;
     if (messages.length > 0) return messages.length - 1;
     return -1;
-  }, [ids, messages, oldestUnread, snapshot]);
+  }, [frozenUnread, ids, messages, snapshot]);
+  const initialTargetRef = useRef(initialTarget);
+  initialTargetRef.current = initialTarget;
+  const hasOlderRef = useRef(hasOlder);
+  hasOlderRef.current = hasOlder;
+  const positioningKey = JSON.stringify({
+    conversationKey,
+    ids,
+    snapshot:
+      snapshot === undefined
+        ? undefined
+        : {
+            messageIds: snapshot.messageIds,
+            anchorId: snapshot.anchorId,
+            anchorOffset: snapshot.anchorOffset,
+            virtuoso: snapshot.virtuoso,
+          },
+    hasOlder,
+    frozenUnread,
+    initialTarget,
+  });
+  const positioningKeyRef = useRef(positioningKey);
+  positioningKeyRef.current = positioningKey;
 
   useEffect(() => {
-    if (
-      !scrollerElement ||
-      positionedConversationRef.current === conversationKey ||
-      messages.length === 0
-    )
-      return;
-    positionedConversationRef.current = conversationKey;
-    if (initialTarget < 0 || (snapshot && sameIds(snapshot.messageIds, ids))) return;
+    if (!scrollerElement || !hasMessages || exactRestoreKey === undefined) return;
+    armedRef.current = false;
+    for (const frame of positioningRafsRef.current) cancelAnimationFrame(frame);
+    positioningRafsRef.current = [];
+    const restoreAfterFrames = (remaining: number) => {
+      const frame = requestAnimationFrame(() => {
+        if (remaining > 1) {
+          restoreAfterFrames(remaining - 1);
+          return;
+        }
+        if (
+          exactRestoreKeyRef.current !== exactRestoreKey ||
+          conversationRef.current !== conversationKey
+        )
+          return;
+        const currentSnapshot = snapshotRef.current;
+        if (!currentSnapshot) return;
+        if (scrollerRef.current) scrollerRef.current.scrollTop = currentSnapshot.virtuoso.scrollTop;
+        positionedConversationRef.current = conversationKey;
+        exactRestoreIdsRef.current = [...idsRef.current];
+        const armAfterRestore = requestAnimationFrame(() => {
+          const armFrame = requestAnimationFrame(() => {
+            if (positionedConversationRef.current === conversationKey) armedRef.current = true;
+          });
+          positioningRafsRef.current.push(armFrame);
+        });
+        positioningRafsRef.current.push(armAfterRestore);
+      });
+      positioningRafsRef.current.push(frame);
+    };
+    restoreAfterFrames(5);
+    return () => {
+      for (const frame of positioningRafsRef.current) cancelAnimationFrame(frame);
+      positioningRafsRef.current = [];
+    };
+  }, [conversationKey, exactRestoreKey, hasMessages, scrollerElement]);
+
+  useEffect(() => {
+    if (!scrollerElement || !hasMessages) return;
+    const currentSnapshot = snapshotRef.current;
+    const currentIds = idsRef.current;
+    const currentFrozenUnread = frozenUnreadRef.current;
+    const currentHasOlder = hasOlderRef.current;
+    const currentInitialTarget = initialTargetRef.current;
+    const exactRestoreDiverged =
+      positionedConversationRef.current === conversationKey &&
+      exactRestoreIdsRef.current !== undefined &&
+      currentSnapshot !== undefined &&
+      currentFrozenUnread === undefined &&
+      !sameIds(exactRestoreIdsRef.current, currentIds);
+    if (positionedConversationRef.current === conversationKey && !exactRestoreDiverged) return;
+    const shouldRetrySnapshot =
+      currentSnapshot !== undefined &&
+      currentFrozenUnread === undefined &&
+      !currentIds.includes(currentSnapshot.anchorId) &&
+      currentHasOlder;
+    const target = currentInitialTarget;
+    if (target < 0) return;
     const frame = requestAnimationFrame(() => {
-      const hasAnchor = snapshot !== undefined && ids.includes(snapshot.anchorId);
-      const offset = hasAnchor ? snapshot.anchorOffset : 0;
-      scrollTo(
-        initialTarget,
-        hasAnchor || oldestUnread !== undefined || snapshot !== undefined ? "start" : "end",
+      if (
+        positioningKeyRef.current !== positioningKey ||
+        conversationRef.current !== conversationKey
+      )
+        return;
+      const latestSnapshot = snapshotRef.current;
+      const latestIds = idsRef.current;
+      const latestFrozenUnread = frozenUnreadRef.current;
+      const hasAnchor =
+        latestFrozenUnread === undefined &&
+        latestSnapshot !== undefined &&
+        latestIds.includes(latestSnapshot.anchorId);
+      if (!shouldRetrySnapshot) {
+        positionedConversationRef.current = conversationKey;
+        exactRestoreIdsRef.current = undefined;
+      }
+      const offset = hasAnchor && latestSnapshot ? latestSnapshot.anchorOffset : 0;
+      scrollToRef.current(
+        target,
+        hasAnchor || latestFrozenUnread !== undefined || latestSnapshot !== undefined
+          ? "start"
+          : "end",
         offset,
         false,
         "auto",
       );
     });
     return () => cancelAnimationFrame(frame);
-  }, [
-    conversationKey,
-    ids,
-    initialTarget,
-    messages.length,
-    oldestUnread,
-    scrollTo,
-    scrollerElement,
-    snapshot,
-  ]);
+  }, [conversationKey, hasMessages, positioningKey, scrollerElement]);
 
   const resetJumpConversationRef = useRef<string | null>(null);
   useEffect(() => {
@@ -527,10 +687,10 @@ export function ChatList({
         data={messages}
         firstItemIndex={firstItemIndex}
         followOutput={(isAtBottom) => (isAtBottom ? motionBehavior() : false)}
-        initialTopMostItemIndex={initialTarget >= 0 ? firstItemIndex + initialTarget : undefined}
+        initialTopMostItemIndex={initialTarget >= 0 ? initialTarget : undefined}
         itemContent={item}
         ref={virtuosoRef}
-        {...(snapshot && sameIds(snapshot.messageIds, ids) && oldestUnread === undefined
+        {...(snapshot && sameIds(snapshot.messageIds, ids) && frozenUnread === undefined
           ? { restoreStateFrom: snapshot.virtuoso }
           : {})}
         scrollerRef={handleScrollerRef}

@@ -871,6 +871,12 @@ test("restores the global viewport after leaving and returning to Chat", async (
   fireEvent.click(screen.getByRole("button", { name: "Chat" }));
   await screen.findByRole("heading", { name: "Global chat" });
   expect(screen.getByTestId("virtualizer-root")).toHaveAttribute("data-restore-state", "absent");
+  await act(
+    async () =>
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
 
   fireEvent.click(screen.getByRole("button", { name: "Games" }));
   await screen.findByRole("heading", { name: "Open games" });
@@ -878,7 +884,7 @@ test("restores the global viewport after leaving and returning to Chat", async (
   await screen.findByRole("heading", { name: "Global chat" });
   expect(screen.getByTestId("virtualizer-root")).toHaveAttribute(
     "data-restore-state",
-    JSON.stringify({ ranges: [], scrollTop: 0 }),
+    JSON.stringify({ ranges: [], scrollTop: 12 }),
   );
 });
 
