@@ -1,10 +1,14 @@
-// Global chat storage. Append-only with a hard cap: the table is trimmed on
-// every insert, so it stays at roughly CHAT_RETENTION rows forever and there
-// is no retention job to schedule or forget.
+// Global chat: append-only persistence with a retained subscription window.
 
-import type { ChatMessage, ChatMessageId, UserId } from "@werewolf/protocol";
-import { CHAT_PAGE_SIZE } from "@werewolf/protocol";
-import { desc, gt, lt, lte } from "drizzle-orm";
+import {
+  CHAT_PAGE_SIZE,
+  type ChatContent,
+  ChatMentionSchema,
+  type ChatMessage,
+  type ChatMessageId,
+  type UserId,
+} from "@werewolf/protocol";
+import { asc, desc, gt, lt, lte, sql } from "drizzle-orm";
 
 import type { Db } from "./client.ts";
 import { type GlobalChatMessageRow, globalChatMessages } from "./schema.ts";
@@ -13,12 +17,32 @@ import { type GlobalChatMessageRow, globalChatMessages } from "./schema.ts";
  * scroll. A trimmed row is unrecoverable, so this is deliberately generous. */
 export const CHAT_RETENTION = 1000;
 
+export type GlobalChatWindow = {
+  messages: ChatMessage[];
+  cursor: ChatMessageId;
+  oldestRetainedId: ChatMessageId;
+  hasOlder: boolean;
+  historyTruncated: boolean;
+};
+
+function parseMentions(value: string): ChatMessage["mentions"] {
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(value);
+  } catch {
+    return [];
+  }
+  const parsed = ChatMentionSchema.array().safeParse(decoded);
+  return parsed.success ? parsed.data : [];
+}
+
 function toMessage(row: GlobalChatMessageRow): ChatMessage {
   return {
     id: row.id as ChatMessageId,
     userId: row.userId as UserId,
     displayName: row.displayName,
     text: row.text,
+    mentions: parseMentions(row.mentionsJson),
     createdAt: row.createdAt,
   };
 }
@@ -51,13 +75,105 @@ export class GlobalChatRepository {
     return rows.reverse().map(toMessage);
   }
 
+  async listSubscriptionWindow(
+    deliveryCursor: ChatMessageId,
+    readCursor?: ChatMessageId,
+  ): Promise<GlobalChatWindow> {
+    return this.db.transaction(async (tx) => {
+      const [bounds] = await tx
+        .select({
+          oldest: sql<number | null>`min(${globalChatMessages.id})`,
+          latest: sql<number | null>`max(${globalChatMessages.id})`,
+        })
+        .from(globalChatMessages);
+      const oldest = bounds?.oldest ?? 0;
+      const latest = bounds?.latest ?? 0;
+      if (latest === 0) {
+        return {
+          messages: [],
+          cursor: 0 as ChatMessageId,
+          oldestRetainedId: 0 as ChatMessageId,
+          hasOlder: false,
+          historyTruncated: false,
+        };
+      }
+
+      let rows: GlobalChatMessageRow[];
+      let historyTruncated = false;
+      const latestPage = () =>
+        tx
+          .select()
+          .from(globalChatMessages)
+          .orderBy(desc(globalChatMessages.id))
+          .limit(CHAT_PAGE_SIZE);
+      const allRows = () =>
+        tx.select().from(globalChatMessages).orderBy(asc(globalChatMessages.id));
+
+      const cursorBeyondLatest =
+        deliveryCursor > latest || (readCursor !== undefined && readCursor > latest);
+      if (cursorBeyondLatest) {
+        rows = await latestPage();
+      } else if (deliveryCursor > 0) {
+        if (deliveryCursor < oldest) {
+          rows = await allRows();
+          historyTruncated = true;
+        } else {
+          rows = await tx
+            .select()
+            .from(globalChatMessages)
+            .where(gt(globalChatMessages.id, deliveryCursor))
+            .orderBy(asc(globalChatMessages.id));
+        }
+      } else if (readCursor === undefined) {
+        rows = await latestPage();
+      } else if (readCursor === 0 || readCursor < oldest) {
+        rows = await allRows();
+        historyTruncated = readCursor === 0 ? oldest > 1 : true;
+      } else {
+        const context = await tx
+          .select()
+          .from(globalChatMessages)
+          .where(lte(globalChatMessages.id, readCursor))
+          .orderBy(desc(globalChatMessages.id))
+          .limit(CHAT_PAGE_SIZE);
+        const after = await tx
+          .select()
+          .from(globalChatMessages)
+          .where(gt(globalChatMessages.id, readCursor))
+          .orderBy(asc(globalChatMessages.id));
+        rows = [...context, ...after];
+      }
+
+      const uniqueRows = new Map<number, GlobalChatMessageRow>();
+      for (const row of rows) uniqueRows.set(row.id, row);
+      rows = [...uniqueRows.values()].sort((left, right) => left.id - right.id);
+      const messages = rows.map(toMessage);
+      return {
+        messages,
+        cursor: latest as ChatMessageId,
+        oldestRetainedId: oldest as ChatMessageId,
+        hasOlder: rows.length > 0 && rows[0]!.id > oldest,
+        historyTruncated,
+      };
+    });
+  }
+
   async append(input: {
     userId: UserId;
     displayName: string;
-    text: string;
+    content: ChatContent;
     createdAt: number;
   }): Promise<ChatMessage> {
-    const rows = await this.db.insert(globalChatMessages).values(input).returning();
+    const rows = await this.db
+      .insert(globalChatMessages)
+      .values({
+        userId: input.userId,
+        displayName: input.displayName,
+        text: input.content.text,
+        mentionsJson: JSON.stringify(input.content.mentions),
+        createdAt: input.createdAt,
+      })
+      .returning();
     const row = rows[0];
     if (!row) throw new Error("global chat insert returned no row");
     await this.db

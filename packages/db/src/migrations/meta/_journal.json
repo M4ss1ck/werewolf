@@ -43,6 +43,13 @@
       "when": 1787101189287,
       "tag": "0005_loose_talon",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1787363215244,
+      "tag": "0006_real_arachne",
+      "breakpoints": true
     }
   ]
 }

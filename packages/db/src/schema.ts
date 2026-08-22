@@ -90,6 +90,7 @@ export const globalChatMessages = sqliteTable("global_chat_messages", {
   userId: text("user_id").notNull(),
   displayName: text("display_name").notNull(),
   text: text("text").notNull(),
+  mentionsJson: text("mentions_json").notNull().default("[]"),
   createdAt: integer("created_at").notNull(),
 });
 

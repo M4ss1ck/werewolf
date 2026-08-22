@@ -1,0 +1,1 @@
+ALTER TABLE `global_chat_messages` ADD `mentions_json` text DEFAULT '[]' NOT NULL;
