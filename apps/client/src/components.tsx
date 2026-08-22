@@ -388,15 +388,22 @@ export function TabBar({
   current,
   onSelect,
 }: {
-  items: { id: string; label: string; icon: LucideIcon; badge?: boolean }[];
+  items: { id: string; label: string; icon: LucideIcon; badge?: TabBadge | undefined }[];
   current: string;
   onSelect: (id: string) => void;
 }) {
+  const { t } = useTranslation();
+  const mentionCue = t("ui.mentionedYou", { defaultValue: "mentioned you" });
   return (
     <nav className="tabbar">
       {items.map(({ id, label, icon: Icon, badge }) => (
         <button
           aria-current={id === current ? "page" : undefined}
+          aria-label={
+            badge?.kind === "count"
+              ? `${label}, ${badge.count}${badge.mentioned ? `, ${mentionCue}` : ""}`
+              : label
+          }
           className={`tabbar__item${id === current ? " tabbar__item--active" : ""}`}
           key={id}
           onClick={() => onSelect(id)}
@@ -404,7 +411,12 @@ export function TabBar({
         >
           <span className="tabbar__glyph-wrap">
             <Icon aria-hidden="true" className="tabbar__glyph" size={18} strokeWidth={2} />
-            {badge && <span aria-hidden="true" className="tabbar__badge" />}
+            {badge?.kind === "dot" && <span aria-hidden="true" className="tabbar__badge" />}
+            {badge?.kind === "count" && (
+              <span aria-hidden="true" className="tabbar__badge tabbar__badge--count">
+                {badge.count <= 99 ? badge.count : "99+"}
+              </span>
+            )}
           </span>
           {label}
         </button>
@@ -412,3 +424,5 @@ export function TabBar({
     </nav>
   );
 }
+
+export type TabBadge = { kind: "dot" } | { kind: "count"; count: number; mentioned: boolean };

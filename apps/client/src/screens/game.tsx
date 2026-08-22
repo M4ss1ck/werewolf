@@ -185,7 +185,7 @@ export function GameScreen({
           id: item.id,
           label: t(`ui.tabs.${item.labelKey}`),
           icon: item.icon,
-          badge: badges[item.id],
+          badge: badges[item.id] ? { kind: "dot" } : undefined,
         }))}
         onSelect={(id) => setTab(id as TabId)}
       />

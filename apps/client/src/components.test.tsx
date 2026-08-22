@@ -1,5 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import type { LucideIcon } from "lucide-react";
 import { MessageCircle, Moon, Users } from "lucide-react";
+import { I18nextProvider } from "react-i18next";
 import { afterEach, expect, test, vi } from "vitest";
 
 import {
@@ -9,9 +11,11 @@ import {
   Countdown,
   Segmented,
   Stepper,
+  type TabBadge,
   TabBar,
   Toggle,
 } from "./components.tsx";
+import { i18n } from "./i18n/i18n.ts";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -101,7 +105,7 @@ test("AvatarStack shows +N once names exceed the max", () => {
 });
 
 test("TabBar marks the current item with aria-current and selects on click", () => {
-  const items = [
+  const items: { id: string; label: string; icon: LucideIcon; badge?: TabBadge }[] = [
     { id: "village", label: "Village", icon: Users },
     { id: "talk", label: "Talk", icon: MessageCircle },
     { id: "act", label: "Act", icon: Moon },
@@ -124,7 +128,7 @@ test("TabBar marks the current item with aria-current and selects on click", () 
 test("TabBar renders a badge dot only for items that ask for one", () => {
   const items = [
     { id: "village", label: "Village", icon: Users },
-    { id: "talk", label: "Talk", icon: MessageCircle, badge: true },
+    { id: "talk", label: "Talk", icon: MessageCircle, badge: { kind: "dot" as const } },
     { id: "act", label: "Act", icon: Moon },
   ];
   render(<TabBar current="village" items={items} onSelect={vi.fn()} />);
@@ -134,6 +138,28 @@ test("TabBar renders a badge dot only for items that ask for one", () => {
   expect(badge("Talk")).not.toBeNull();
   expect(badge("Village")).toBeNull();
   expect(badge("Act")).toBeNull();
+});
+
+test("TabBar exposes the full count and mention cue while hiding badge visuals", () => {
+  render(
+    <I18nextProvider i18n={i18n}>
+      <TabBar
+        current="village"
+        items={[
+          {
+            id: "talk",
+            label: "Talk",
+            icon: MessageCircle,
+            badge: { kind: "count", count: 100, mentioned: true },
+          },
+        ]}
+        onSelect={vi.fn()}
+      />
+    </I18nextProvider>,
+  );
+  const tab = screen.getByRole("button", { name: "Talk, 100, Mentioned you" });
+  expect(tab.querySelector(".tabbar__badge")).toHaveTextContent("99+");
+  expect(tab.querySelector(".tabbar__badge")).toHaveAttribute("aria-hidden", "true");
 });
 
 test("Segmented reads like a radio group and reports its value", () => {
