@@ -396,7 +396,11 @@ test("does not baseline history over a saved global frontier", async () => {
 
   render(<App />);
   await screen.findByRole("heading", { name: "Open games" });
-  const socket = await vi.waitFor(() => StubWebSocket.instances.at(-1)!);
+  const socket = await vi.waitFor(() => {
+    const current = StubWebSocket.instances.at(-1);
+    expect(current).toBeDefined();
+    return current!;
+  });
   await act(async () => {
     socket.receive(
       JSON.stringify({
@@ -430,7 +434,11 @@ test("omits readCursor from the first subscribe when no frontier is stored", asy
 
   render(<App />);
   await screen.findByRole("heading", { name: "Open games" });
-  const socket = await vi.waitFor(() => StubWebSocket.instances.at(-1)!);
+  const socket = await vi.waitFor(() => {
+    const current = StubWebSocket.instances.at(-1);
+    expect(current).toBeDefined();
+    return current!;
+  });
   socket.onopen?.();
   expect(JSON.parse(socket.sent[0]!)).not.toHaveProperty("readCursor");
 });
@@ -464,7 +472,11 @@ test("rebases a persisted frontier beyond a reset retention latest before later 
 
   render(<App />);
   await screen.findByRole("heading", { name: "Open games" });
-  const socket = await vi.waitFor(() => StubWebSocket.instances.at(-1)!);
+  const socket = await vi.waitFor(() => {
+    const current = StubWebSocket.instances.at(-1);
+    expect(current).toBeDefined();
+    return current!;
+  });
   await act(async () => {
     socket.receive(
       JSON.stringify({
@@ -656,7 +668,11 @@ test("opening global chat does not mark pushed rows read", async () => {
 
   render(<App />);
   await screen.findByRole("heading", { name: "Open games" });
-  const socket = await vi.waitFor(() => StubWebSocket.instances.at(-1)!);
+  const socket = await vi.waitFor(() => {
+    const current = StubWebSocket.instances.at(-1);
+    expect(current).toBeDefined();
+    return current!;
+  });
   await act(async () => {
     socket.receive(
       JSON.stringify({
@@ -719,7 +735,11 @@ test("keeps one global socket across main and game routes and closes it on unmou
 
   const view = render(<App />);
   await screen.findByRole("heading", { name: "Open games" });
-  const socket = await vi.waitFor(() => StubWebSocket.instances.at(-1)!);
+  const socket = await vi.waitFor(() => {
+    const current = StubWebSocket.instances.at(-1);
+    expect(current).toBeDefined();
+    return current!;
+  });
   await act(async () => {
     window.history.pushState({}, "", "/games/g1");
     window.dispatchEvent(new PopStateEvent("popstate"));
@@ -854,7 +874,11 @@ test("restores the global viewport after leaving and returning to Chat", async (
 
   render(<App />);
   await screen.findByRole("heading", { name: "Open games" });
-  const socket = await vi.waitFor(() => StubWebSocket.instances.at(-1)!);
+  const socket = await vi.waitFor(() => {
+    const current = StubWebSocket.instances.at(-1);
+    expect(current).toBeDefined();
+    return current!;
+  });
   await act(async () => {
     socket.receive(
       JSON.stringify({
@@ -1470,7 +1494,11 @@ test("guards overlapping global older-page requests", async () => {
   window.history.replaceState({}, "", "/");
   render(<App />);
   await screen.findByRole("heading", { name: "Open games" });
-  const socket = await vi.waitFor(() => StubWebSocket.instances.at(-1)!);
+  const socket = await vi.waitFor(() => {
+    const current = StubWebSocket.instances.at(-1);
+    expect(current).toBeDefined();
+    return current!;
+  });
   await act(async () => {
     socket.receive(
       JSON.stringify({
@@ -1521,7 +1549,11 @@ test("holds at most 1000 global rows while retaining the truncation boundary", a
   );
   render(<App />);
   await screen.findByRole("heading", { name: "Open games" });
-  const socket = await vi.waitFor(() => StubWebSocket.instances.at(-1)!);
+  const socket = await vi.waitFor(() => {
+    const current = StubWebSocket.instances.at(-1);
+    expect(current).toBeDefined();
+    return current!;
+  });
   await act(async () => {
     socket.receive(
       JSON.stringify({
