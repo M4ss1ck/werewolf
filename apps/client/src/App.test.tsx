@@ -1193,8 +1193,13 @@ test("a game route offers a way back to the games list", async () => {
   const back = await screen.findByRole("button", { name: "Back to games" });
   fireEvent.click(back);
 
-  await screen.findByRole("heading", { name: "Open games" });
+  // Assert the navigation before the render. The click pushes the path and
+  // fires popstate synchronously, so a failure here means the click never
+  // landed, while a failure below means it landed and the route did not
+  // re-render. CI has failed on the render half once, and the two look
+  // identical from a DOM dump.
   expect(window.location.pathname).toBe("/");
+  await screen.findByRole("heading", { name: "Open games" });
 });
 
 test("associates game snapshots with the requested route and clears failed loads", async () => {
