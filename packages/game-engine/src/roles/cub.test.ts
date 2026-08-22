@@ -81,7 +81,7 @@ describe("the Cub", () => {
         commandId: "c1",
         phaseId: 1 as never,
         type: "chat.send",
-        payload: { channel: "wolves", text: "hello" },
+        payload: { channel: "wolves", text: "hello", mentions: [] },
       },
       { now: 1 },
     );

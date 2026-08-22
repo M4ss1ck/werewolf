@@ -247,7 +247,13 @@ describe("GameRepository", () => {
           changes: { role: "werewolf", faction: "wolves", status: "dead" },
         },
       ],
-      events: [draft("chat.message", "public", { channel: "public", text: "must not appear" })],
+      events: [
+        draft("chat.message", "public", {
+          channel: "public",
+          text: "must not appear",
+          mentions: [],
+        }),
+      ],
       ephemeral: [],
     };
     const result = await repo.commitTransition(GAME_ID, 0, stale);
@@ -274,7 +280,7 @@ describe("GameRepository", () => {
         draft(
           "chat.message",
           "public",
-          { channel: "public", text: "hello" },
+          { channel: "public", text: "hello", mentions: [] },
           { commandId: "chat-1" },
         ),
       ],
@@ -290,7 +296,7 @@ describe("GameRepository", () => {
         draft(
           "chat.message",
           "public",
-          { channel: "public", text: "hello retry" },
+          { channel: "public", text: "hello retry", mentions: [] },
           { commandId: "chat-1" },
         ),
       ],
@@ -314,7 +320,11 @@ describe("GameRepository", () => {
       playerPatches: [],
       events: [
         draft("game.started", "public", {}),
-        draft("chat.message", "public", { channel: "public", text: "first" }),
+        draft("chat.message", "public", {
+          channel: "public",
+          text: "first",
+          mentions: [],
+        }),
         draft("phase.started", "public", {
           phaseId: 1 as PhaseId,
           type: "discussion",

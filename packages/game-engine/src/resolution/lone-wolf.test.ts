@@ -179,12 +179,12 @@ describe("lone wolf is not one of the pack", () => {
       scope: "faction" as const,
       scopeId: "wolves",
       createdAt: 0,
-      payload: { channel: "wolves" as const, text: "before" },
+      payload: { channel: "wolves" as const, text: "before", mentions: [] },
     };
     const after = {
       ...before,
       id: 60 as never,
-      payload: { channel: "wolves" as const, text: "after" },
+      payload: { channel: "wolves" as const, text: "after", mentions: [] },
     };
     expect(canViewEvent(before, id("p0"), ascended)).toBe(false);
     expect(canViewEvent(after, id("p0"), ascended)).toBe(true);

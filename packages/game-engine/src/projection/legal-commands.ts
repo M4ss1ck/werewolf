@@ -108,7 +108,11 @@ export function getSpeakableChannels(
     isLegal(
       state,
       playerId,
-      { type: "chat.send", phaseId: phase.id, payload: { channel, text: "probe" } },
+      {
+        type: "chat.send",
+        phaseId: phase.id,
+        payload: { channel, text: "probe", mentions: [] },
+      },
       now,
     ),
   );

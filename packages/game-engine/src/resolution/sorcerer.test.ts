@@ -186,7 +186,7 @@ describe("the Sorcerer", () => {
         commandId: "c1",
         phaseId: 1 as never,
         type: "chat.send",
-        payload: { channel: "wolves", text: "hello" },
+        payload: { channel: "wolves", text: "hello", mentions: [] },
       },
       { now: 1 },
     );
@@ -207,7 +207,7 @@ describe("the Sorcerer", () => {
       scope: "faction",
       scopeId: "wolves",
       createdAt: 0,
-      payload: { channel: "wolves", text: "psst" },
+      payload: { channel: "wolves", text: "psst", mentions: [] },
     };
     expect(canViewEvent(chatEvent, id("p0"), state)).toBe(false);
     // The viewer snapshot must not offer the wolves channel either: the client
@@ -403,7 +403,7 @@ describe("the pack still behaves as the pack (regression)", () => {
           commandId: "c1",
           phaseId: 1 as never,
           type: "chat.send",
-          payload: { channel: "wolves", text: "hello" },
+          payload: { channel: "wolves", text: "hello", mentions: [] },
         },
         { now: 1 },
       ),
