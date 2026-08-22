@@ -2,7 +2,7 @@
 // GET /me/stats: their lifetime record over finished games.
 
 import type { Db, GameRepository } from "@werewolf/db";
-import type { UserId } from "@werewolf/protocol";
+import { normalizeMentionSearch, type UserId } from "@werewolf/protocol";
 import { eq } from "drizzle-orm";
 import type { Context } from "hono";
 import { Hono } from "hono";
@@ -30,7 +30,7 @@ export function meRoutes(db: Db, repository: GameRepository) {
     const username = parsed.data.username;
     await db
       .update(authUser)
-      .set({ username, updatedAt: new Date() })
+      .set({ username, usernameSearch: normalizeMentionSearch(username), updatedAt: new Date() })
       .where(eq(authUser.id, userId));
     return c.json({ userId, username });
   });

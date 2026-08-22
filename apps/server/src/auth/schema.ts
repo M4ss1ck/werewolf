@@ -6,12 +6,14 @@
 // generates for SQLite: camelCase columns, integer timestamps in ms and
 // integer booleans.
 
+import { normalizeMentionSearch } from "@werewolf/protocol";
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const authUser = sqliteTable("user", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   username: text("username"),
+  usernameSearch: text("usernameSearch"),
   email: text("email").notNull().unique(),
   emailVerified: integer("emailVerified", { mode: "boolean" }).notNull(),
   image: text("image"),
@@ -71,6 +73,7 @@ CREATE TABLE IF NOT EXISTS "user" (
   "id" text PRIMARY KEY NOT NULL,
   "name" text NOT NULL,
   "username" text,
+  "usernameSearch" text,
   "email" text NOT NULL UNIQUE,
   "emailVerified" integer NOT NULL,
   "image" text,
@@ -112,12 +115,35 @@ CREATE TABLE IF NOT EXISTS "verification" (
 );
 `;
 
+function isDuplicateColumnError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const message = "message" in error && typeof error.message === "string" ? error.message : "";
+  if (!/duplicate column(?: name)?/i.test(message)) return false;
+  const code = "code" in error && typeof error.code === "string" ? error.code : undefined;
+  return code === undefined || code === "SQLITE_ERROR" || code === "SQLITE_CONSTRAINT";
+}
+
 /**
  * Create the Better Auth tables. Idempotent, so it is safe to run on every
  * boot. Takes the libsql client structurally to avoid a direct dependency.
  */
 export async function createAuthTables(client: {
   executeMultiple: (sql: string) => Promise<unknown>;
+  execute: (
+    statement:
+      | string
+      | {
+          sql: string;
+          args?:
+            | (string | number | bigint | ArrayBuffer | boolean | Uint8Array | Date | null)[]
+            | Record<
+                string,
+                string | number | bigint | ArrayBuffer | boolean | Uint8Array | Date | null
+              >;
+        },
+  ) => Promise<{
+    rows: Array<Record<string, string | number | bigint | ArrayBuffer | null>>;
+  }>;
 }): Promise<void> {
   await client.executeMultiple(AUTH_TABLES_SQL);
   // Databases created before usernames existed still need the column, and
@@ -125,7 +151,30 @@ export async function createAuthTables(client: {
   // the success case, not a failure.
   try {
     await client.executeMultiple(`ALTER TABLE "user" ADD COLUMN "username" text;`);
-  } catch {
-    // Already present.
+  } catch (error) {
+    if (!isDuplicateColumnError(error)) throw error;
   }
+  try {
+    await client.executeMultiple(`ALTER TABLE "user" ADD COLUMN "usernameSearch" text;`);
+  } catch (error) {
+    if (!isDuplicateColumnError(error)) throw error;
+  }
+
+  const rows = await client.execute(
+    `SELECT "id", "username", "usernameSearch" FROM "user" WHERE "username" IS NOT NULL`,
+  );
+  for (const row of rows.rows) {
+    const id = row.id;
+    const username = row.username;
+    if (typeof id !== "string" || typeof username !== "string") continue;
+    const normalized = normalizeMentionSearch(username);
+    if (row.usernameSearch === normalized) continue;
+    await client.execute({
+      sql: `UPDATE "user" SET "usernameSearch" = ? WHERE "id" = ?`,
+      args: [normalized, id],
+    });
+  }
+  await client.executeMultiple(
+    `CREATE INDEX IF NOT EXISTS "user_username_search_idx" ON "user" ("usernameSearch");`,
+  );
 }

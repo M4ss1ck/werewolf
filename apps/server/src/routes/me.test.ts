@@ -67,6 +67,7 @@ test("PATCH /api/me/username stores the chosen username", async () => {
 
   const row = await db.select().from(authUser).where(eq(authUser.id, USERS[0]!)).get();
   expect(row?.username).toBe("Moonwatcher");
+  expect(row?.usernameSearch).toBe("moonwatcher");
 });
 
 test("PATCH /api/me/username with a too-short username is refused", async () => {

@@ -9,6 +9,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createDb, type Db } from "@werewolf/db";
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/libsql";
 import { createAuth, resolveAuthSession } from "./auth.ts";
 import { authSchema, createAuthTables } from "./schema.ts";
@@ -122,4 +123,63 @@ test("a malformed subprotocol resolves to no viewer rather than throwing", async
     );
     expect(viewer).toBeNull();
   }
+});
+
+test("auth bootstrap adds and backfills usernameSearch on an old user table", async () => {
+  const { client, db } = setup();
+  await client.executeMultiple(`
+    CREATE TABLE "user" (
+      "id" text PRIMARY KEY NOT NULL,
+      "name" text NOT NULL,
+      "username" text,
+      "email" text NOT NULL UNIQUE,
+      "emailVerified" integer NOT NULL,
+      "image" text,
+      "createdAt" integer NOT NULL,
+      "updatedAt" integer NOT NULL
+    );
+    INSERT INTO "user" ("id", "name", "username", "email", "emailVerified", "createdAt", "updatedAt")
+    VALUES ('old-1', 'Old', ' ÁLEx ', 'old@example.com', 1, 0, 0),
+      ('old-2', 'No name', NULL, 'none@example.com', 1, 0, 0);
+  `);
+
+  await createAuthTables(client);
+  const first = await db.select().from(authSchema.user).orderBy(authSchema.user.id);
+  expect(first.map((row) => [row.id, row.usernameSearch])).toEqual([
+    ["old-1", " alex "],
+    ["old-2", null],
+  ]);
+  const indexes = await client.execute(
+    `SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'user_username_search_idx'`,
+  );
+  expect(indexes.rows).toHaveLength(1);
+
+  await client.execute({
+    sql: `UPDATE "user" SET "usernameSearch" = ? WHERE "id" = ?`,
+    args: ["stale", "old-1"],
+  });
+  await createAuthTables(client);
+  const repaired = await db.select().from(authSchema.user).where(eq(authSchema.user.id, "old-1"));
+  expect(repaired[0]?.usernameSearch).toBe(" alex ");
+
+  await createAuthTables(client);
+  const second = await db.select().from(authSchema.user).orderBy(authSchema.user.id);
+  expect(second.map((row) => [row.id, row.usernameSearch])).toEqual(
+    first.map((row) => [row.id, row.usernameSearch]),
+  );
+});
+
+test("auth bootstrap propagates unexpected ALTER TABLE failures", async () => {
+  const failure = new Error("database is read-only");
+  const statements: string[] = [];
+  await expect(
+    createAuthTables({
+      executeMultiple: async (sql) => {
+        statements.push(sql);
+        if (sql.includes(`ADD COLUMN "username"`)) throw failure;
+      },
+      execute: async () => ({ rows: [] }),
+    }),
+  ).rejects.toBe(failure);
+  expect(statements).toHaveLength(2);
 });
