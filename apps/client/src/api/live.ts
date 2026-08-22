@@ -13,6 +13,7 @@ import { wsUrl } from "./origin.ts";
 
 export type LiveStatus = "connecting" | "connected" | "reconnecting" | "closed";
 export interface LiveHandlers {
+  onSync?: (snapshot: ViewerGameSnapshot, events: GameEvent[]) => void;
   onSnapshot?: (snapshot: ViewerGameSnapshot) => void;
   onEvent?: (event: GameEvent) => void;
   onEphemeral?: (kind: string, payload: unknown) => void;
@@ -26,6 +27,7 @@ export class LiveGameConnection {
   private closed = false;
   private status: LiveStatus = "closed";
   private cursor: EventId;
+  private needsFullSync = false;
   /** Last snapshot received from the server; kept across reconnects so the UI
    * can show a reconnecting state without blanking out. */
   private snapshot: ViewerGameSnapshot | null = null;
@@ -50,8 +52,7 @@ export class LiveGameConnection {
     this.socket.onopen = () => {
       this.retry = 0;
       this.setStatus("connected");
-      const frame = SubscribeFrameSchema.parse({ type: "subscribe", cursor: this.cursor });
-      this.socket?.send(JSON.stringify(frame));
+      this.sendSubscribe(this.needsFullSync ? (0 as EventId) : this.cursor);
     };
     this.socket.onmessage = (message) => void this.receive(message.data);
     this.socket.onclose = () => {
@@ -105,9 +106,13 @@ export class LiveGameConnection {
     switch (frame.type) {
       case "sync": {
         this.cursor = frame.cursor;
+        this.needsFullSync = false;
         this.snapshot = frame.snapshot;
-        this.handlers.onSnapshot?.(frame.snapshot);
-        for (const event of frame.events) this.handlers.onEvent?.(event);
+        if (this.handlers.onSync) this.handlers.onSync(frame.snapshot, frame.events);
+        else {
+          this.handlers.onSnapshot?.(frame.snapshot);
+          for (const event of frame.events) this.handlers.onEvent?.(event);
+        }
         break;
       }
       case "event": {
@@ -124,10 +129,17 @@ export class LiveGameConnection {
         // whole snapshot over HTTP instead of patching local state.
         const snapshot = await api.getSnapshot(this.gameId);
         this.cursor = snapshot.cursor;
+        this.needsFullSync = true;
         this.snapshot = snapshot;
         this.handlers.onSnapshot?.(snapshot);
+        this.sendSubscribe(0 as EventId);
         break;
       }
     }
+  }
+
+  private sendSubscribe(cursor: EventId) {
+    const frame = SubscribeFrameSchema.parse({ type: "subscribe", cursor });
+    this.socket?.send(JSON.stringify(frame));
   }
 }

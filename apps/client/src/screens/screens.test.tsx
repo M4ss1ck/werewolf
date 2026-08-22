@@ -19,10 +19,14 @@ import type {
   UserId,
   ViewerGameSnapshot,
 } from "@werewolf/protocol";
-import type { ReactElement } from "react";
+import { type ReactElement, useEffect, useRef, useState } from "react";
 import { I18nextProvider } from "react-i18next";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { ApiError, api } from "../api/client.ts";
+import * as chatUi from "../chat/index.ts";
+import type { ChatDraft, ConversationKey } from "../chat/model.ts";
+import type { ConversationReadState } from "../chat/read-state.ts";
+import type { ChatReadStoreController } from "../chat/read-store.ts";
 import { ErrorMessage } from "../components.tsx";
 import { i18n } from "../i18n/i18n.ts";
 import { Act } from "./act.tsx";
@@ -32,7 +36,7 @@ import { GameOverScreen } from "./game-over.tsx";
 import { GamesScreen } from "./games.tsx";
 import { LobbyScreen } from "./lobby.tsx";
 import { ProfileScreen } from "./profile.tsx";
-import { Talk } from "./talk.tsx";
+import { type GameChatRecord, Talk } from "./talk.tsx";
 import { UsernameScreen } from "./username.tsx";
 
 // A stand-in for the game socket: the lobby now subscribes on mount, so these
@@ -49,6 +53,7 @@ const { MockLiveGameConnection } = vi.hoisted(() => {
       readonly gameId: string,
       readonly cursor: EventId,
       readonly handlers: {
+        onSync?: (snapshot: ViewerGameSnapshot, events: GameEvent[]) => void;
         onSnapshot?: (snapshot: ViewerGameSnapshot) => void;
         onEvent?: (event: GameEvent) => void;
       },
@@ -121,6 +126,58 @@ function makeGameSnapshot(
 // tests push frames into re-renders, and a fresh function per render would
 // rebuild the socket every time.
 const noopUpdate = () => undefined;
+
+class StubIntersectionObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+function fakeReadStore(initial: Partial<Record<ConversationKey, ConversationReadState>> = {}) {
+  const calls = {
+    baseline: [] as { key: string; ids: number[] }[],
+    visible: [] as string[],
+    through: [] as string[],
+    order: [] as string[],
+  };
+  const states = { ...initial } as Partial<Record<ConversationKey, ConversationReadState>>;
+  const store: ChatReadStoreController = {
+    states,
+    hasRecord: (key) => states[key] !== undefined,
+    establishBaseline: (key, messages) => {
+      calls.order.push(`baseline:${key}`);
+      calls.baseline.push({ key, ids: messages.map((message) => message.id) });
+      states[key] = { readThrough: messages.at(-1)?.id ?? 0, seenAfter: [] };
+    },
+    markVisible: (key) => calls.visible.push(key),
+    markThrough: (key) => calls.through.push(key),
+    rebaseRetention: () => undefined,
+  };
+  return { calls, store };
+}
+
+function talkRecords(): Record<ChatChannel, GameChatRecord> {
+  const channels: ChatChannel[] = ["public", "wolves", "cult", "grave"];
+  return Object.fromEntries(
+    channels.map((channel) => [
+      channel,
+      {
+        draft: { text: `${channel} draft`, mentions: [] } satisfies ChatDraft,
+        jumpToLatestToken: 4,
+        viewport: {
+          virtuoso: { ranges: [], scrollTop: 8 },
+          messageIds: [1],
+          anchorId: 1,
+          anchorOffset: 4,
+        },
+      },
+    ]),
+  ) as unknown as Record<ChatChannel, GameChatRecord>;
+}
+
+beforeEach(() => {
+  vi.stubGlobal("IntersectionObserver", StubIntersectionObserver);
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -636,7 +693,7 @@ test("lobby: opens a live connection that delivers pushed snapshots to onUpdate"
   expect(connection!.close).toHaveBeenCalledTimes(1);
 });
 
-test("game: a chat message after the sync badges Talk until it is opened", () => {
+test("game: a chat message keeps the numeric Talk badge until its row is visible", () => {
   const snapshot = makeGameSnapshot({
     game: { phase: { id: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 } },
   });
@@ -648,8 +705,9 @@ test("game: a chat message after the sync badges Talk until it is opened", () =>
     id: id as EventId,
     kind: "chat.message",
     scope: "public",
+    actorUserId: "odile" as UserId,
     createdAt: id,
-    payload: { channel: "public", text: "hello" },
+    payload: { channel: "public", text: "hello", mentions: [] },
   });
 
   // The mount-time sync frame backfills history; backlog is not "new".
@@ -666,13 +724,15 @@ test("game: a chat message after the sync badges Talk until it is opened", () =>
   reactAct(() => connection!.handlers.onEvent?.(chat(2)));
 
   const badge = (name: string) =>
-    screen.getByRole("button", { name }).querySelector(".tabbar__badge");
+    screen
+      .getByRole("button", { name: name === "Talk" ? /^Talk/ : name })
+      .querySelector(".tabbar__badge");
   expect(badge("Talk")).not.toBeNull();
   expect(badge("Village")).toBeNull();
   expect(badge("Me")).toBeNull();
 
-  fireEvent.click(screen.getByRole("button", { name: "Talk" }));
-  expect(badge("Talk")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: /^Talk/ }));
+  expect(badge("Talk")).not.toBeNull();
 });
 
 test("game: the Act tab badges while the viewer has no registered vote", () => {
@@ -715,8 +775,9 @@ test("game: the first event batch is the mount sync and never badges", () => {
     id: id as EventId,
     kind: "chat.message",
     scope: "public",
+    actorUserId: "odile" as UserId,
     createdAt: id,
-    payload: { channel: "public", text: "hello" },
+    payload: { channel: "public", text: "hello", mentions: [] },
   });
 
   // The first batch is the mount-time sync: it backfills history, so it must
@@ -725,13 +786,232 @@ test("game: the first event batch is the mount sync and never badges", () => {
     connection!.handlers.onEvent?.(chat(1));
     connection!.handlers.onEvent?.(chat(2));
   });
-  expect(screen.getByRole("button", { name: "Talk" }).querySelector(".tabbar__badge")).toBeNull();
+  expect(screen.getByRole("button", { name: /^Talk/ }).querySelector(".tabbar__badge")).toBeNull();
 
   // A later message is unseen until the Talk tab is opened.
   reactAct(() => connection!.handlers.onEvent?.(chat(3)));
   expect(
-    screen.getByRole("button", { name: "Talk" }).querySelector(".tabbar__badge"),
+    screen.getByRole("button", { name: /^Talk/ }).querySelector(".tabbar__badge"),
   ).not.toBeNull();
+});
+
+test("game: atomic sync deduplicates and baselines complete newly available history before update", () => {
+  const initial = makeGameSnapshot();
+  const next = makeGameSnapshot({
+    players: initial.players.map((player) =>
+      player.userId === "wren" ? { ...player, status: "dead" as const } : player,
+    ),
+    me: { ...initial.me!, status: "dead" },
+    availableChannels: ["public", "grave"],
+  });
+  const read = fakeReadStore();
+  const onUpdate = vi.fn(() => read.calls.order.push("update"));
+  renderWithI18n(<GameScreen initial={initial} onUpdate={onUpdate} readStore={read.store} />);
+  const connection = MockLiveGameConnection.instances[0];
+  expect(connection).toBeDefined();
+
+  const publicChat = (text: string): GameEvent => ({
+    id: 5 as EventId,
+    kind: "chat.message",
+    scope: "public",
+    actorUserId: "odile" as UserId,
+    createdAt: 5,
+    payload: { channel: "public", text, mentions: [] },
+  });
+  const graveChat: GameEvent = {
+    id: 7 as EventId,
+    kind: "chat.message",
+    scope: "faction",
+    scopeId: "grave",
+    actorUserId: "mattias" as UserId,
+    createdAt: 7,
+    payload: { channel: "grave", text: "old grave", mentions: [] },
+  };
+  const nonChat: GameEvent = {
+    id: 3 as EventId,
+    kind: "player.eliminated",
+    scope: "public",
+    actorUserId: "odile" as UserId,
+    createdAt: 3,
+    payload: { playerId: "wren" as UserId, role: "villager", cause: "day_vote" },
+  };
+
+  reactAct(() =>
+    connection!.handlers.onSync?.(next, [nonChat, graveChat, publicChat("old"), publicChat("new")]),
+  );
+
+  expect(read.calls.baseline).toEqual([
+    { key: "game:g1:public", ids: [5] },
+    { key: "game:g1:grave", ids: [7] },
+  ]);
+  expect(read.calls.order).toEqual(["baseline:game:g1:public", "baseline:game:g1:grave", "update"]);
+  expect(onUpdate).toHaveBeenCalledWith(next);
+
+  reactAct(() =>
+    connection!.handlers.onSync?.(next, [graveChat, publicChat("duplicate backfill")]),
+  );
+  expect(read.calls.baseline).toHaveLength(2);
+  expect(onUpdate).toHaveBeenCalledTimes(2);
+});
+
+test("game: atomic sync preserves an existing read record and baselines only a new channel", () => {
+  const initial = makeGameSnapshot();
+  const publicKey = "game:g1:public" as ConversationKey;
+  const next = makeGameSnapshot({
+    players: initial.players.map((player) =>
+      player.userId === "wren" ? { ...player, status: "dead" as const } : player,
+    ),
+    me: { ...initial.me!, status: "dead" },
+    availableChannels: ["public", "grave"],
+  });
+  const read = fakeReadStore({ [publicKey]: { readThrough: 2, seenAfter: [3] } });
+  renderWithI18n(<GameScreen initial={initial} onUpdate={noopUpdate} readStore={read.store} />);
+  const connection = MockLiveGameConnection.instances[0];
+  expect(connection).toBeDefined();
+
+  const events: GameEvent[] = [
+    {
+      id: 5 as EventId,
+      kind: "chat.message",
+      scope: "public",
+      actorUserId: "odile" as UserId,
+      createdAt: 5,
+      payload: { channel: "public", text: "new public", mentions: [] },
+    },
+    {
+      id: 7 as EventId,
+      kind: "chat.message",
+      scope: "faction",
+      scopeId: "grave",
+      actorUserId: "mattias" as UserId,
+      createdAt: 7,
+      payload: { channel: "grave", text: "old grave", mentions: [] },
+    },
+  ];
+  reactAct(() => connection!.handlers.onSync?.(next, events));
+
+  expect(read.calls.baseline).toEqual([{ key: "game:g1:grave", ids: [7] }]);
+  expect(read.store.states[publicKey]).toEqual({ readThrough: 2, seenAfter: [3] });
+});
+
+test("game: four channel drafts survive Talk chip and Village/Act/Me navigation, then reset on remount", () => {
+  const snapshot = makeGameSnapshot({
+    availableChannels: ["public", "wolves", "cult", "grave"],
+  });
+  const view = renderWithI18n(<GameScreen initial={snapshot} onUpdate={noopUpdate} />);
+  fireEvent.click(screen.getByRole("button", { name: "Talk" }));
+
+  const drafts: Record<ChatChannel, string> = {
+    public: "public draft",
+    wolves: "wolves draft",
+    cult: "cult draft",
+    grave: "grave draft",
+  };
+  for (const [channel, text] of Object.entries(drafts) as [ChatChannel, string][]) {
+    const labels: Record<ChatChannel, string> = {
+      public: "Public chat",
+      wolves: "Wolf chat",
+      cult: "Cult chat",
+      grave: "Grave chat",
+    };
+    fireEvent.click(screen.getByRole("button", { name: labels[channel] }));
+    fireEvent.change(screen.getByLabelText("Message"), { target: { value: text } });
+  }
+
+  fireEvent.click(screen.getByRole("button", { name: "Village" }));
+  fireEvent.click(screen.getByRole("button", { name: "Act" }));
+  fireEvent.click(screen.getByRole("button", { name: "Me" }));
+  fireEvent.click(screen.getByRole("button", { name: "Talk" }));
+  const labels: Record<ChatChannel, string> = {
+    public: "Public chat",
+    wolves: "Wolf chat",
+    cult: "Cult chat",
+    grave: "Grave chat",
+  };
+  for (const [channel, text] of Object.entries(drafts) as [ChatChannel, string][]) {
+    fireEvent.click(screen.getByRole("button", { name: labels[channel] }));
+    expect(screen.getByLabelText("Message")).toHaveValue(text);
+  }
+
+  view.unmount();
+  renderWithI18n(<GameScreen initial={snapshot} onUpdate={noopUpdate} />);
+  fireEvent.click(screen.getByRole("button", { name: "Talk" }));
+  expect(screen.getByLabelText("Message")).toHaveValue("");
+});
+
+test("game: unavailable selected channel falls back without deleting its draft", () => {
+  const initial = makeGameSnapshot({ availableChannels: ["public", "wolves"] });
+  const unavailable = makeGameSnapshot({ availableChannels: ["public"] });
+  const availableAgain = makeGameSnapshot({ availableChannels: ["public", "wolves"] });
+  renderWithI18n(<GameScreen initial={initial} onUpdate={noopUpdate} />);
+  const connection = MockLiveGameConnection.instances[0];
+  expect(connection).toBeDefined();
+  fireEvent.click(screen.getByRole("button", { name: "Talk" }));
+  fireEvent.click(screen.getByRole("button", { name: "Wolf chat" }));
+  fireEvent.change(screen.getByLabelText("Message"), { target: { value: "keep this" } });
+
+  reactAct(() => connection!.handlers.onSync?.(unavailable, []));
+  expect(screen.getByRole("button", { name: "Public chat" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  expect(screen.queryByRole("button", { name: "Wolf chat" })).not.toBeInTheDocument();
+
+  reactAct(() => connection!.handlers.onSync?.(availableAgain, []));
+  fireEvent.click(screen.getByRole("button", { name: "Wolf chat" }));
+  expect(screen.getByLabelText("Message")).toHaveValue("keep this");
+});
+
+test("game: Talk aggregates only available channel unread counts and keeps its badge active", () => {
+  const publicKey = "game:g1:public" as ConversationKey;
+  const wolvesKey = "game:g1:wolves" as ConversationKey;
+  const read = fakeReadStore({
+    [publicKey]: { readThrough: 0, seenAfter: [] },
+    [wolvesKey]: { readThrough: 0, seenAfter: [] },
+  });
+  const snapshot = makeGameSnapshot({
+    me: { userId: "wren" as UserId, status: "alive", role: "werewolf" },
+    availableChannels: ["public", "wolves"] as ChatChannel[],
+    knownChannelMemberIds: { wolves: ["odile" as UserId] },
+  });
+  renderWithI18n(<GameScreen initial={snapshot} onUpdate={noopUpdate} readStore={read.store} />);
+  const connection = MockLiveGameConnection.instances[0];
+  expect(connection).toBeDefined();
+  const events: GameEvent[] = [
+    {
+      id: 5 as EventId,
+      kind: "chat.message",
+      scope: "public",
+      actorUserId: "odile" as UserId,
+      createdAt: 5,
+      payload: {
+        channel: "public",
+        text: "@Wren",
+        mentions: [{ userId: "wren" as UserId, start: 0, length: 5 }],
+      },
+    },
+    {
+      id: 6 as EventId,
+      kind: "chat.message",
+      scope: "faction",
+      scopeId: "wolves",
+      actorUserId: "odile" as UserId,
+      createdAt: 6,
+      payload: { channel: "wolves", text: "howl", mentions: [] },
+    },
+  ];
+  reactAct(() => connection!.handlers.onSync?.(snapshot, events));
+
+  const talk = screen.getByRole("button", { name: "Talk, 2, Mentioned you" });
+  expect(talk.querySelector(".tabbar__badge")).toHaveTextContent("2");
+  fireEvent.click(talk);
+  expect(screen.getByRole("button", { name: "Talk, 2, Mentioned you" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /Public chat, 1, Mentioned you/ })).toHaveTextContent(
+    "@",
+  );
+  expect(screen.getByRole("button", { name: "Wolf chat, 1" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /Cult chat|Grave chat/ })).not.toBeInTheDocument();
+  expect(read.calls.visible).toEqual([]);
 });
 
 test("game: a rejected command renders the error and keeps the typed text", async () => {
@@ -748,6 +1028,410 @@ test("game: a rejected command renders the error and keeps the typed text", asyn
 
   expect(await screen.findByText("That phase has already ended.")).toBeInTheDocument();
   expect(input).toHaveValue("the deadline raced");
+});
+
+test("game: a failed send does not let a later remote row consume stale pending state", async () => {
+  const jumps = vi.fn();
+  vi.spyOn(chatUi, "ChatList").mockImplementation((props) => {
+    const previousToken = useRef(props.jumpToLatestToken);
+    useEffect(() => {
+      if (props.jumpToLatestToken !== previousToken.current && props.messages.length > 0) jumps();
+      previousToken.current = props.jumpToLatestToken;
+    }, [props.jumpToLatestToken, props.messages.length]);
+    return <div data-testid="jump-probe" />;
+  });
+  vi.spyOn(api, "postCommand").mockRejectedValue({ code: "PHASE_CLOSED" });
+  const read = fakeReadStore();
+  const snapshot = makeGameSnapshot();
+  renderWithI18n(<GameScreen initial={snapshot} onUpdate={noopUpdate} readStore={read.store} />);
+  const connection = MockLiveGameConnection.instances[0];
+  expect(connection).toBeDefined();
+
+  fireEvent.click(screen.getByRole("button", { name: "Talk" }));
+  const input = screen.getByLabelText("Message");
+  fireEvent.change(input, { target: { value: "failed message" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  await screen.findByText("That phase has already ended.");
+  expect(input).toHaveValue("failed message");
+
+  reactAct(() =>
+    connection!.handlers.onSync?.(snapshot, [
+      {
+        id: 5 as EventId,
+        kind: "chat.message",
+        scope: "public",
+        actorUserId: "odile" as UserId,
+        createdAt: 5,
+        payload: { channel: "public", text: "remote after failure", mentions: [] },
+      },
+    ]),
+  );
+  expect(read.calls.through).toEqual([]);
+  expect(jumps).not.toHaveBeenCalled();
+  expect(input).toHaveValue("failed message");
+});
+
+test("game: a sync echo after the HTTP response clears and marks only its channel", async () => {
+  vi.spyOn(api, "postCommand").mockResolvedValue(undefined);
+  const read = fakeReadStore();
+  const snapshot = makeGameSnapshot({ availableChannels: ["public", "wolves"] });
+  renderWithI18n(<GameScreen initial={snapshot} onUpdate={noopUpdate} readStore={read.store} />);
+  const connection = MockLiveGameConnection.instances[0];
+  expect(connection).toBeDefined();
+
+  fireEvent.click(screen.getByRole("button", { name: "Talk" }));
+  fireEvent.change(screen.getByLabelText("Message"), { target: { value: "hello village" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  await waitFor(() => expect(screen.getByLabelText("Message")).toHaveValue(""));
+
+  reactAct(() =>
+    connection!.handlers.onSync?.(snapshot, [
+      {
+        id: 5 as EventId,
+        kind: "chat.message",
+        scope: "public",
+        actorUserId: "wren" as UserId,
+        createdAt: 5,
+        payload: { channel: "public", text: "hello village", mentions: [] },
+      },
+    ]),
+  );
+  expect(read.calls.through).toEqual(["game:g1:public"]);
+  expect(read.calls.through).not.toContain("game:g1:wolves");
+});
+
+test("game: a sync echo before the HTTP response still marks once after the row arrives", async () => {
+  let resolvePost: (() => void) | undefined;
+  const post = vi.spyOn(api, "postCommand").mockImplementation(
+    () =>
+      new Promise<void>((resolve) => {
+        resolvePost = resolve;
+      }),
+  );
+  const read = fakeReadStore();
+  const snapshot = makeGameSnapshot({ availableChannels: ["public", "wolves"] });
+  renderWithI18n(<GameScreen initial={snapshot} onUpdate={noopUpdate} readStore={read.store} />);
+  const connection = MockLiveGameConnection.instances[0];
+  expect(connection).toBeDefined();
+
+  fireEvent.click(screen.getByRole("button", { name: "Talk" }));
+  fireEvent.change(screen.getByLabelText("Message"), { target: { value: "hello before ack" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+
+  reactAct(() =>
+    connection!.handlers.onSync?.(snapshot, [
+      {
+        id: 6 as EventId,
+        kind: "chat.message",
+        scope: "public",
+        actorUserId: "wren" as UserId,
+        createdAt: 6,
+        payload: { channel: "public", text: "hello before ack", mentions: [] },
+      },
+    ]),
+  );
+  expect(read.calls.through).toEqual(["game:g1:public"]);
+  resolvePost?.();
+  await waitFor(() => expect(screen.getByLabelText("Message")).toHaveValue(""));
+  expect(read.calls.through).toHaveLength(1);
+});
+
+test("game: a sync-before-HTTP echo performs one actual jump and never jumps twice", async () => {
+  const jumps = vi.fn();
+  vi.spyOn(chatUi, "ChatList").mockImplementation((props) => {
+    const previousToken = useRef(props.jumpToLatestToken);
+    useEffect(() => {
+      if (props.jumpToLatestToken !== previousToken.current && props.messages.length > 0) jumps();
+      previousToken.current = props.jumpToLatestToken;
+    }, [props.jumpToLatestToken, props.messages.length]);
+    return <div data-testid="jump-probe" />;
+  });
+
+  let resolvePost: (() => void) | undefined;
+  const post = vi.spyOn(api, "postCommand").mockImplementation(
+    () =>
+      new Promise<void>((resolve) => {
+        resolvePost = resolve;
+      }),
+  );
+  const snapshot = makeGameSnapshot();
+  renderWithI18n(<GameScreen initial={snapshot} onUpdate={noopUpdate} />);
+  const connection = MockLiveGameConnection.instances[0];
+  expect(connection).toBeDefined();
+
+  fireEvent.click(screen.getByRole("button", { name: "Talk" }));
+  fireEvent.change(screen.getByLabelText("Message"), { target: { value: "jump once" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+
+  reactAct(() =>
+    connection!.handlers.onSync?.(snapshot, [
+      {
+        id: 6 as EventId,
+        kind: "chat.message",
+        scope: "public",
+        actorUserId: "wren" as UserId,
+        createdAt: 6,
+        payload: { channel: "public", text: "jump once", mentions: [] },
+      },
+    ]),
+  );
+  await waitFor(() => expect(jumps).toHaveBeenCalledTimes(1));
+  resolvePost?.();
+  await waitFor(() => expect(screen.getByLabelText("Message")).toHaveValue(""));
+  expect(jumps).toHaveBeenCalledTimes(1);
+});
+
+test("game: overlapping sends ignore remote rows and resolve each own echo", async () => {
+  const jumps = vi.fn();
+  vi.spyOn(chatUi, "ChatList").mockImplementation((props) => {
+    const previousToken = useRef(props.jumpToLatestToken);
+    const previousLatest = useRef(props.messages.at(-1)?.id);
+    const pendingJump = useRef(false);
+    useEffect(() => {
+      const latest = props.messages.at(-1)?.id;
+      const appendedLatest =
+        previousLatest.current !== undefined &&
+        latest !== undefined &&
+        latest > previousLatest.current;
+      if (props.jumpToLatestToken !== previousToken.current) {
+        previousToken.current = props.jumpToLatestToken;
+        if (appendedLatest) jumps();
+        else pendingJump.current = true;
+      } else if (pendingJump.current && appendedLatest) {
+        pendingJump.current = false;
+        jumps();
+      }
+      previousLatest.current = latest;
+    }, [props.jumpToLatestToken, props.messages]);
+    return <div data-testid="jump-probe" />;
+  });
+  let resolveSecond: (() => void) | undefined;
+  const post = vi
+    .spyOn(api, "postCommand")
+    .mockResolvedValueOnce(undefined)
+    .mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSecond = resolve;
+        }),
+    );
+  const read = fakeReadStore();
+  const snapshot = makeGameSnapshot();
+  renderWithI18n(<GameScreen initial={snapshot} onUpdate={noopUpdate} readStore={read.store} />);
+  const connection = MockLiveGameConnection.instances[0];
+  expect(connection).toBeDefined();
+
+  fireEvent.click(screen.getByRole("button", { name: "Talk" }));
+  reactAct(() =>
+    connection!.handlers.onSync?.(snapshot, [
+      {
+        id: 1 as EventId,
+        kind: "chat.message",
+        scope: "public",
+        actorUserId: "odile" as UserId,
+        createdAt: 1,
+        payload: { channel: "public", text: "existing history", mentions: [] },
+      },
+    ]),
+  );
+  const input = screen.getByLabelText("Message");
+  fireEvent.change(input, { target: { value: "first own message" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  await waitFor(() => expect(input).toHaveValue(""));
+
+  fireEvent.change(input, { target: { value: "second own message" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
+  expect(post).toHaveBeenNthCalledWith(
+    1,
+    "g1",
+    expect.objectContaining({ payload: expect.objectContaining({ text: "first own message" }) }),
+  );
+  expect(post).toHaveBeenNthCalledWith(
+    2,
+    "g1",
+    expect.objectContaining({ payload: expect.objectContaining({ text: "second own message" }) }),
+  );
+
+  reactAct(() =>
+    connection!.handlers.onSync?.(snapshot, [
+      {
+        id: 5 as EventId,
+        kind: "chat.message",
+        scope: "public",
+        actorUserId: "odile" as UserId,
+        createdAt: 5,
+        payload: { channel: "public", text: "remote between sends", mentions: [] },
+      },
+    ]),
+  );
+  expect(read.calls.through).toEqual([]);
+  expect(jumps).not.toHaveBeenCalled();
+
+  reactAct(() =>
+    connection!.handlers.onSync?.(snapshot, [
+      {
+        id: 6 as EventId,
+        kind: "chat.message",
+        scope: "public",
+        actorUserId: "wren" as UserId,
+        createdAt: 6,
+        payload: { channel: "public", text: "first own message", mentions: [] },
+      },
+    ]),
+  );
+  expect(read.calls.through).toEqual(["game:g1:public"]);
+  await waitFor(() => expect(jumps).toHaveBeenCalledTimes(1));
+
+  reactAct(() =>
+    connection!.handlers.onSync?.(snapshot, [
+      {
+        id: 7 as EventId,
+        kind: "chat.message",
+        scope: "public",
+        actorUserId: "wren" as UserId,
+        createdAt: 7,
+        payload: { channel: "public", text: "second own message", mentions: [] },
+      },
+    ]),
+  );
+  expect(read.calls.through).toEqual(["game:g1:public", "game:g1:public"]);
+  await waitFor(() => expect(jumps).toHaveBeenCalledTimes(2));
+
+  resolveSecond?.();
+  await waitFor(() => expect(input).toHaveValue(""));
+});
+
+test("game: an authoritative resync removes stale rows before cursor-zero history returns", async () => {
+  vi.spyOn(api, "postCommand").mockResolvedValue(undefined);
+  const read = fakeReadStore();
+  const initial = makeGameSnapshot({ cursor: 40 as EventId });
+  renderWithI18n(<GameScreen initial={initial} onUpdate={noopUpdate} readStore={read.store} />);
+  const connection = MockLiveGameConnection.instances[0];
+  expect(connection).toBeDefined();
+
+  const stale = {
+    id: 40 as EventId,
+    kind: "chat.message" as const,
+    scope: "public" as const,
+    actorUserId: "odile" as UserId,
+    createdAt: 40,
+    payload: { channel: "public" as const, text: "stale", mentions: [] },
+  };
+  reactAct(() => connection!.handlers.onSync?.(initial, [stale]));
+
+  const fresh = makeGameSnapshot({
+    cursor: 10 as EventId,
+    players: initial.players.map((player) =>
+      player.userId === "wren" ? { ...player, status: "dead" as const } : player,
+    ),
+    me: { ...initial.me!, status: "alive" },
+    availableChannels: ["public", "grave"],
+  });
+  reactAct(() => connection!.handlers.onSnapshot?.(fresh));
+  reactAct(() =>
+    connection!.handlers.onSync?.(fresh, [
+      {
+        id: 11 as EventId,
+        kind: "chat.message",
+        scope: "public",
+        actorUserId: "odile" as UserId,
+        createdAt: 11,
+        payload: { channel: "public", text: "fresh", mentions: [] },
+      },
+      {
+        id: 12 as EventId,
+        kind: "chat.message",
+        scope: "faction",
+        scopeId: "grave",
+        actorUserId: "mattias" as UserId,
+        createdAt: 12,
+        payload: { channel: "grave", text: "new grave", mentions: [] },
+      },
+    ]),
+  );
+  expect(read.calls.baseline).toContainEqual({ key: "game:g1:grave", ids: [12] });
+
+  fireEvent.click(screen.getByRole("button", { name: "Talk" }));
+  fireEvent.change(screen.getByLabelText("Message"), { target: { value: "after resync" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  await waitFor(() => expect(screen.getByLabelText("Message")).toHaveValue(""));
+  reactAct(() =>
+    connection!.handlers.onSync?.(fresh, [
+      {
+        id: 13 as EventId,
+        kind: "chat.message",
+        scope: "public",
+        actorUserId: "wren" as UserId,
+        createdAt: 13,
+        payload: { channel: "public", text: "after resync", mentions: [] },
+      },
+    ]),
+  );
+  expect(read.calls.through).toEqual(["game:g1:public"]);
+});
+
+test("Talk keeps the public composer read-only at night and for spectators", () => {
+  const night = renderWithI18n(
+    <Talk
+      events={[]}
+      send={vi.fn()}
+      snapshot={makeGameSnapshot({
+        game: { phase: { id: 2 as PhaseId, type: "night", startedAt: 1000, endsAt: 10_000 } },
+      })}
+    />,
+  );
+  expect(screen.getByLabelText("Message")).toBeDisabled();
+  night.unmount();
+
+  renderWithI18n(
+    <Talk
+      events={[]}
+      send={vi.fn()}
+      snapshot={makeGameSnapshot({
+        me: { userId: "spectator" as UserId, status: "spectator" },
+      })}
+    />,
+  );
+  expect(screen.getByLabelText("Message")).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
+});
+
+test("controlled Talk preserves the exact channel draft and viewport when sending fails", async () => {
+  const initialRecords = talkRecords();
+  let currentRecords = initialRecords;
+  const onDraftChange = vi.fn((draft: ChatDraft) => {
+    currentRecords = {
+      ...currentRecords,
+      wolves: { ...currentRecords.wolves, draft },
+    };
+  });
+  const onError = vi.fn();
+  const snapshot = makeGameSnapshot({
+    me: { userId: "wren" as UserId, status: "alive", role: "werewolf" },
+    availableChannels: ["public", "wolves"],
+  });
+  renderWithI18n(
+    <Talk
+      activeChannel="wolves"
+      chatRows={{ public: [], wolves: [], cult: [], grave: [] }}
+      onDraftChange={onDraftChange}
+      onError={onError}
+      onSend={vi.fn().mockRejectedValue(new ApiError("PHASE_CLOSED"))}
+      records={currentRecords}
+      snapshot={snapshot}
+    />,
+  );
+
+  const before = currentRecords.wolves;
+  fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  await waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+  expect(onDraftChange).not.toHaveBeenCalled();
+  expect(screen.getByLabelText("Message")).toHaveValue("wolves draft");
+  expect(currentRecords.wolves).toBe(before);
+  expect(currentRecords.wolves.viewport).toEqual(before.viewport);
 });
 
 test("action controls render from availableActions; none offered renders none even for a seer", () => {
@@ -1293,8 +1977,62 @@ test("sending on the grave channel posts chat.send with channel grave", async ()
   expect(send).toHaveBeenCalledWith({
     type: "chat.send",
     phaseId: 1,
-    payload: { channel: "grave", text: "rest well" },
+    payload: { channel: "grave", text: "rest well", mentions: [] },
   });
+});
+
+test("controlled Talk sends the current channel with canonical mentions", async () => {
+  const sent: { channel: ChatChannel; text: string; mentions: unknown[] }[] = [];
+  const snapshot = makeGameSnapshot({
+    me: { userId: "wren" as UserId, status: "alive", role: "werewolf" },
+    availableChannels: ["public", "wolves"] as ChatChannel[],
+    knownChannelMemberIds: { wolves: ["odile" as UserId] },
+  });
+  const rows = { public: [], wolves: [], cult: [], grave: [] } as Record<ChatChannel, never[]>;
+
+  function Harness() {
+    const [activeChannel, setActiveChannel] = useState<ChatChannel>("public");
+    const [records, setRecords] = useState(talkRecords());
+    return (
+      <Talk
+        activeChannel={activeChannel}
+        chatRows={rows}
+        onChannelChange={setActiveChannel}
+        onDraftChange={(draft) =>
+          setRecords((current) => ({
+            ...current,
+            [activeChannel]: { ...current[activeChannel], draft },
+          }))
+        }
+        onSend={async (content) => {
+          sent.push({ channel: activeChannel, ...content });
+        }}
+        records={records}
+        snapshot={snapshot}
+      />
+    );
+  }
+
+  renderWithI18n(<Harness />);
+  const input = screen.getByLabelText("Message");
+  fireEvent.change(input, { target: { value: "@Od" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  fireEvent.keyUp(input, { key: "Enter" });
+  await reactAct(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  });
+  expect(sent[0]).toEqual({
+    channel: "public",
+    text: "@Odile",
+    mentions: [{ userId: "odile", start: 0, length: 6 }],
+  });
+
+  fireEvent.click(screen.getByRole("button", { name: "Wolf chat" }));
+  fireEvent.change(screen.getByLabelText("Message"), { target: { value: "secret" } });
+  await reactAct(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+  });
+  expect(sent[1]).toEqual({ channel: "wolves", text: "secret", mentions: [] });
 });
 
 test("a dead viewer can type on the grave channel during the night phase", () => {
@@ -1313,6 +2051,7 @@ test("a dead viewer can type on the grave channel during the night phase", () =>
   expect(screen.getByLabelText(/Message/)).toBeDisabled();
   fireEvent.click(screen.getByRole("button", { name: "Grave chat" }));
   expect(screen.getByLabelText(/Message/)).toBeEnabled();
+  fireEvent.change(screen.getByLabelText(/Message/), { target: { value: "rest well" } });
   expect(screen.getByRole("button", { name: "Send message" })).toBeEnabled();
 });
 

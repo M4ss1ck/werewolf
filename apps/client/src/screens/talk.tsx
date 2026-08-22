@@ -1,131 +1,223 @@
 import type {
   ChatChannel,
+  ChatContent,
   GameEvent,
   GameplayCommand,
   ViewerGameSnapshot,
 } from "@werewolf/protocol";
-import { useState } from "react";
+import { CHAT_CHANNELS } from "@werewolf/protocol";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { gameMentionCandidates } from "../chat/candidates.ts";
+import {
+  ChatComposer,
+  ChatList,
+  type ChatReadStoreController,
+  type ChatViewportSnapshot,
+} from "../chat/index.ts";
+import {
+  type ChatDraft,
+  type ClientChatMessage,
+  type ConversationKey,
+  EMPTY_CHAT_DRAFT,
+  gameChatRows,
+} from "../chat/model.ts";
+import { unreadSummary } from "../chat/read-state.ts";
+import { Chip } from "../components.tsx";
 
-import { ChatBubble, ChatComposer, Chip, DividerNote } from "../components.tsx";
+export type GameChatRecord = {
+  draft: ChatDraft;
+  jumpToLatestToken: number;
+  viewport?: ChatViewportSnapshot;
+};
 
-type Send = (command: Omit<GameplayCommand, "commandId">) => Promise<void>;
+function keyFor(gameId: string, channel: ChatChannel): ConversationKey {
+  return `game:${gameId}:${channel}` as ConversationKey;
+}
 
-/** Design 06 · the Talk tab: channel chips, the message list, the composer. */
+function emptyRecords(): Record<ChatChannel, GameChatRecord> {
+  return Object.fromEntries(
+    CHAT_CHANNELS.map((channel) => [
+      channel,
+      { draft: EMPTY_CHAT_DRAFT, jumpToLatestToken: 0, viewport: undefined },
+    ]),
+  ) as unknown as Record<ChatChannel, GameChatRecord>;
+}
+
+function channelLabel(channel: ChatChannel, t: (key: string) => string): string {
+  if (channel === "public") return t("ui.publicChat");
+  if (channel === "wolves") return t("ui.wolfChat");
+  if (channel === "cult") return t("ui.cultChat");
+  return t("ui.graveChat");
+}
+
+/** Design 06 · controlled in-game Talk with one virtualized list and composer. */
 export function Talk({
   snapshot,
   events,
   send,
+  chatRows: controlledRows,
+  activeChannel: controlledChannel,
+  records: controlledRecords,
+  readStore,
+  errors,
+  onChannelChange,
+  onDraftChange,
+  onSend,
+  onError,
+  onSnapshot,
+  onVisible,
+  onMarkThrough,
 }: {
   snapshot: ViewerGameSnapshot;
-  events: GameEvent[];
-  send: Send;
+  events?: GameEvent[];
+  send?: (command: Omit<GameplayCommand, "commandId">) => Promise<void>;
+  chatRows?: Record<ChatChannel, ClientChatMessage[]>;
+  activeChannel?: ChatChannel;
+  records?: Record<ChatChannel, GameChatRecord>;
+  readStore?: ChatReadStoreController;
+  errors?: Partial<Record<ChatChannel, unknown>>;
+  onChannelChange?(channel: ChatChannel): void;
+  onDraftChange?(draft: ChatDraft): void;
+  onSend?(content: ChatContent): Promise<void>;
+  onError?(error: unknown): void;
+  onSnapshot?(snapshot: ChatViewportSnapshot): void;
+  onVisible?(ids: number[]): void;
+  onMarkThrough?(latestId: number): void;
 }) {
   const { t } = useTranslation();
-  const [channel, setChannel] = useState<ChatChannel>("public");
+  const [localChannel, setLocalChannel] = useState<ChatChannel>("public");
+  const [localRecords, setLocalRecords] = useState(emptyRecords);
+  const activeChannel = controlledChannel ?? localChannel;
+  const chatRows = controlledRows ?? gameChatRows(events ?? [], snapshot.players);
+  const records = controlledRecords ?? localRecords;
+  const changeChannel = onChannelChange ?? setLocalChannel;
+  const record = records[activeChannel];
+  const changeDraft =
+    onDraftChange ??
+    ((draft: ChatDraft) => {
+      setLocalRecords((current) => ({
+        ...current,
+        [activeChannel]: { ...current[activeChannel], draft },
+      }));
+    });
+  const sendContent =
+    onSend ??
+    (async (content: ChatContent) => {
+      const phase = snapshot.game.phase;
+      if (phase === null || send === undefined) return;
+      await send({
+        type: "chat.send",
+        phaseId: phase.id,
+        payload: { channel: activeChannel, ...content },
+      });
+    });
+  const reportError = onError ?? (() => undefined);
+  const reportSnapshot = onSnapshot ?? (() => undefined);
+  const reportVisible = onVisible ?? (() => undefined);
+  const reportMarkThrough = onMarkThrough ?? (() => undefined);
   const me = snapshot.me;
+  const viewerId = me?.userId ?? ("" as ViewerGameSnapshot["game"]["ownerUserId"]);
+  const available = snapshot.availableChannels;
   const readOnly =
+    !available.includes(activeChannel) ||
     me === undefined ||
-    (me.status === "dead" && channel !== "grave") ||
     me.status === "spectator" ||
-    (channel === "public" && snapshot.game.phase?.type === "night");
-  const names = new Map(snapshot.players.map((player) => [player.userId, player.displayName]));
-  const myId = me?.userId;
-  type ChatRow =
-    | Extract<GameEvent, { kind: "chat.message" }>
-    | Extract<GameEvent, { kind: "player.eliminated" }>;
-  const rows = events.filter(
-    (event): event is ChatRow =>
-      event.kind === "player.eliminated" ||
-      (event.kind === "chat.message" && event.payload.channel === channel),
+    (me.status === "dead" && activeChannel !== "grave") ||
+    (activeChannel === "public" && snapshot.game.phase?.type === "night");
+  const readStates = readStore?.states;
+  const summaries = useMemo(
+    () =>
+      Object.fromEntries(
+        CHAT_CHANNELS.map((channel) => [
+          channel,
+          unreadSummary(
+            readStates?.[keyFor(snapshot.game.id, channel)] ?? { readThrough: 0, seenAfter: [] },
+            chatRows[channel],
+            viewerId,
+          ),
+        ]),
+      ) as Record<ChatChannel, ReturnType<typeof unreadSummary>>,
+    [chatRows, readStates, snapshot.game.id, viewerId],
   );
+  const candidates = useMemo(
+    () => gameMentionCandidates(snapshot, activeChannel),
+    [activeChannel, snapshot],
+  );
+  const source = useMemo(() => ({ kind: "local" as const, candidates }), [candidates]);
+  const conversationKey = keyFor(snapshot.game.id, activeChannel);
+  const phase = snapshot.game.phase;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="screen__scroll global-chat-scrollbar flex flex-col gap-4 px-4.5 pb-5">
-        <div className="flex gap-1.5">
-          <button
-            aria-pressed={channel === "public"}
-            className="rounded-full p-0.5"
-            onClick={() => setChannel("public")}
-            type="button"
-          >
-            <Chip tone={channel === "public" ? "active" : "neutral"}>{t("ui.publicChat")}</Chip>
-          </button>
-          {snapshot.availableChannels.includes("wolves") && (
+      <div className="flex gap-1.5 overflow-x-auto px-4.5 pb-3 pt-1">
+        {available.map((channel) => {
+          const summary = summaries[channel];
+          const label = channelLabel(channel, t);
+          return (
             <button
-              aria-pressed={channel === "wolves"}
+              aria-label={`${label}${summary.count > 0 ? `, ${summary.count}` : ""}${summary.mentioned ? `, ${t("ui.mentionedYou")}` : ""}`}
+              aria-pressed={activeChannel === channel}
               className="rounded-full p-0.5"
-              onClick={() => setChannel("wolves")}
+              key={channel}
+              onClick={() => changeChannel(channel)}
               type="button"
             >
-              <Chip tone={channel === "wolves" ? "active" : "running"}>
-                <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-blood" />
-                {t("ui.wolfChat")}
+              <Chip
+                tone={
+                  activeChannel === channel
+                    ? "active"
+                    : channel === "public"
+                      ? "neutral"
+                      : "running"
+                }
+              >
+                {label}
+                {summary.count > 0 && (
+                  <span
+                    className="ml-1 font-mono text-[11px]"
+                    data-mentioned={summary.mentioned || undefined}
+                  >
+                    {summary.count > 99 ? "99+" : summary.count}
+                    {summary.mentioned && <span aria-hidden="true"> @</span>}
+                  </span>
+                )}
               </Chip>
             </button>
-          )}
-          {snapshot.availableChannels.includes("cult") && (
-            <button
-              aria-pressed={channel === "cult"}
-              className="rounded-full p-0.5"
-              onClick={() => setChannel("cult")}
-              type="button"
-            >
-              <Chip tone={channel === "cult" ? "active" : "running"}>{t("ui.cultChat")}</Chip>
-            </button>
-          )}
-          {snapshot.availableChannels.includes("grave") && (
-            <button
-              aria-pressed={channel === "grave"}
-              className="rounded-full p-0.5"
-              onClick={() => setChannel("grave")}
-              type="button"
-            >
-              <Chip tone={channel === "grave" ? "active" : "running"}>{t("ui.graveChat")}</Chip>
-            </button>
-          )}
-        </div>
-        <ul className="flex flex-col gap-4">
-          {rows.length === 0 ? (
-            <li className="text-sm text-fog">{t("ui.chatEmpty")}</li>
-          ) : (
-            rows.map((event) => {
-              if (event.kind === "player.eliminated") {
-                return (
-                  <li key={event.id}>
-                    <DividerNote>
-                      {t("events.public.player.eliminated", {
-                        player: names.get(event.payload.playerId) ?? event.payload.playerId,
-                        role: t(`roles.${event.payload.role}.name`),
-                      })}
-                    </DividerNote>
-                  </li>
-                );
-              }
-              const mine = event.actorUserId === myId;
-              const authorId = event.actorUserId;
-              const author = authorId !== undefined ? (names.get(authorId) ?? authorId) : "";
-              return (
-                <li key={event.id}>
-                  <ChatBubble author={author} mine={mine} text={event.payload.text} />
-                </li>
-              );
-            })
-          )}
-        </ul>
+          );
+        })}
       </div>
+      <ChatList
+        conversationKey={conversationKey}
+        emptyLabel={t("ui.chatEmpty")}
+        identityCohort={candidates}
+        jumpToLatestToken={record.jumpToLatestToken}
+        key={conversationKey}
+        messages={chatRows[activeChannel]}
+        onMarkThrough={reportMarkThrough}
+        onSnapshot={reportSnapshot}
+        onVisible={reportVisible}
+        readState={readStates?.[conversationKey] ?? { readThrough: 0, seenAfter: [] }}
+        {...(record.viewport === undefined ? {} : { snapshot: record.viewport })}
+        viewerId={viewerId}
+      />
       <ChatComposer
-        className="flex items-center gap-2.5 border-t border-paper/10 bg-bar px-3.5 py-2.5"
-        disabled={readOnly}
-        inputId="talk-message"
+        className="border-t border-paper/10 bg-bar px-3.5 py-2.5"
+        draft={record.draft}
+        error={errors?.[activeChannel]}
+        inputId={`game-${activeChannel}-message`}
         label={t("ui.messageLabel")}
-        onSend={(text) => {
-          const phase = snapshot.game.phase;
-          if (phase === null) return;
-          return send({ type: "chat.send", phaseId: phase.id, payload: { channel, text } });
+        onDraftChange={changeDraft}
+        onError={reportError}
+        onSend={async (content) => {
+          if (phase === null) throw new Error("PHASE_CLOSED");
+          await sendContent(content);
         }}
+        onSent={() => undefined}
         placeholder={t("ui.messagePlaceholder")}
+        readOnly={readOnly}
         sendLabel={t("ui.sendMessage")}
+        source={source}
       />
     </div>
   );

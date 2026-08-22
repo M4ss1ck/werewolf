@@ -4,8 +4,10 @@
 
 import { expect, test } from "bun:test";
 import { games } from "@werewolf/db";
-import type { GameId, ServerFrame, UserId } from "@werewolf/protocol";
+import { canViewEvent } from "@werewolf/game-engine";
+import type { EventId, GameEvent, GameId, ServerFrame, UserId } from "@werewolf/protocol";
 import { eq } from "drizzle-orm";
+import type { GameCoordinator } from "../game/coordinator.ts";
 import {
   as,
   createGame,
@@ -29,6 +31,64 @@ function fakeSocket() {
 
 async function subscribe(conn: { message(raw: string): Promise<void> }, cursor: number) {
   await conn.message(JSON.stringify({ type: "subscribe", cursor }));
+}
+
+function publicEvent(id: number): GameEvent {
+  return {
+    id: id as EventId,
+    kind: "phase.started",
+    scope: "public",
+    createdAt: id,
+    payload: { phaseId: id, type: "discussion", startedAt: id, endsAt: id + 1 },
+  } as GameEvent;
+}
+
+function chatEvent(
+  id: number,
+  channel: "grave" | "wolves",
+  actorUserId: UserId,
+  text: string,
+): GameEvent {
+  return {
+    id: id as EventId,
+    kind: "chat.message",
+    scope: "faction",
+    scopeId: channel,
+    actorUserId,
+    createdAt: id,
+    payload: { channel, text, mentions: [] },
+  } as GameEvent;
+}
+
+function fakeCoordinator(
+  gameId: GameId,
+  state: Awaited<ReturnType<GameCoordinator["loadGameState"]>>,
+  events: GameEvent[],
+) {
+  let committed: ((id: GameId, events: unknown[]) => void | Promise<void>) | undefined;
+  const tracker = { fullLogCalls: 0 };
+  const coordinator = {
+    onCommitted(callback: (id: GameId, events: unknown[]) => void | Promise<void>) {
+      committed = callback;
+      return () => {
+        committed = undefined;
+        return true;
+      };
+    },
+    loadGameState: async () => state,
+    getVisibleEvents: async (_id: GameId, afterId = 0) => {
+      if (afterId === 0) tracker.fullLogCalls += 1;
+      return events.filter((event) => event.id > afterId);
+    },
+  } as unknown as GameCoordinator;
+  return {
+    coordinator,
+    tracker,
+    async commit(nextEvents: GameEvent[]) {
+      events.push(...nextEvents);
+      await committed?.(gameId, nextEvents);
+    },
+  };
 }
 
 test("a subscriber receives a sync frame with a snapshot and their visible events", async () => {
@@ -61,6 +121,229 @@ test("a subscriber receives a sync frame with a snapshot and their visible event
   hub.stop();
 });
 
+test("cursor zero sync contains every event visible under the current projection", async () => {
+  const { app, db, repo } = await setup();
+  const gameId = await startGameWithSeed(
+    app,
+    db,
+    USERS[0]!,
+    [USERS[1]!, USERS[2]!, USERS[3]!, USERS[4]!],
+    "find-1",
+  );
+  const state = (await repo.loadGameState(gameId))!;
+  const events = (await repo.getVisibleEvents(gameId, 0)) as GameEvent[];
+  const fake = fakeCoordinator(gameId, state, events);
+  const hub = new GameHub(fake.coordinator);
+  const socket = fakeSocket();
+  await subscribe(hub.connect(gameId, USERS[0]! as UserId, socket), 0);
+
+  const sync = socket.frames.find((frame) => frame.type === "sync");
+  expect(sync?.type).toBe("sync");
+  if (sync?.type !== "sync") return;
+  expect(sync.events.map((event) => event.id)).toEqual(
+    events
+      .filter((event) => canViewEvent(event, USERS[0]! as UserId, state))
+      .map((event) => event.id),
+  );
+  hub.stop();
+});
+
+test("first grave entitlement sync backfills prior grave history", async () => {
+  const { app, db, repo } = await setup();
+  const gameId = await startGameWithSeed(
+    app,
+    db,
+    USERS[0]!,
+    [USERS[1]!, USERS[2]!, USERS[3]!, USERS[4]!],
+    "find-1",
+  );
+  const viewer = USERS[0]! as UserId;
+  const state = (await repo.loadGameState(gameId))!;
+  const events = [publicEvent(1), chatEvent(5, "grave", USERS[1]! as UserId, "before death")];
+  const fake = fakeCoordinator(gameId, state, events);
+  const hub = new GameHub(fake.coordinator);
+  const socket = fakeSocket();
+  await subscribe(hub.connect(gameId, viewer, socket), 0);
+  fake.tracker.fullLogCalls = 0;
+
+  state.players[viewer]!.status = "dead";
+  await fake.commit([publicEvent(6)]);
+
+  const sync = socket.frames.at(-1);
+  expect(sync?.type).toBe("sync");
+  if (sync?.type !== "sync") return;
+  expect(sync.snapshot.availableChannels).toContain("grave");
+  expect(sync.events.map((event) => Number(event.id))).toEqual([1, 5, 6]);
+  expect(sync.events.find((event) => event.id === 5)?.payload).toMatchObject({
+    channel: "grave",
+    text: "before death",
+  });
+  expect(fake.tracker.fullLogCalls).toBe(1);
+  hub.stop();
+});
+
+test("new wolf entitlement backfills only events at and after the conversion marker", async () => {
+  const { app, db, repo } = await setup();
+  const gameId = await startGameWithSeed(
+    app,
+    db,
+    USERS[0]!,
+    [USERS[1]!, USERS[2]!, USERS[3]!, USERS[4]!],
+    "find-1",
+  );
+  const viewer = USERS[0]! as UserId;
+  const state = (await repo.loadGameState(gameId))!;
+  const events = [
+    publicEvent(1),
+    chatEvent(5, "wolves", USERS[1]! as UserId, "before conversion"),
+    chatEvent(10, "wolves", USERS[1]! as UserId, "conversion boundary"),
+    chatEvent(11, "wolves", USERS[1]! as UserId, "after conversion"),
+  ];
+  const fake = fakeCoordinator(gameId, state, events);
+  const hub = new GameHub(fake.coordinator);
+  const socket = fakeSocket();
+  await subscribe(hub.connect(gameId, viewer, socket), 0);
+  fake.tracker.fullLogCalls = 0;
+
+  const player = state.players[viewer]!;
+  player.role = "werewolf";
+  player.faction = "wolves";
+  player.originalRole = "cursed";
+  player.channelSince = { wolves: 10 as EventId };
+  await fake.commit([publicEvent(12)]);
+
+  const sync = socket.frames.at(-1);
+  expect(sync?.type).toBe("sync");
+  if (sync?.type !== "sync") return;
+  expect(sync.snapshot.availableChannels).toContain("wolves");
+  expect(
+    sync.events.filter((event) => event.scopeId === "wolves").map((event) => Number(event.id)),
+  ).toEqual([10, 11]);
+  expect(sync.events.some((event) => event.id === 5)).toBe(false);
+  expect(fake.tracker.fullLogCalls).toBe(1);
+  hub.stop();
+});
+
+test("losing an entitlement removes the channel without backfilling its history", async () => {
+  const { app, db, repo } = await setup();
+  const gameId = await startGameWithSeed(
+    app,
+    db,
+    USERS[0]!,
+    [USERS[1]!, USERS[2]!, USERS[3]!, USERS[4]!],
+    "find-1",
+  );
+  const viewer = USERS[0]! as UserId;
+  const state = (await repo.loadGameState(gameId))!;
+  const player = state.players[viewer]!;
+  player.role = "werewolf";
+  player.faction = "wolves";
+  player.originalRole = "werewolf";
+  delete player.channelSince;
+  const events = [
+    publicEvent(1),
+    chatEvent(2, "wolves", USERS[1]! as UserId, "secret history"),
+    publicEvent(3),
+  ];
+  const fake = fakeCoordinator(gameId, state, events);
+  const hub = new GameHub(fake.coordinator);
+  const socket = fakeSocket();
+  await subscribe(hub.connect(gameId, viewer, socket), 0);
+  fake.tracker.fullLogCalls = 0;
+
+  player.role = "villager";
+  player.faction = "village";
+  player.originalRole = "villager";
+  await fake.commit([publicEvent(4)]);
+
+  const sync = socket.frames.at(-1);
+  expect(sync?.type).toBe("sync");
+  if (sync?.type !== "sync") return;
+  expect(sync.snapshot.availableChannels).not.toContain("wolves");
+  expect(sync.events.map((event) => Number(event.id))).toEqual([4]);
+  expect(fake.tracker.fullLogCalls).toBe(0);
+  hub.stop();
+});
+
+test("ordinary commits and reconnects deliver only missed visible events", async () => {
+  const { app, db, repo } = await setup();
+  const gameId = await startGameWithSeed(
+    app,
+    db,
+    USERS[0]!,
+    [USERS[1]!, USERS[2]!, USERS[3]!, USERS[4]!],
+    "find-1",
+  );
+  const viewer = USERS[0]! as UserId;
+  const state = (await repo.loadGameState(gameId))!;
+  const events = [publicEvent(1), publicEvent(2)];
+  const fake = fakeCoordinator(gameId, state, events);
+  const hub = new GameHub(fake.coordinator);
+  const firstSocket = fakeSocket();
+  const first = hub.connect(gameId, viewer, firstSocket);
+  await subscribe(first, 0);
+  fake.tracker.fullLogCalls = 0;
+
+  await fake.commit([publicEvent(3)]);
+  const ordinary = firstSocket.frames.at(-1);
+  expect(ordinary?.type).toBe("sync");
+  if (ordinary?.type !== "sync") return;
+  expect(ordinary.events.map((event) => Number(event.id))).toEqual([3]);
+  expect(fake.tracker.fullLogCalls).toBe(0);
+
+  first.close();
+  const reconnectSocket = fakeSocket();
+  await subscribe(hub.connect(gameId, viewer, reconnectSocket), 1);
+  const reconnect = reconnectSocket.frames.at(-1);
+  expect(reconnect?.type).toBe("sync");
+  if (reconnect?.type !== "sync") return;
+  expect(reconnect.events.map((event) => Number(event.id))).toEqual([2, 3]);
+  expect(reconnect.events.map((event) => Number(event.id))).not.toContain(1);
+  hub.stop();
+});
+
+test("one full-log query is reused when multiple subscribers gain a channel", async () => {
+  const { app, db, repo } = await setup();
+  const gameId = await startGameWithSeed(
+    app,
+    db,
+    USERS[0]!,
+    [USERS[1]!, USERS[2]!, USERS[3]!, USERS[4]!],
+    "find-1",
+  );
+  const firstViewer = USERS[0]! as UserId;
+  const secondViewer = USERS[1]! as UserId;
+  const state = (await repo.loadGameState(gameId))!;
+  const events = [
+    publicEvent(1),
+    publicEvent(2),
+    chatEvent(5, "grave", USERS[2]! as UserId, "old grave"),
+  ];
+  const fake = fakeCoordinator(gameId, state, events);
+  const hub = new GameHub(fake.coordinator);
+  const firstSocket = fakeSocket();
+  const secondSocket = fakeSocket();
+  await subscribe(hub.connect(gameId, firstViewer, firstSocket), 0);
+  await subscribe(hub.connect(gameId, secondViewer, secondSocket), 0);
+  fake.tracker.fullLogCalls = 0;
+
+  state.players[firstViewer]!.status = "dead";
+  state.players[secondViewer]!.status = "dead";
+  await fake.commit([publicEvent(6)]);
+
+  expect(fake.tracker.fullLogCalls).toBe(1);
+  for (const socket of [firstSocket, secondSocket]) {
+    const sync = socket.frames.at(-1);
+    expect(sync?.type).toBe("sync");
+    if (sync?.type !== "sync") continue;
+    expect(sync.events.map((event) => Number(event.id))).toEqual([1, 2, 5, 6]);
+    expect(sync.events.find((event) => event.id === 5)?.payload).toMatchObject({
+      channel: "grave",
+    });
+  }
+  hub.stop();
+});
+
 test("a villager subscriber never receives a wolf chat event, while a wolf does", async () => {
   const { app, coordinator, repo, db } = await setup();
   const gameId = await startGameWithSeed(
@@ -84,7 +367,7 @@ test("a villager subscriber never receives a wolf chat event, while a wolf does"
     commandId: "wolf-chat-1",
     phaseId: state.phase!.id,
     type: "chat.send",
-    payload: { channel: "wolves", text: "kill the seer" },
+    payload: { channel: "wolves", text: "kill the seer", mentions: [] },
   });
 
   // The wolf learns of the message in a pushed sync frame — the hub's only
@@ -146,13 +429,13 @@ test("a spectator receives public events only", async () => {
     commandId: "spectator-pub-1",
     phaseId: state.phase!.id,
     type: "chat.send",
-    payload: { channel: "public", text: "hello all" },
+    payload: { channel: "public", text: "hello all", mentions: [] },
   });
   await coordinator.executeCommand(game.id as GameId, wolf.id, {
     commandId: "spectator-wolf-1",
     phaseId: state.phase!.id,
     type: "chat.send",
-    payload: { channel: "wolves", text: "secret plan" },
+    payload: { channel: "wolves", text: "secret plan", mentions: [] },
   });
   // Every pushed frame is a sync frame, and every event in them is public.
   const pushed = socket.frames.filter((frame) => frame.type === "sync");
@@ -270,7 +553,7 @@ test("disconnecting removes the subscription and no further sends are attempted"
     commandId: "post-close-1",
     phaseId: state.phase!.id,
     type: "chat.send",
-    payload: { channel: "public", text: "after close" },
+    payload: { channel: "public", text: "after close", mentions: [] },
   });
   expect(socket.frames.length).toBe(framesAfterClose);
   expect(JSON.stringify(socket.frames)).not.toContain("after close");

@@ -126,6 +126,23 @@ test("subscribes with the current cursor and applies a sync frame's snapshot", (
   expect(conn.getSnapshot()).toMatchObject({ cursor: 9 });
 });
 
+test("delivers a sync batch atomically when onSync is provided", () => {
+  vi.stubGlobal("WebSocket", FakeWebSocket);
+  const onSync = vi.fn();
+  const onSnapshot = vi.fn();
+  const onEvent = vi.fn();
+  const conn = new LiveGameConnection(gameId, 0 as EventId, { onSync, onSnapshot, onEvent });
+  conn.connect();
+  const socket = lastSocket();
+  socket.open();
+  const events = [makeEvent(1), makeEvent(2)];
+  socket.receive(JSON.stringify({ type: "sync", snapshot: makeSnapshot(2), events, cursor: 2 }));
+
+  expect(onSync).toHaveBeenCalledWith(expect.objectContaining({ cursor: 2 }), events);
+  expect(onSnapshot).not.toHaveBeenCalled();
+  expect(onEvent).not.toHaveBeenCalled();
+});
+
 test("passes a browser-safe bearer subprotocol when a token is stored and no second argument when none is", () => {
   vi.stubGlobal("WebSocket", FakeWebSocket);
   vi.stubGlobal("localStorage", {
@@ -219,8 +236,39 @@ test("resync_required reloads the snapshot over HTTP instead of patching local s
   );
   expect(conn.getSnapshot()).toMatchObject({ cursor: 42 });
   expect(onSnapshot).toHaveBeenCalledWith(expect.objectContaining({ cursor: 42 }));
+  expect(JSON.parse(socket.sent.at(-1)!)).toMatchObject({ type: "subscribe", cursor: 0 });
   // A reload replaces state; nothing is patched from the socket.
   expect(onEvent).not.toHaveBeenCalled();
+});
+
+test("resync reconnects from cursor zero until an authoritative sync arrives", async () => {
+  vi.useFakeTimers();
+  try {
+    vi.stubGlobal("WebSocket", FakeWebSocket);
+    const fresh = makeSnapshot(42);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify(fresh), { status: 200 })),
+    );
+    const conn = new LiveGameConnection(gameId, 0 as EventId);
+    conn.connect();
+    const socket = lastSocket();
+    socket.open();
+    socket.receive(JSON.stringify({ type: "resync_required" }));
+    await vi.waitFor(() => expect(conn.getCursor()).toBe(42));
+
+    socket.drop();
+    vi.advanceTimersByTime(1000);
+    const reconnected = lastSocket();
+    reconnected.open();
+    expect(JSON.parse(reconnected.sent.at(-1)!)).toMatchObject({
+      type: "subscribe",
+      cursor: 0,
+    });
+    conn.close();
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("a dropped connection reports reconnecting while the last snapshot stays readable", () => {

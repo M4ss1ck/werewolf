@@ -511,7 +511,12 @@ function SignedInShell({
         ) : renderedSnapshot.game.status === "finished" ? (
           <GameOverScreen snapshot={renderedSnapshot} />
         ) : (
-          <GameScreen initial={renderedSnapshot} onUpdate={setSnapshot} />
+          <GameScreen
+            initial={renderedSnapshot}
+            key={renderedSnapshot.game.id}
+            onUpdate={setSnapshot}
+            readStore={readStore}
+          />
         )
       ) : renderedSnapshotError ? (
         <p className="px-4.5 text-fog" role="alert">
