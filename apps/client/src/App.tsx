@@ -35,7 +35,7 @@ import {
 } from "./chat/read-state.ts";
 import { TabBar } from "./components.tsx";
 import { i18n } from "./i18n/i18n.ts";
-import { currentRoute, navigate, type Route } from "./routes.tsx";
+import { currentRoute, navigate, type Route, sameRoute } from "./routes.tsx";
 import {
   CancelledScreen,
   CreateGameScreen,
@@ -215,7 +215,14 @@ function SignedInShell({
   readStoreRef.current = readStore;
 
   useEffect(() => {
-    const update = () => setRoute(currentRoute());
+    // Keep the current object when the URL still resolves to the same route.
+    // The snapshot effect below keys on `route`, so a fresh object for an
+    // unchanged route re-runs it and fires a second GET for the same game.
+    const update = () =>
+      setRoute((current) => {
+        const next = currentRoute();
+        return sameRoute(current, next) ? current : next;
+      });
     window.addEventListener("popstate", update);
     // The route was read during render, and nothing was listening between then
     // and now. Re-read it, or a navigation landing in that window is lost and

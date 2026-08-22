@@ -1238,6 +1238,50 @@ test("a navigation that beats the popstate listener is still picked up", async (
   expect(window.location.pathname).toBe("/");
 });
 
+test("a game route loads its snapshot once", async () => {
+  // The route is re-read when the popstate listener attaches. If that re-read
+  // produces a fresh Route object the snapshot effect keys on, it re-runs and
+  // fires a second GET for the same game — a duplicate request on every load.
+  window.history.replaceState({}, "", "/games/a");
+  const loaded: ViewerGameSnapshot = {
+    game: {
+      id: "a" as GameId,
+      name: "Game A",
+      ownerUserId: "owner" as UserId,
+      status: "lobby",
+      day: 1,
+      phase: null,
+      settings: {
+        visibility: "public",
+        spectatingEnabled: true,
+        durations: { discussion: 120, voting: 60, night: 60 },
+      },
+    },
+    players: [{ userId: "me" as UserId, displayName: "Wren", status: "lobby" }],
+    me: { userId: "me" as UserId, status: "lobby" },
+    availableActions: [],
+    availableChannels: ["public"],
+    cursor: 0 as EventId,
+    serverNow: 5000,
+  };
+  const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>((input) => {
+    const url = String(input);
+    if (url === "/api/auth/get-session")
+      return Promise.resolve(
+        new Response(JSON.stringify({ user: { id: "me", username: "wren" } }), { status: 200 }),
+      );
+    if (url === "/api/games/a")
+      return Promise.resolve(new Response(JSON.stringify(loaded), { status: 200 }));
+    return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }));
+  });
+  vi.stubGlobal("fetch", fetchMock);
+
+  render(<App />);
+  await screen.findByRole("heading", { name: "Game A" });
+
+  expect(fetchMock.mock.calls.filter(([url]) => String(url) === "/api/games/a")).toHaveLength(1);
+});
+
 test("associates game snapshots with the requested route and clears failed loads", async () => {
   const snapshot = (id: string, name: string): ViewerGameSnapshot => ({
     game: {

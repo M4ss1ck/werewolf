@@ -17,6 +17,12 @@ export function currentRoute(pathname = window.location.pathname): Route {
   return { type: "games" };
 }
 
+/** Route identity, so re-reading an unchanged URL does not look like a move. */
+export function sameRoute(left: Route, right: Route): boolean {
+  const id = (route: Route) => ("id" in route ? route.id : undefined);
+  return left.type === right.type && id(left) === id(right);
+}
+
 export function navigate(path: string) {
   window.history.pushState({}, "", path);
   window.dispatchEvent(new PopStateEvent("popstate"));
