@@ -40,9 +40,5 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
-    // CI runners are several times slower than a dev box, and these tests wait
-    // on real effects, fetches and sockets. The defaults (5s per test, 1s per
-    // `findBy*`) time out there while the assertions themselves still hold.
-    testTimeout: 20_000,
   },
 });
