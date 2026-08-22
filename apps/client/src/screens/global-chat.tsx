@@ -1,66 +1,118 @@
-import type { UserId } from "@werewolf/protocol";
+import type { ChatContent, UserId } from "@werewolf/protocol";
+import { useCallback, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Virtuoso } from "react-virtuoso";
 
 import type { ChatState } from "../api/chat-state.ts";
-import { ChatBubble, ChatComposer, ErrorMessage } from "../components.tsx";
+import {
+  ChatComposer,
+  ChatList,
+  type ChatViewportSnapshot,
+  type MentionCandidateSource,
+} from "../chat/index.ts";
+import type { MentionCandidate } from "../chat/mentions.ts";
+import { type ChatDraft, globalChatRow } from "../chat/model.ts";
+import type { ConversationReadState } from "../chat/read-state.ts";
 
-/** The global chat tab: a virtualized message list that pages backwards as the
- * reader scrolls up, with the composer pinned beneath it. */
 export function GlobalChatScreen({
   state,
   viewerId,
+  readState,
+  draft,
+  candidates,
+  mentionSource,
+  viewport,
+  jumpToLatestToken,
   error,
+  onDraftChange,
   onSend,
+  onSent,
+  onError,
+  onInvalidMention,
+  onSnapshot,
+  onVisible,
+  onMarkThrough,
   onLoadOlder,
 }: {
   state: ChatState;
   viewerId: UserId;
+  readState: ConversationReadState;
+  draft: ChatDraft;
+  candidates: MentionCandidate[];
+  mentionSource: MentionCandidateSource;
+  viewport?: ChatViewportSnapshot;
+  jumpToLatestToken: number;
   error?: unknown;
-  onSend: (text: string) => void;
-  onLoadOlder: () => void;
+  onDraftChange(draft: ChatDraft): void;
+  onSend(content: ChatContent): Promise<void>;
+  onSent(): void;
+  onError(error: unknown): void;
+  onInvalidMention(): void;
+  onSnapshot(snapshot: ChatViewportSnapshot): void;
+  onVisible(ids: number[]): void;
+  onMarkThrough(latestId: number): void;
+  onLoadOlder(): void;
 }) {
   const { t } = useTranslation();
+  const messages = state.messages.map(globalChatRow);
+  const latestMessages = useRef(messages);
+  latestMessages.current = messages;
+  const snapshotCaptured = useRef(false);
+  const captureSnapshot = useCallback(
+    (snapshot: ChatViewportSnapshot) => {
+      snapshotCaptured.current = true;
+      onSnapshot(snapshot);
+    },
+    [onSnapshot],
+  );
+  useEffect(() => {
+    return () => {
+      if (snapshotCaptured.current || latestMessages.current.length === 0) return;
+      const first = latestMessages.current[0]!;
+      onSnapshot({
+        virtuoso: { ranges: [], scrollTop: 0 },
+        messageIds: latestMessages.current.map((message) => message.id),
+        anchorId: first.id,
+        anchorOffset: 0,
+      });
+    };
+  }, [onSnapshot]);
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <h1 className="px-4.5 pt-6 pb-4 text-[30px] font-semibold tracking-[-0.03em]">
         {t("ui.globalChat")}
       </h1>
-      {state.messages.length === 0 ? (
-        <p className="flex-1 px-4.5 text-sm text-fog">{t("ui.globalChatEmpty")}</p>
-      ) : (
-        <Virtuoso
-          className="global-chat-scrollbar flex-1"
-          data={state.messages}
-          firstItemIndex={state.firstItemIndex}
-          followOutput={(isAtBottom) => (isAtBottom ? "smooth" : false)}
-          initialTopMostItemIndex={state.messages.length - 1}
-          itemContent={(_index, message) => (
-            <div className="px-4.5 pb-4">
-              <ChatBubble
-                author={message.displayName}
-                mine={message.userId === viewerId}
-                text={message.text}
-              />
-            </div>
-          )}
-          startReached={() => {
-            if (state.hasOlder) onLoadOlder();
-          }}
-        />
-      )}
-      {error ? (
-        <div className="px-4.5 pb-2">
-          <ErrorMessage error={error} />
-        </div>
-      ) : null}
+      <ChatList
+        conversationKey="global"
+        emptyLabel={t("ui.globalChatEmpty")}
+        firstItemIndex={state.firstItemIndex}
+        hasOlder={state.hasOlder}
+        historyTruncated={state.historyTruncated}
+        identityCohort={candidates}
+        jumpToLatestToken={jumpToLatestToken}
+        messages={messages}
+        onLoadOlder={onLoadOlder}
+        onMarkThrough={onMarkThrough}
+        onSnapshot={captureSnapshot}
+        onVisible={onVisible}
+        readState={readState}
+        {...(viewport === undefined ? {} : { snapshot: viewport })}
+        viewerId={viewerId}
+      />
       <ChatComposer
-        className="flex items-center gap-2.5 border-t border-paper/10 bg-bar px-3.5 py-2.5"
+        className="border-t border-paper/10 bg-bar px-3.5 py-2.5"
+        draft={draft}
+        error={error}
         inputId="global-chat-message"
         label={t("ui.messageLabel")}
+        onDraftChange={onDraftChange}
+        onError={onError}
+        onInvalidMention={onInvalidMention}
         onSend={onSend}
+        onSent={onSent}
         placeholder={t("ui.messagePlaceholder")}
+        readOnly={false}
         sendLabel={t("ui.sendMessage")}
+        source={mentionSource}
       />
     </div>
   );

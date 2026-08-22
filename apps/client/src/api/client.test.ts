@@ -1,4 +1,4 @@
-import type { GameplayCommand, PhaseId, UserId } from "@werewolf/protocol";
+import type { ChatContent, GameplayCommand, PhaseId, UserId } from "@werewolf/protocol";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { ApiError, api } from "./client.ts";
@@ -142,5 +142,64 @@ describe("api client", () => {
     expect(result.snapshot).toEqual({ game: { id: "g1" }, players: [] });
     expect(result.events).toEqual([]);
     expect(fetchMock).toHaveBeenCalledWith("/api/games/game-1/replay", expect.anything());
+  });
+
+  test("posts canonical structured chat content and parses returned mention metadata", async () => {
+    const content: ChatContent = {
+      text: "hello @Ada",
+      mentions: [{ userId: "u2" as UserId, start: 6, length: 4 }],
+    };
+    const message = {
+      id: 4,
+      userId: "u1",
+      displayName: "Wren",
+      text: content.text,
+      mentions: content.mentions,
+      createdAt: 1,
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify(message), { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(api.sendChatMessage(content)).resolves.toMatchObject({
+      mentions: content.mentions,
+    });
+    expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).toEqual(content);
+  });
+
+  test("encodes candidate searches and accepts only candidate arrays", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify([{ userId: "u2", displayName: "Ada" }]), { status: 200 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(api.getMentionCandidates("Ada & co")).resolves.toEqual([
+      { userId: "u2", displayName: "Ada" },
+    ]);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/chat/mention-candidates?q=Ada%20%26%20co");
+  });
+
+  test("history GET parses mention metadata and keeps its response shape", async () => {
+    const body = {
+      messages: [
+        {
+          id: 4,
+          userId: "u1",
+          displayName: "Wren",
+          text: "hello",
+          mentions: [],
+          createdAt: 1,
+        },
+      ],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify(body), { status: 200 })),
+    );
+
+    await expect(api.getChatHistory(5)).resolves.toEqual(body);
   });
 });

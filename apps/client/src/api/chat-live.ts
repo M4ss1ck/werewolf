@@ -5,7 +5,7 @@ import { getAuthToken, webSocketBearerProtocols } from "../auth/token.ts";
 import { wsUrl } from "./origin.ts";
 
 export interface ChatHandlers {
-  onHistory?: (messages: ChatMessage[], cursor: ChatMessageId) => void;
+  onHistory?: (frame: Extract<ChatServerFrame, { type: "history" }>) => void;
   onMessage?: (message: ChatMessage) => void;
 }
 
@@ -20,6 +20,7 @@ export class GlobalChatConnection {
   constructor(
     private readonly handlers: ChatHandlers = {},
     initialCursor: ChatMessageId = 0 as ChatMessageId,
+    private readonly readCursor?: ChatMessageId,
   ) {
     this.cursor = initialCursor;
   }
@@ -37,6 +38,7 @@ export class GlobalChatConnection {
       const frame = ChatSubscribeFrameSchema.parse({
         type: "subscribe",
         cursor: this.cursor,
+        ...(this.readCursor === undefined ? {} : { readCursor: this.readCursor }),
       });
       this.socket?.send(JSON.stringify(frame));
     };
@@ -74,7 +76,7 @@ export class GlobalChatConnection {
     const frame = result.data as ChatServerFrame;
     if (frame.type === "history") {
       this.cursor = frame.cursor;
-      this.handlers.onHistory?.(frame.messages, frame.cursor);
+      this.handlers.onHistory?.(frame);
     } else {
       this.cursor = frame.message.id;
       this.handlers.onMessage?.(frame.message);

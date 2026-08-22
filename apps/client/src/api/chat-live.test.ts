@@ -55,6 +55,7 @@ function message(id: number): ChatMessage {
     userId: "u1" as UserId,
     displayName: "Ana",
     text: `message ${id}`,
+    mentions: [],
     createdAt: 1_000_000 + id,
   };
 }
@@ -123,6 +124,22 @@ test("a connection seeded with a cursor subscribes from it, not from 0", () => {
   conn.close();
 });
 
+test("includes an explicit read cursor, including zero, but omits an absent one", () => {
+  vi.stubGlobal("WebSocket", FakeWebSocket);
+
+  const absent = new GlobalChatConnection();
+  absent.connect();
+  lastSocket().open();
+  expect(sentFrame(lastSocket())).not.toHaveProperty("readCursor");
+  absent.close();
+
+  const zero = new GlobalChatConnection({}, 0 as ChatMessageId, 0 as ChatMessageId);
+  zero.connect();
+  lastSocket().open();
+  expect(sentFrame(lastSocket())).toMatchObject({ readCursor: 0 });
+  zero.close();
+});
+
 test("the cursor advances as frames arrive, so a reconnect subscribes from the newer cursor", () => {
   vi.useFakeTimers();
   const conn = new GlobalChatConnection();
@@ -149,4 +166,34 @@ test("the cursor advances as frames arrive, so a reconnect subscribes from the n
     conn.close();
     vi.useRealTimers();
   }
+});
+
+test("reconnect advances delivery while retaining the original read frontier and history metadata", () => {
+  vi.useFakeTimers();
+  vi.stubGlobal("WebSocket", FakeWebSocket);
+  const onHistory = vi.fn();
+  const conn = new GlobalChatConnection({ onHistory }, 4 as ChatMessageId, 2 as ChatMessageId);
+  conn.connect();
+  const socket = lastSocket();
+  socket.open();
+  socket.receive(
+    JSON.stringify({
+      type: "history",
+      messages: [message(5)],
+      cursor: 5,
+      oldestRetainedId: 1,
+      hasOlder: true,
+      historyTruncated: false,
+    }),
+  );
+  expect(onHistory).toHaveBeenCalledWith(
+    expect.objectContaining({ type: "history", cursor: 5, oldestRetainedId: 1 }),
+  );
+  socket.drop();
+  vi.advanceTimersByTime(1000);
+  const reconnected = lastSocket();
+  reconnected.open();
+  expect(sentFrame(reconnected)).toMatchObject({ cursor: 5, readCursor: 2 });
+  conn.close();
+  vi.useRealTimers();
 });

@@ -1,5 +1,6 @@
 import type {
   BotRosterEntry,
+  ChatContent,
   ChatMessage,
   GameEvent,
   GameId,
@@ -9,6 +10,8 @@ import type {
   UserId,
   ViewerGameSnapshot,
 } from "@werewolf/protocol";
+
+import { ChatMessageSchema, MentionCandidateSchema } from "@werewolf/protocol";
 
 import { captureAuthToken, getAuthToken } from "../auth/token.ts";
 import { apiUrl } from "./origin.ts";
@@ -95,10 +98,19 @@ export const api = {
   getReplay: (id: GameId | string) =>
     request<{ snapshot: ViewerGameSnapshot; events: GameEvent[] }>(`/api/games/${id}/replay`),
   getStats: () => request<MeStats>("/api/me/stats"),
-  sendChatMessage: (text: string) =>
-    request<ChatMessage>("/api/chat/messages", { ...json({ text }) }),
+  sendChatMessage: (content: ChatContent) =>
+    request<ChatMessage>("/api/chat/messages", {
+      ...json({ text: content.text, mentions: content.mentions }),
+    }).then((message) => ChatMessageSchema.parse(message)),
   getChatHistory: (before: number) =>
-    request<{ messages: ChatMessage[] }>(`/api/chat/messages?before=${before}`),
+    request<{ messages: ChatMessage[] }>(`/api/chat/messages?before=${before}`).then((result) => ({
+      messages: result.messages.map((message) => ChatMessageSchema.parse(message)),
+    })),
+  getMentionCandidates: (query: string, signal?: AbortSignal) =>
+    request<unknown>(
+      `/api/chat/mention-candidates?q=${encodeURIComponent(query)}`,
+      signal === undefined ? {} : { signal },
+    ).then((body) => MentionCandidateSchema.array().parse(body)),
   patchLocale: (locale: "en" | "es") =>
     request<{ locale: "en" | "es" }>("/api/me/locale", {
       method: "PATCH",
