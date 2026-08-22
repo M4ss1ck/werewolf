@@ -218,6 +218,44 @@ describe("llm bot agent", () => {
     expect(prompt).toContain("DIRECTLY MENTIONS YOU");
   });
 
+  test("prompt tolerates a legacy chat event without labeling a direct mention", () => {
+    const legacyEvent = {
+      id: 1,
+      kind: "chat.message",
+      scope: "public",
+      actorUserId: id("p1"),
+      createdAt: 1,
+      payload: {
+        channel: "public",
+        text: "@Mira please answer",
+      },
+    } as unknown as GameEvent;
+
+    const prompt = buildUserPrompt(
+      input({ visibleEvents: [legacyEvent], directMentions: [legacyEvent] }),
+    );
+
+    expect(prompt).toContain("[village] Tobias: @Mira please answer");
+    expect(prompt).not.toContain("DIRECTLY MENTIONS YOU");
+  });
+
+  test("prompt rejects a malformed chat event with null mentions", () => {
+    const malformedEvent = {
+      id: 1,
+      kind: "chat.message",
+      scope: "public",
+      actorUserId: id("p1"),
+      createdAt: 1,
+      payload: {
+        channel: "public",
+        text: "@Mira please answer",
+        mentions: null,
+      },
+    } as unknown as GameEvent;
+
+    expect(() => buildUserPrompt(input({ visibleEvents: [malformedEvent] }))).toThrow(TypeError);
+  });
+
   test("a decision without a done field parses and is treated as still talking", async () => {
     const { agent } = agentWith([JSON.stringify({ actionId: 0, say: null, channel: null })]);
     const decision = await agent.decide(input());

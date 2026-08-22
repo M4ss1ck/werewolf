@@ -49,12 +49,16 @@ export function gameChatRows(
 
   for (const event of events) {
     if (event.kind !== "chat.message" || event.actorUserId === undefined) continue;
+    const mentions = event.payload.mentions;
+    if (mentions !== undefined && !Array.isArray(mentions)) {
+      throw new Error("Invalid game chat event mentions");
+    }
     rows[event.payload.channel].push({
       id: event.id,
       authorId: event.actorUserId,
       displayName: names.get(event.actorUserId) ?? event.actorUserId,
       text: event.payload.text,
-      mentions: event.payload.mentions,
+      mentions: mentions === undefined ? [] : mentions,
       createdAt: event.createdAt,
     });
   }

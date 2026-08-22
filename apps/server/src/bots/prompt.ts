@@ -73,7 +73,9 @@ function describeEvent(input: BotDecisionInput, event: GameEvent): string | null
           : event.payload.channel === "cult"
             ? "cult chat"
             : "village";
-      const direct = event.payload.mentions.some((mention) => mention.userId === input.playerId)
+      const direct = (event.payload.mentions === undefined ? [] : event.payload.mentions).some(
+        (mention) => mention.userId === input.playerId,
+      )
         ? " — DIRECTLY MENTIONS YOU"
         : "";
       return `[${room}] ${speaker}: ${event.payload.text}${direct}`;

@@ -17,6 +17,8 @@ import { type GlobalChatMessageRow, globalChatMessages } from "./schema.ts";
  * scroll. A trimmed row is unrecoverable, so this is deliberately generous. */
 export const CHAT_RETENTION = 1000;
 
+type GlobalChatWriter = Pick<Db, "insert" | "delete">;
+
 export type GlobalChatWindow = {
   messages: ChatMessage[];
   cursor: ChatMessageId;
@@ -158,13 +160,16 @@ export class GlobalChatRepository {
     });
   }
 
-  async append(input: {
-    userId: UserId;
-    displayName: string;
-    content: ChatContent;
-    createdAt: number;
-  }): Promise<ChatMessage> {
-    const rows = await this.db
+  async append(
+    input: {
+      userId: UserId;
+      displayName: string;
+      content: ChatContent;
+      createdAt: number;
+    },
+    writer: GlobalChatWriter = this.db,
+  ): Promise<ChatMessage> {
+    const rows = await writer
       .insert(globalChatMessages)
       .values({
         userId: input.userId,
@@ -176,7 +181,7 @@ export class GlobalChatRepository {
       .returning();
     const row = rows[0];
     if (!row) throw new Error("global chat insert returned no row");
-    await this.db
+    await writer
       .delete(globalChatMessages)
       .where(lte(globalChatMessages.id, row.id - CHAT_RETENTION));
     return toMessage(row);

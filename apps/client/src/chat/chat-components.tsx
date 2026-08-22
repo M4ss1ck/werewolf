@@ -218,6 +218,7 @@ export function ChatComposer({
   const overLimit = draft.text.length > CHAT_MAX_TEXT_LENGTH;
   const submitDisabled = readOnly || canonical === undefined || overLimit || sending;
   const listOpen = query !== undefined && (options.length > 0 || loading);
+  const optionIdentityMarks = allocateIdentityMarks(options);
 
   return (
     <form
@@ -339,7 +340,7 @@ export function ChatComposer({
                   <IdentitySigil
                     aria-hidden="true"
                     className="chat-identity-mark"
-                    mark={allocateIdentityMarks([candidate]).get(candidate.userId)!}
+                    mark={optionIdentityMarks.get(candidate.userId)!}
                   />
                   <span>{candidate.displayName}</span>
                   <span className="sr-only">, user {candidate.userId}</span>

@@ -81,6 +81,26 @@ function draft<K extends EventKind>(
 }
 
 describe("GameRepository", () => {
+  test("maps legacy chat events without mentions to an empty mention list", async () => {
+    const { db, repo } = await setup();
+    await createGame(repo);
+    await db.insert(gameEvents).values({
+      gameId: GAME_ID,
+      kind: "chat.message",
+      actorUserId: USER_IDS[0]!,
+      scope: "public",
+      payloadJson: JSON.stringify({ channel: "public", text: "legacy message" }),
+      createdAt: 1_001,
+    });
+
+    const [event] = await repo.getVisibleEvents(GAME_ID);
+
+    expect(event).toMatchObject({
+      kind: "chat.message",
+      payload: { channel: "public", text: "legacy message", mentions: [] },
+    });
+  });
+
   test("createGame + addPlayer + loadGameState round-trips an equivalent GameState", async () => {
     const { repo } = await setup();
     await createGame(repo);

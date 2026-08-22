@@ -253,6 +253,42 @@ test("an invalid mention does not consume the message rate slot", async () => {
   expect(accepted.status).toBe(201);
 });
 
+test("invalid mentions are rejected before the message rate limit", async () => {
+  const { app, db, clock } = await setup();
+  await addUser(db, USERS[1]!, "target");
+
+  const first = await as(
+    app,
+    USERS[0]!,
+    "/api/chat/messages",
+    jsonRequest("POST", { text: "ordinary" }),
+  );
+  const invalid = await as(
+    app,
+    USERS[0]!,
+    "/api/chat/messages",
+    jsonRequest("POST", {
+      text: "@stale",
+      mentions: [{ userId: USERS[1]!, start: 0, length: 6 }],
+    }),
+  );
+  clock.now += 1000;
+  const accepted = await as(
+    app,
+    USERS[0]!,
+    "/api/chat/messages",
+    jsonRequest("POST", {
+      text: "@target",
+      mentions: [{ userId: USERS[1]!, start: 0, length: 7 }],
+    }),
+  );
+
+  expect(first.status).toBe(201);
+  expect(invalid.status).toBe(400);
+  expect(await invalid.json()).toEqual({ error: { code: "INVALID_MENTION" } });
+  expect(accepted.status).toBe(201);
+});
+
 test("an accepted message consumes the one-second rate slot", async () => {
   const { app, db } = await setup();
   await addUser(db, USERS[1]!, "target");
@@ -413,8 +449,155 @@ test("invalid searches do not consume quota and the rolling limit expires", asyn
     expect(response.status).toBe(200);
   }
   expect((await as(app, USERS[0]!, "/api/chat/mention-candidates?q=abc")).status).toBe(429);
-  clock.now += 10_001;
+  clock.now += 10_000;
   expect((await as(app, USERS[0]!, "/api/chat/mention-candidates?q=abc")).status).toBe(200);
+});
+
+test("mention validation and append serialize before a concurrent username rename", async () => {
+  const { app, db, chatRepo } = await setup();
+  await addUser(db, USERS[1]!, "before");
+
+  let releaseAppend!: () => void;
+  const appendReleased = new Promise<void>((resolve) => {
+    releaseAppend = resolve;
+  });
+  let appendStarted!: () => void;
+  const appendEntered = new Promise<void>((resolve) => {
+    appendStarted = resolve;
+  });
+  const originalAppend = chatRepo.append.bind(chatRepo);
+  chatRepo.append = (async (...args: Parameters<typeof originalAppend>) => {
+    appendStarted();
+    await appendReleased;
+    return originalAppend(...args);
+  }) as typeof chatRepo.append;
+
+  const send = as(
+    app,
+    USERS[0]!,
+    "/api/chat/messages",
+    jsonRequest("POST", {
+      text: "@before",
+      mentions: [{ userId: USERS[1]!, start: 0, length: 7 }],
+    }),
+  );
+  await appendEntered;
+
+  let renameFinished = false;
+  let renameError: unknown;
+  const rename = db
+    .update(authUser)
+    .set({ username: "after", usernameSearch: normalizeMentionSearch("after") })
+    .where(eq(authUser.id, USERS[1]!))
+    .then(() => {
+      renameFinished = true;
+    })
+    .catch((error: unknown) => {
+      renameError = error;
+    });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(renameFinished).toBe(false);
+
+  releaseAppend();
+  const response = await send;
+  await rename;
+  if (renameError !== undefined) {
+    const cause = renameError instanceof Error ? renameError.cause : undefined;
+    expect(String(cause ?? renameError)).toContain("SQLITE_BUSY");
+    await db
+      .update(authUser)
+      .set({ username: "after", usernameSearch: normalizeMentionSearch("after") })
+      .where(eq(authUser.id, USERS[1]!));
+  }
+
+  expect(response.status).toBe(201);
+  expect(await chatRepo.listRecent(0)).toHaveLength(1);
+});
+
+test("simultaneous posts by one user serialize through the rate limit", async () => {
+  const { app, chatRepo, chatHub } = await setup();
+  let releaseAppend!: () => void;
+  const appendReleased = new Promise<void>((resolve) => {
+    releaseAppend = resolve;
+  });
+  let appendStarted!: () => void;
+  const appendEntered = new Promise<void>((resolve) => {
+    appendStarted = resolve;
+  });
+  const originalAppend = chatRepo.append.bind(chatRepo);
+  let appendCalls = 0;
+  chatRepo.append = (async (...args: Parameters<typeof originalAppend>) => {
+    appendCalls += 1;
+    appendStarted();
+    await appendReleased;
+    return originalAppend(...args);
+  }) as typeof chatRepo.append;
+  const originalPublish = chatHub.publish.bind(chatHub);
+  let publishCalls = 0;
+  chatHub.publish = (message) => {
+    publishCalls += 1;
+    originalPublish(message);
+  };
+
+  const first = as(app, USERS[0]!, "/api/chat/messages", jsonRequest("POST", { text: "first" }));
+  await appendEntered;
+  const second = as(app, USERS[0]!, "/api/chat/messages", jsonRequest("POST", { text: "second" }));
+  releaseAppend();
+
+  const responses = await Promise.all([first, second]);
+  const statuses = responses.map((response) => response.status).sort();
+  const rateLimited = responses.find((response) => response.status === 429);
+
+  expect(statuses).toEqual([201, 429]);
+  expect(rateLimited).toBeDefined();
+  expect(await rateLimited!.json()).toEqual({ error: { code: "RATE_LIMITED" } });
+  expect(appendCalls).toBe(1);
+  expect(publishCalls).toBe(1);
+  expect(await chatRepo.listRecent(0)).toHaveLength(1);
+});
+
+test("simultaneous posts by different users serialize database writes", async () => {
+  const { app, chatRepo, chatHub } = await setup();
+  let releaseAppend!: () => void;
+  const appendReleased = new Promise<void>((resolve) => {
+    releaseAppend = resolve;
+  });
+  let appendStarted!: () => void;
+  const appendEntered = new Promise<void>((resolve) => {
+    appendStarted = resolve;
+  });
+  const originalAppend = chatRepo.append.bind(chatRepo);
+  let appendCalls = 0;
+  chatRepo.append = (async (...args: Parameters<typeof originalAppend>) => {
+    appendCalls += 1;
+    if (appendCalls === 1) {
+      appendStarted();
+      await appendReleased;
+    }
+    return originalAppend(...args);
+  }) as typeof chatRepo.append;
+  const originalPublish = chatHub.publish.bind(chatHub);
+  let publishCalls = 0;
+  chatHub.publish = (message) => {
+    publishCalls += 1;
+    originalPublish(message);
+  };
+
+  const first = as(app, USERS[0]!, "/api/chat/messages", jsonRequest("POST", { text: "first" }));
+  await appendEntered;
+  const second = as(
+    app,
+    USERS[1]!,
+    "/api/chat/messages",
+    jsonRequest("POST", { text: "second" }, USERS[1]!),
+  );
+  releaseAppend();
+
+  const responses = await Promise.all([first, second]);
+  expect(responses.map((response) => response.status).sort()).toEqual([201, 201]);
+  expect(appendCalls).toBe(2);
+  expect(publishCalls).toBe(2);
+  expect(await chatRepo.listRecent(0)).toHaveLength(2);
 });
 
 test("global mention validation uses current spelling after a rename", async () => {

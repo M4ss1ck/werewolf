@@ -8,6 +8,7 @@ import type {
   RoleId,
   UserId,
 } from "@werewolf/protocol";
+import { GameEventSchema } from "@werewolf/protocol";
 import type { EventRow, GameRow, PlayerRow } from "./schema.ts";
 
 function json<T>(value: string): T {
@@ -60,14 +61,14 @@ export function mapGame(rows: { game: GameRow; players: PlayerRow[] }): GameStat
 }
 
 export function mapEvent(row: EventRow): GameEvent {
-  const result = {
+  const result: Record<string, unknown> = {
     id: row.id as EventId,
     kind: row.kind,
     scope: row.scope,
     createdAt: row.createdAt,
     payload: json(row.payloadJson),
-  } as GameEvent & { scopeId?: string; actorUserId?: UserId };
+  };
   if (row.scopeId !== null) result.scopeId = row.scopeId;
   if (row.actorUserId !== null) result.actorUserId = row.actorUserId as UserId;
-  return result;
+  return GameEventSchema.parse(result) as GameEvent;
 }

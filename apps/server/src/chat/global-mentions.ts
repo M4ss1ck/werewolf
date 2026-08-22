@@ -8,6 +8,8 @@ import {
 import { and, asc, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import { authUser } from "../auth/schema.ts";
 
+type MentionSelectExecutor = Pick<Db, "select">;
+
 export function escapeLikePrefix(value: string): string {
   return `${value.replace(/[\\%_]/g, (character) => `\\${character}`)}%`;
 }
@@ -42,7 +44,7 @@ export async function findGlobalMentionCandidates(
 }
 
 export async function validateGlobalMentions(
-  db: Db,
+  db: MentionSelectExecutor,
   senderId: UserId,
   content: ChatContent,
 ): Promise<boolean> {

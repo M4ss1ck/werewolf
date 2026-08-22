@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { UserId } from "@werewolf/protocol";
-import { createContext, forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import { createContext, forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { I18nextProvider } from "react-i18next";
 import { VirtuosoMockContext } from "react-virtuoso";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -99,6 +99,10 @@ class ControlledIntersectionObserver {
 
   trigger(target: Element, top: number, ratio = 1, isIntersecting = true) {
     if (!this.observed.has(target)) return;
+    this.triggerStale(target, top, ratio, isIntersecting);
+  }
+
+  triggerStale(target: Element, top: number, ratio = 1, isIntersecting = true) {
     this.callback([
       {
         target,
@@ -746,7 +750,7 @@ describe("ChatList viewport and unread mechanics", () => {
     view.unmount();
   });
 
-  test("observer teardown clears geometry even when the root is reused", () => {
+  test("conversation cleanup snapshots preserve current geometry when the root is reused", () => {
     const onSnapshot = vi.fn();
     const firstVisible = vi.fn();
     const secondVisible = vi.fn();
@@ -795,7 +799,66 @@ describe("ChatList viewport and unread mechanics", () => {
         </VirtuosoMockContext.Provider>
       </I18nextProvider>,
     );
-    expect(onSnapshot.mock.lastCall?.[0]).toMatchObject({ anchorOffset: 0 });
+    expect(onSnapshot.mock.lastCall?.[0]).toMatchObject({ anchorOffset: 80 });
+    view.unmount();
+  });
+
+  test("stale observer callbacks cannot restore a replaced row", () => {
+    const onVisible = vi.fn();
+    const view = renderList({ messages: [message(1)], onVisible });
+    flushArm();
+    const oldObserver = ControlledIntersectionObserver.instances[0]!;
+    const oldRow = document.querySelector<HTMLElement>("[data-message-id='1']")!;
+
+    view.rerender(
+      <I18nextProvider i18n={i18n}>
+        <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
+          <ChatList
+            conversationKey="global"
+            messages={[]}
+            identityCohort={[]}
+            viewerId={viewerId}
+            readState={{ readThrough: 0, seenAfter: [] }}
+            jumpToLatestToken={0}
+            emptyLabel="No messages"
+            onSnapshot={vi.fn()}
+            onVisible={onVisible}
+            onMarkThrough={vi.fn()}
+          />
+        </VirtuosoMockContext.Provider>
+      </I18nextProvider>,
+    );
+    view.rerender(
+      <I18nextProvider i18n={i18n}>
+        <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
+          <ChatList
+            conversationKey="global"
+            messages={[message(1)]}
+            identityCohort={[]}
+            viewerId={viewerId}
+            readState={{ readThrough: 0, seenAfter: [] }}
+            jumpToLatestToken={0}
+            emptyLabel="No messages"
+            onSnapshot={vi.fn()}
+            onVisible={onVisible}
+            onMarkThrough={vi.fn()}
+          />
+        </VirtuosoMockContext.Provider>
+      </I18nextProvider>,
+    );
+    flushArm();
+    const currentObserver = ControlledIntersectionObserver.instances.at(-1)!;
+    const currentRow = document.querySelector<HTMLElement>("[data-message-id='1']")!;
+    expect(currentRow).not.toBe(oldRow);
+
+    act(() => {
+      oldObserver.triggerStale(oldRow, 100);
+      currentObserver.triggerStale(oldRow, 100);
+    });
+    expect(onVisible).not.toHaveBeenCalled();
+
+    act(() => currentObserver.trigger(currentRow, 100));
+    expect(onVisible).toHaveBeenCalledWith([1]);
     view.unmount();
   });
 
@@ -1183,6 +1246,87 @@ describe("ChatList viewport and unread mechanics", () => {
     act(() => dispatchTrusted(root, "touchstart"));
     act(() => ControlledIntersectionObserver.instances[0]!.trigger(row, 100));
     expect(onVisible).not.toHaveBeenCalled();
+  });
+
+  test("focus restoration reports rows that stayed intersecting while blurred", () => {
+    const onVisible = vi.fn();
+    renderList({ onVisible });
+    flushArm();
+    const observer = ControlledIntersectionObserver.instances[0]!;
+    const firstRow = document.querySelector<HTMLElement>("[data-message-id='1']")!;
+    const secondRow = document.querySelector<HTMLElement>("[data-message-id='2']")!;
+
+    act(() => window.dispatchEvent(new Event("blur")));
+    act(() => {
+      observer.trigger(firstRow, 100, 1, true);
+      observer.trigger(secondRow, 100, 0, false);
+    });
+    expect(onVisible).not.toHaveBeenCalled();
+
+    act(() => window.dispatchEvent(new Event("focus")));
+    expect(onVisible).toHaveBeenCalledTimes(1);
+    expect(onVisible).toHaveBeenCalledWith([1]);
+  });
+
+  test("visibility restoration reports retained rows only when focused", () => {
+    const onVisible = vi.fn();
+    renderList({ onVisible });
+    flushArm();
+    const observer = ControlledIntersectionObserver.instances[0]!;
+    const row = document.querySelector<HTMLElement>("[data-message-id='1']")!;
+
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    act(() => observer.trigger(row, 100));
+    expect(onVisible).not.toHaveBeenCalled();
+
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+    Object.defineProperty(document, "hasFocus", { configurable: true, value: () => false });
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    expect(onVisible).not.toHaveBeenCalled();
+
+    Object.defineProperty(document, "hasFocus", { configurable: true, value: () => true });
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    expect(onVisible).toHaveBeenCalledTimes(1);
+    expect(onVisible).toHaveBeenCalledWith([1]);
+  });
+
+  test("fresh parent visibility callbacks do not recreate observer or listeners", () => {
+    const onVisible = vi.fn();
+    function InlineParent() {
+      const [, rerender] = useState(0);
+      return (
+        <ChatList
+          conversationKey="global"
+          messages={[message(1), message(2), message(3)]}
+          identityCohort={[]}
+          viewerId={viewerId}
+          readState={{ readThrough: 0, seenAfter: [] }}
+          jumpToLatestToken={0}
+          emptyLabel="No messages"
+          onSnapshot={vi.fn()}
+          onVisible={() => {
+            onVisible();
+            rerender((value) => value + 1);
+          }}
+          onMarkThrough={vi.fn()}
+        />
+      );
+    }
+    render(
+      <I18nextProvider i18n={i18n}>
+        <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
+          <InlineParent />
+        </VirtuosoMockContext.Provider>
+      </I18nextProvider>,
+    );
+    flushArm();
+    const observer = ControlledIntersectionObserver.instances[0]!;
+    const row = document.querySelector<HTMLElement>("[data-message-id='1']")!;
+
+    act(() => observer.trigger(row, 100));
+    expect(onVisible).toHaveBeenCalledTimes(1);
+    expect(ControlledIntersectionObserver.instances).toHaveLength(1);
   });
 
   test("at-bottom follows, off-bottom does not, and navigation marks through only down", () => {

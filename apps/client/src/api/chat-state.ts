@@ -111,6 +111,17 @@ function nextState(
 /** A history frame: messages newer than the cursor we subscribed with. On the
  * first one, a short page proves there is nothing older to page back to. */
 export function withHistory(state: ChatState, frame: HistoryFrame): ChatState {
+  if (frame.cursor < state.cursor) {
+    return {
+      ...state,
+      messages: [...frame.messages],
+      cursor: frame.cursor,
+      oldestRetainedId: frame.oldestRetainedId,
+      firstItemIndex: CHAT_FIRST_INDEX,
+      hasOlder: frame.hasOlder,
+      historyTruncated: frame.historyTruncated,
+    };
+  }
   return nextState(state, frame.messages, {
     cursor: frame.cursor,
     oldestRetainedId: frame.oldestRetainedId,

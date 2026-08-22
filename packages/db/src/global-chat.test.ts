@@ -91,6 +91,30 @@ test("append and reads round-trip content across ranges, including repeated user
   expect((await repo.listBefore(2)).map((message) => message.text)).toEqual(["@Bram @Bram"]);
 });
 
+test("append uses the caller transaction for insert and retention", async () => {
+  const db = await freshDb();
+  const repo = new GlobalChatRepository(db);
+
+  try {
+    await db.transaction(async (tx) => {
+      await repo.append(
+        {
+          userId: "u1" as UserId,
+          displayName: "Ana",
+          content: content("rolled back"),
+          createdAt: 1_000_001,
+        },
+        tx,
+      );
+      throw new Error("rollback");
+    });
+  } catch (error) {
+    expect(error).toEqual(new Error("rollback"));
+  }
+
+  expect(await repo.listRecent(0)).toEqual([]);
+});
+
 test("default, legacy, and malformed mention JSON map to an empty array", async () => {
   const db = await freshDb();
   const repo = new GlobalChatRepository(db);

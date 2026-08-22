@@ -99,6 +99,32 @@ test("no-overlap history resets to CHAT_FIRST_INDEX", () => {
   expect(next.firstItemIndex).toBe(CHAT_FIRST_INDEX);
 });
 
+test("a lower-cursor history frame replaces stale rows and accepts lower live IDs", () => {
+  const opened = withHistory(initialChatState, frame(page(1, 10), 10, 1, false));
+  const reset = withHistory(opened, frame(page(3, 3), 5, 3, false));
+
+  expect(reset.messages.map((row) => row.id)).toEqual([3, 4, 5]);
+  expect(reset.cursor).toBe(5);
+  expect(reset.oldestRetainedId).toBe(3);
+  expect(reset.firstItemIndex).toBe(CHAT_FIRST_INDEX);
+
+  const next = withMessage(reset, message(6));
+  expect(next.messages.map((row) => row.id)).toEqual([3, 4, 5, 6]);
+  expect(next.cursor).toBe(6);
+});
+
+test("a lower-cursor empty history frame clears stale rows", () => {
+  const opened = withHistory(initialChatState, frame(page(1, 3), 3, 1, false));
+  const reset = withHistory(opened, frame([], 0, 0, false));
+
+  expect(reset.messages).toEqual([]);
+  expect(reset.cursor).toBe(0);
+  expect(reset.oldestRetainedId).toBe(0);
+  expect(reset.firstItemIndex).toBe(CHAT_FIRST_INDEX);
+  expect(reset.hasOlder).toBe(false);
+  expect(reset.historyTruncated).toBe(false);
+});
+
 test("live rows cap at 1000 and move the client retention boundary", () => {
   const opened = withHistory(initialChatState, frame(page(1, 1000), 1000, 1, false));
   const next = withMessage(opened, message(1001));

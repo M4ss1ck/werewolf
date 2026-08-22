@@ -25,29 +25,60 @@ export function chatRoutes(
 ) {
   const app = new Hono();
   const lastPostAt = new Map<string, number>();
+  let postQueue = Promise.resolve();
   const acceptedSearchAt = new Map<UserId, number[]>();
+
+  async function enqueuePost<T>(operation: () => Promise<T>): Promise<T> {
+    const previous = postQueue;
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    postQueue = current;
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      release();
+      if (postQueue === current) postQueue = Promise.resolve();
+    }
+  }
 
   app.post("/chat/messages", async (c: Context) => {
     const parsed = ChatContentSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: { code: "VALIDATION" } }, 400);
     const viewer = c.get("viewer") as ViewerContext;
     const senderId = viewer.userId as UserId;
-    if (!(await validateGlobalMentions(db, senderId, parsed.data)))
-      return c.json({ error: { code: "INVALID_MENTION" } }, 400);
-    const at = now();
-    const previous = lastPostAt.get(viewer.userId);
-    if (previous !== undefined && at - previous < MIN_INTERVAL_MS)
-      return c.json({ error: { code: "RATE_LIMITED" } }, 429);
-    lastPostAt.set(viewer.userId, at);
-    const message = await repository.append({
-      userId: senderId,
-      displayName: viewer.username ?? viewer.userId,
-      content: parsed.data,
-      createdAt: at,
+    return enqueuePost(async () => {
+      const at = now();
+      const message = await db.transaction(
+        async (tx) => {
+          if (!(await validateGlobalMentions(tx, senderId, parsed.data)))
+            return { kind: "invalid" as const };
+          const previous = lastPostAt.get(viewer.userId);
+          if (previous !== undefined && at - previous < MIN_INTERVAL_MS)
+            return { kind: "rate-limited" as const };
+          return repository.append(
+            {
+              userId: senderId,
+              displayName: viewer.username ?? viewer.userId,
+              content: parsed.data,
+              createdAt: at,
+            },
+            tx,
+          );
+        },
+        { behavior: "immediate" },
+      );
+      if ("kind" in message) {
+        if (message.kind === "invalid") return c.json({ error: { code: "INVALID_MENTION" } }, 400);
+        return c.json({ error: { code: "RATE_LIMITED" } }, 429);
+      }
+      lastPostAt.set(viewer.userId, at);
+      // Persist first, then fan out.
+      hub.publish(message);
+      return c.json(message, 201);
     });
-    // Persist first, then fan out.
-    hub.publish(message);
-    return c.json(message, 201);
   });
 
   app.get("/chat/messages", async (c: Context) => {
@@ -69,7 +100,7 @@ export function chatRoutes(
     const viewerId = viewer.userId as UserId;
     const at = now();
     const timestamps = (acceptedSearchAt.get(viewerId) ?? []).filter(
-      (timestamp) => timestamp >= at - SEARCH_WINDOW_MS,
+      (timestamp) => timestamp > at - SEARCH_WINDOW_MS,
     );
     if (timestamps.length >= SEARCH_LIMIT) return c.json({ error: { code: "RATE_LIMITED" } }, 429);
     timestamps.push(at);

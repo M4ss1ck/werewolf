@@ -277,6 +277,45 @@ describe("ChatComposer async search and controlled errors", () => {
     expect(screen.queryByRole("option")).not.toBeInTheDocument();
   });
 
+  test("same-name autocomplete options receive distinct identity colors", () => {
+    render(
+      wrap(
+        <ChatComposer
+          inputId="same-name-chat"
+          label="Message"
+          placeholder="Say"
+          sendLabel="Send"
+          draft={draft}
+          source={{
+            kind: "local",
+            candidates: [
+              { userId: "u9" as never, displayName: "Alex" },
+              { userId: "u30" as never, displayName: "Alex" },
+            ],
+          }}
+          readOnly={false}
+          onDraftChange={vi.fn()}
+          onSend={vi.fn().mockResolvedValue(undefined)}
+          onSent={vi.fn()}
+        />,
+      ),
+    );
+
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "@A" } });
+    const u9 = screen.getByRole("option", { name: "Alex, user u9" });
+    const u30 = screen.getByRole("option", { name: "Alex, user u30" });
+    expect(u9).toBeInTheDocument();
+    expect(u30).toBeInTheDocument();
+    const u9Circle = u9.querySelector("circle");
+    const u30Circle = u30.querySelector("circle");
+    expect(u9Circle).toBeInTheDocument();
+    expect(u30Circle).toBeInTheDocument();
+    expect(u9Circle).toHaveAttribute("stroke");
+    expect(u30Circle).toHaveAttribute("stroke");
+    if (!u9Circle || !u30Circle) throw new Error("autocomplete identity sigils are missing");
+    expect(u9Circle.getAttribute("stroke")).not.toBe(u30Circle.getAttribute("stroke"));
+  });
+
   test("keyboard and pointer selection preserve the caret and full-ID names", () => {
     const local = {
       kind: "local" as const,

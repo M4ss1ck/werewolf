@@ -95,6 +95,10 @@ export function ChatList({
   const [isVisible, setIsVisible] = useState(document.visibilityState === "visible");
   const [scrollerElement, setScrollerElement] = useState<HTMLElement | null>(null);
   const [, setVisibilityVersion] = useState(0);
+  const onVisibleRef = useRef(onVisible);
+  onVisibleRef.current = onVisible;
+  const isVisibleRef = useRef(isVisible);
+  isVisibleRef.current = isVisible;
 
   const ids = useMemo(() => messages.map((message) => message.id), [messages]);
   const hasMessages = messages.length > 0;
@@ -140,15 +144,16 @@ export function ChatList({
   }, [identityCohort, messages]);
 
   const reportVisible = useCallback(() => {
-    if (!armedRef.current || !focusRef.current || !isVisible) return;
+    if (!armedRef.current || !focusRef.current || !isVisibleRef.current) return;
     const idsToReport = [...visibleIdsRef.current];
-    if (idsToReport.length > 0) onVisible(idsToReport);
-  }, [isVisible, onVisible]);
+    if (idsToReport.length > 0) onVisibleRef.current(idsToReport);
+  }, []);
 
   const setRowRef = useCallback((id: number, element: HTMLElement | null) => {
     const old = rowElements.current.get(id);
     if (old && old !== element) {
       observerRef.current?.unobserve(old);
+      visibleIdsRef.current.delete(id);
       rowRects.current.delete(id);
     }
     if (element) {
@@ -179,12 +184,16 @@ export function ChatList({
     const activeConversation = conversationKey;
     observerRef.current?.disconnect();
     visibleIdsRef.current.clear();
-    const observer = new IntersectionObserver(
+    let observer: IntersectionObserver;
+    observer = new IntersectionObserver(
       (entries) => {
+        if (observerRef.current !== observer) return;
         for (const entry of entries) {
           if (conversationRef.current !== activeConversation) return;
-          const id = Number((entry.target as HTMLElement).dataset.messageId);
+          const target = entry.target as HTMLElement;
+          const id = Number(target.dataset.messageId);
           if (!Number.isFinite(id)) continue;
+          if (rowElements.current.get(id) !== target) continue;
           if (entry.isIntersecting && entry.intersectionRatio > 0) {
             visibleIdsRef.current.add(id);
             rowRects.current.set(id, {
@@ -210,6 +219,7 @@ export function ChatList({
         snapshotCapturedRef.current = true;
       }
       observer.disconnect();
+      if (observerRef.current !== observer) return;
       observerRef.current = null;
       visibleIdsRef.current.clear();
       rowRects.current.clear();
@@ -230,9 +240,14 @@ export function ChatList({
     };
     const visibility = () => {
       const visible = document.visibilityState === "visible";
+      isVisibleRef.current = visible;
       setIsVisible(visible);
-      if (!visible) focusRef.current = false;
-      else focusRef.current = document.hasFocus?.() ?? true;
+      if (!visible) {
+        focusRef.current = false;
+        return;
+      }
+      focusRef.current = document.hasFocus?.() ?? true;
+      reportVisible();
     };
     root.addEventListener("pointerdown", trusted);
     root.addEventListener("keydown", trusted);
@@ -240,7 +255,10 @@ export function ChatList({
     root.addEventListener("touchstart", trusted);
     window.addEventListener("blur", blur);
     const focus = () => {
-      if (document.visibilityState === "visible") focusRef.current = true;
+      if (document.visibilityState === "visible") {
+        focusRef.current = true;
+        reportVisible();
+      }
     };
     window.addEventListener("focus", focus);
     document.addEventListener("visibilitychange", visibility);
@@ -253,7 +271,7 @@ export function ChatList({
       window.removeEventListener("focus", focus);
       document.removeEventListener("visibilitychange", visibility);
     };
-  }, [conversationKey, scrollerElement]);
+  }, [conversationKey, reportVisible, scrollerElement]);
 
   useEffect(() => {
     if (!scrollerElement || !hasMessages) return;

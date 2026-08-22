@@ -115,4 +115,26 @@ describe("canonical chat rows", () => {
       cult: [],
     });
   });
+
+  test("normalizes a legacy game chat event without mentions", () => {
+    const legacyEvent = {
+      ...chatEvent(1, "public", "u1"),
+      payload: { channel: "public", text: "legacy message" },
+    } as unknown as GameEvent;
+
+    expect(gameChatRows([legacyEvent], players).public).toEqual([
+      expect.objectContaining({ text: "legacy message", mentions: [] }),
+    ]);
+  });
+
+  test("rejects malformed null mentions at the mapping boundary", () => {
+    const malformedEvent = {
+      ...chatEvent(1, "public", "u1"),
+      payload: { channel: "public", text: "malformed message", mentions: null },
+    } as unknown as GameEvent;
+
+    expect(() => gameChatRows([malformedEvent], players)).toThrow(
+      "Invalid game chat event mentions",
+    );
+  });
 });
