@@ -1,12 +1,12 @@
 import { reticle } from "@reticlehq/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, type PluginOption } from "vite";
 
 const SERVER_ORIGIN = process.env.VITE_SERVER_ORIGIN ?? "http://localhost:3000";
 
 export default defineConfig({
-  plugins: [reticle(), react(), tailwindcss()],
+  plugins: [reticle() as unknown as PluginOption, react(), tailwindcss()],
 
   // Tauri expects a fixed dev port and ignores its own Rust sources.
   clearScreen: false,
