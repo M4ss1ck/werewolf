@@ -12,7 +12,7 @@
     },
     "apps/client": {
       "name": "@werewolf/client",
-      "version": "0.1.0",
+      "version": "0.1.7",
       "dependencies": {
         "@tauri-apps/api": "^2.9.0",
         "@tauri-apps/plugin-deep-link": "^2.4.9",
@@ -28,8 +28,8 @@
         "react-virtuoso": "^4.18.11",
       },
       "devDependencies": {
-        "@reticlehq/react": "2.8.0",
-        "@reticlehq/vite-plugin": "2.8.0",
+        "@reticlehq/react": "2.10.0",
+        "@reticlehq/vite-plugin": "2.10.0",
         "@tailwindcss/vite": "^4.1.14",
         "@tauri-apps/cli": "^2.9.0",
         "@testing-library/dom": "^10.4.1",
@@ -46,7 +46,7 @@
     },
     "apps/server": {
       "name": "@werewolf/server",
-      "version": "0.1.0",
+      "version": "0.1.7",
       "dependencies": {
         "@werewolf/db": "workspace:*",
         "@werewolf/game-engine": "workspace:*",
@@ -60,7 +60,7 @@
     },
     "packages/db": {
       "name": "@werewolf/db",
-      "version": "0.1.0",
+      "version": "0.1.7",
       "dependencies": {
         "@libsql/client": "^0.15.15",
         "@werewolf/game-engine": "workspace:*",
@@ -73,14 +73,14 @@
     },
     "packages/game-engine": {
       "name": "@werewolf/game-engine",
-      "version": "0.1.0",
+      "version": "0.1.7",
       "dependencies": {
         "@werewolf/protocol": "workspace:*",
       },
     },
     "packages/i18n": {
       "name": "@werewolf/i18n",
-      "version": "0.1.0",
+      "version": "0.1.7",
       "dependencies": {
         "@werewolf/protocol": "workspace:*",
         "i18next": "^25.6.0",
@@ -88,7 +88,7 @@
     },
     "packages/protocol": {
       "name": "@werewolf/protocol",
-      "version": "0.1.0",
+      "version": "0.1.7",
       "dependencies": {
         "zod": "^4.1.5",
       },
@@ -303,15 +303,15 @@
 
     "@opentelemetry/semantic-conventions": ["@opentelemetry/semantic-conventions@1.43.0", "", {}, "sha512-eSYWTm620tTk45EKSedaUL8MFYI8hW164hIXsgIHyxu3VobUB3fFCu5t0hQby6OoWRPsG1KkKUG2M5UadiLiVg=="],
 
-    "@reticlehq/babel-plugin": ["@reticlehq/babel-plugin@2.8.0", "", { "peerDependencies": { "@babel/core": "^7" } }, "sha512-ea/mr5jQdegVWhCpFNKA9IY58C2XCvosF4jy94NUoeC9CO+A2ASVG5Sf7mI4JVHF/R79TJkFibUrSDidjqjL+w=="],
+    "@reticlehq/babel-plugin": ["@reticlehq/babel-plugin@2.10.0", "", { "peerDependencies": { "@babel/core": "^7" } }, "sha512-uQqQPCJMtyiyCDMCURHfhM+Qw0S+lZMRs2Clodk4xvLaDXTd0rK7TRgHniTHT/IAZuQVBHKac7HataGioktVJg=="],
 
-    "@reticlehq/browser": ["@reticlehq/browser@2.8.0", "", { "dependencies": { "@reticlehq/core": "2.8.0", "@testing-library/dom": "^10.4.1" } }, "sha512-dmkhTffFg1gwEvvKo9XY0l4yqWqLtznneeCZ6QBPjpA1OkHCAqTDl057kR1Wn0jKe+1NQzrQDGbHlhrliKO7sQ=="],
+    "@reticlehq/browser": ["@reticlehq/browser@2.10.0", "", { "dependencies": { "@reticlehq/core": "2.10.0", "@testing-library/dom": "^10.4.1" } }, "sha512-ZuN3CEEmmToYnF9mXXIq97D2gDgQE0gq1sGAG2cNbIG9vFu7edEf3xhSeMTYtfWPFowjuyWtCzyA0nlQ1C8O0A=="],
 
-    "@reticlehq/core": ["@reticlehq/core@2.8.0", "", { "dependencies": { "zod": "^3.24.1" } }, "sha512-PGMmaSMfWw074cCgI2dmpXYUhdjMx+J5+jnXQyBODVOMVnCLCbgmYULF8xY7rKglrWSpiwnALAghhhyiDgnoaA=="],
+    "@reticlehq/core": ["@reticlehq/core@2.10.0", "", { "dependencies": { "zod": "^3.24.1" } }, "sha512-jzyVmkLgONXSGcxnXGn3qt9RdxWszeLF7+f6sxgCMVr1de2zdubn7tRDZQ4JUGrm87/3Gkg8oVFukmA6YRIz9w=="],
 
-    "@reticlehq/react": ["@reticlehq/react@2.8.0", "", { "dependencies": { "@reticlehq/browser": "2.8.0", "@reticlehq/core": "2.8.0" }, "peerDependencies": { "react": ">=18" } }, "sha512-ICKiUDT8+9veqLY8nwZi4FcsWoKBgBKrBuYXMternVty8nWV1CwLxfA/Y+An8nKwgZajkTHzvLS5JTnOxVk7Pg=="],
+    "@reticlehq/react": ["@reticlehq/react@2.10.0", "", { "dependencies": { "@reticlehq/browser": "2.10.0", "@reticlehq/core": "2.10.0" }, "peerDependencies": { "react": ">=18" } }, "sha512-U+JfR0eCyeUIq3Ezkvv/xJRtQRylsINPJbzg8KDx8i2NkvW0GSXOMlqz+fh2bAn/ZAGBjRNeGGD9eVuxNmV1XA=="],
 
-    "@reticlehq/vite-plugin": ["@reticlehq/vite-plugin@2.8.0", "", { "dependencies": { "@babel/core": "^7.26.0", "@reticlehq/babel-plugin": "2.8.0", "@reticlehq/core": "2.8.0" }, "peerDependencies": { "vite": ">=4" }, "optionalPeers": ["vite"] }, "sha512-RKQMUMogjXpg+gu2zfXWpEoRGrlPGWpyxvO7Wlr8Zeb0aA8/QxaVam/KgkyFOAPDRpzXPBAnKj/kD6PijujXcA=="],
+    "@reticlehq/vite-plugin": ["@reticlehq/vite-plugin@2.10.0", "", { "dependencies": { "@babel/core": "^7.26.0", "@reticlehq/babel-plugin": "2.10.0", "@reticlehq/core": "2.10.0" }, "peerDependencies": { "vite": ">=4" }, "optionalPeers": ["vite"] }, "sha512-Pqnu0nYaw0YozUjsOxr6jZcPFmlloBPROBDiJB22IGuFMA6R0pmLt1LhMsorKpv5aNhu7rJa3pRyBpj0LNbOqQ=="],
 
     "@rolldown/pluginutils": ["@rolldown/pluginutils@1.0.0-rc.3", "", {}, "sha512-eybk3TjzzzV97Dlj5c+XrBFW57eTNhzod66y9HrBlzJ6NsCrWCp/2kaPS3K9wJmurBC0Tdw4yPjXKZqlznim3Q=="],
 
