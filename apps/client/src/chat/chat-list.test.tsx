@@ -337,6 +337,415 @@ describe("ChatList viewport and unread mechanics", () => {
     view.unmount();
   });
 
+  test("consumes a pending latest jump when the first row arrives", () => {
+    const onMarkThrough = vi.fn();
+    const view = renderList({ messages: [], onMarkThrough });
+    view.rerender(
+      <I18nextProvider i18n={i18n}>
+        <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
+          <ChatList
+            conversationKey="global"
+            messages={[]}
+            identityCohort={[]}
+            viewerId={viewerId}
+            readState={{ readThrough: 0, seenAfter: [] }}
+            jumpToLatestToken={1}
+            emptyLabel="No messages"
+            onSnapshot={vi.fn()}
+            onVisible={vi.fn()}
+            onMarkThrough={onMarkThrough}
+          />
+        </VirtuosoMockContext.Provider>
+      </I18nextProvider>,
+    );
+    view.rerender(
+      <I18nextProvider i18n={i18n}>
+        <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
+          <ChatList
+            conversationKey="global"
+            messages={[message(1)]}
+            identityCohort={[]}
+            viewerId={viewerId}
+            readState={{ readThrough: 0, seenAfter: [] }}
+            jumpToLatestToken={1}
+            emptyLabel="No messages"
+            onSnapshot={vi.fn()}
+            onVisible={vi.fn()}
+            onMarkThrough={onMarkThrough}
+          />
+        </VirtuosoMockContext.Provider>
+      </I18nextProvider>,
+    );
+    act(() => vi.runAllTimers());
+
+    const jumps = control.scrolls.filter(
+      (location) =>
+        (location as { align?: string; behavior?: string }).align === "end" &&
+        (location as { behavior?: string }).behavior === "smooth",
+    );
+    expect(jumps).toHaveLength(1);
+    expect(onMarkThrough).toHaveBeenCalledOnce();
+
+    view.rerender(
+      <I18nextProvider i18n={i18n}>
+        <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
+          <ChatList
+            conversationKey="global"
+            messages={[message(1)]}
+            identityCohort={[]}
+            viewerId={viewerId}
+            readState={{ readThrough: 0, seenAfter: [] }}
+            jumpToLatestToken={1}
+            emptyLabel="No messages"
+            onSnapshot={vi.fn()}
+            onVisible={vi.fn()}
+            onMarkThrough={onMarkThrough}
+          />
+        </VirtuosoMockContext.Provider>
+      </I18nextProvider>,
+    );
+    act(() => vi.runAllTimers());
+    expect(
+      control.scrolls.filter(
+        (location) =>
+          (location as { align?: string; behavior?: string }).align === "end" &&
+          (location as { behavior?: string }).behavior === "smooth",
+      ),
+    ).toHaveLength(1);
+    expect(onMarkThrough).toHaveBeenCalledOnce();
+    view.unmount();
+  });
+
+  test("jumps when a new token and the first row arrive together", () => {
+    const onMarkThrough = vi.fn();
+    const view = renderList({ messages: [], onMarkThrough });
+    view.rerender(
+      <I18nextProvider i18n={i18n}>
+        <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
+          <ChatList
+            conversationKey="global"
+            messages={[message(1)]}
+            identityCohort={[]}
+            viewerId={viewerId}
+            readState={{ readThrough: 0, seenAfter: [] }}
+            jumpToLatestToken={1}
+            emptyLabel="No messages"
+            onSnapshot={vi.fn()}
+            onVisible={vi.fn()}
+            onMarkThrough={onMarkThrough}
+          />
+        </VirtuosoMockContext.Provider>
+      </I18nextProvider>,
+    );
+    act(() => vi.runAllTimers());
+
+    expect(
+      control.scrolls.filter(
+        (location) =>
+          (location as { align?: string; behavior?: string }).align === "end" &&
+          (location as { behavior?: string }).behavior === "smooth",
+      ),
+    ).toHaveLength(1);
+    expect(onMarkThrough).toHaveBeenCalledOnce();
+    view.unmount();
+  });
+
+  test("clears an older pending token when a newer token jumps with the first row", () => {
+    const onMarkThrough = vi.fn();
+    const view = renderList({ messages: [], onMarkThrough });
+    view.rerender(
+      <I18nextProvider i18n={i18n}>
+        <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
+          <ChatList
+            conversationKey="global"
+            messages={[]}
+            identityCohort={[]}
+            viewerId={viewerId}
+            readState={{ readThrough: 0, seenAfter: [] }}
+            jumpToLatestToken={1}
+            emptyLabel="No messages"
+            onSnapshot={vi.fn()}
+            onVisible={vi.fn()}
+            onMarkThrough={onMarkThrough}
+          />
+        </VirtuosoMockContext.Provider>
+      </I18nextProvider>,
+    );
+    view.rerender(
+      <I18nextProvider i18n={i18n}>
+        <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
+          <ChatList
+            conversationKey="global"
+            messages={[message(1)]}
+            identityCohort={[]}
+            viewerId={viewerId}
+            readState={{ readThrough: 0, seenAfter: [] }}
+            jumpToLatestToken={2}
+            emptyLabel="No messages"
+            onSnapshot={vi.fn()}
+            onVisible={vi.fn()}
+            onMarkThrough={onMarkThrough}
+          />
+        </VirtuosoMockContext.Provider>
+      </I18nextProvider>,
+    );
+    act(() => vi.runAllTimers());
+    view.rerender(
+      <I18nextProvider i18n={i18n}>
+        <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
+          <ChatList
+            conversationKey="global"
+            messages={[message(1), message(2)]}
+            identityCohort={[]}
+            viewerId={viewerId}
+            readState={{ readThrough: 0, seenAfter: [] }}
+            jumpToLatestToken={2}
+            emptyLabel="No messages"
+            onSnapshot={vi.fn()}
+            onVisible={vi.fn()}
+            onMarkThrough={onMarkThrough}
+          />
+        </VirtuosoMockContext.Provider>
+      </I18nextProvider>,
+    );
+    act(() => vi.runAllTimers());
+
+    expect(
+      control.scrolls.filter(
+        (location) =>
+          (location as { align?: string; behavior?: string }).align === "end" &&
+          (location as { behavior?: string }).behavior === "smooth",
+      ),
+    ).toHaveLength(1);
+    expect(onMarkThrough).toHaveBeenCalledOnce();
+    view.unmount();
+  });
+
+  test("keeps a scheduled jump alive when another row arrives before the frame", () => {
+    const onMarkThrough = vi.fn();
+    const view = renderList({ messages: [], onMarkThrough });
+    view.rerender(
+      <I18nextProvider i18n={i18n}>
+        <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
+          <ChatList
+            conversationKey="global"
+            messages={[]}
+            identityCohort={[]}
+            viewerId={viewerId}
+            readState={{ readThrough: 0, seenAfter: [] }}
+            jumpToLatestToken={1}
+            emptyLabel="No messages"
+            onSnapshot={vi.fn()}
+            onVisible={vi.fn()}
+            onMarkThrough={onMarkThrough}
+          />
+        </VirtuosoMockContext.Provider>
+      </I18nextProvider>,
+    );
+    view.rerender(
+      <I18nextProvider i18n={i18n}>
+        <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
+          <ChatList
+            conversationKey="global"
+            messages={[message(1)]}
+            identityCohort={[]}
+            viewerId={viewerId}
+            readState={{ readThrough: 0, seenAfter: [] }}
+            jumpToLatestToken={1}
+            emptyLabel="No messages"
+            onSnapshot={vi.fn()}
+            onVisible={vi.fn()}
+            onMarkThrough={onMarkThrough}
+          />
+        </VirtuosoMockContext.Provider>
+      </I18nextProvider>,
+    );
+    view.rerender(
+      <I18nextProvider i18n={i18n}>
+        <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
+          <ChatList
+            conversationKey="global"
+            messages={[message(1), message(2)]}
+            identityCohort={[]}
+            viewerId={viewerId}
+            readState={{ readThrough: 0, seenAfter: [] }}
+            jumpToLatestToken={1}
+            emptyLabel="No messages"
+            onSnapshot={vi.fn()}
+            onVisible={vi.fn()}
+            onMarkThrough={onMarkThrough}
+          />
+        </VirtuosoMockContext.Provider>
+      </I18nextProvider>,
+    );
+    act(() => vi.runAllTimers());
+
+    const jumps = () =>
+      control.scrolls.filter(
+        (location) =>
+          (location as { align?: string; behavior?: string }).align === "end" &&
+          (location as { behavior?: string }).behavior === "smooth",
+      );
+    expect(jumps()).toHaveLength(1);
+    expect(onMarkThrough).toHaveBeenCalledWith(2);
+    expect(onMarkThrough).toHaveBeenCalledOnce();
+
+    view.rerender(
+      <I18nextProvider i18n={i18n}>
+        <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
+          <ChatList
+            conversationKey={"game:g1:public" as ConversationKey}
+            messages={[message(10)]}
+            identityCohort={[]}
+            viewerId={viewerId}
+            readState={{ readThrough: 0, seenAfter: [] }}
+            jumpToLatestToken={1}
+            emptyLabel="No messages"
+            onSnapshot={vi.fn()}
+            onVisible={vi.fn()}
+            onMarkThrough={onMarkThrough}
+          />
+        </VirtuosoMockContext.Provider>
+      </I18nextProvider>,
+    );
+    act(() => vi.runAllTimers());
+    expect(jumps()).toHaveLength(1);
+    expect(onMarkThrough).toHaveBeenCalledOnce();
+    view.unmount();
+  });
+
+  test("waits for the newest token after a scheduled token is superseded", () => {
+    const onMarkThrough = vi.fn();
+    const view = renderList({ messages: [], onMarkThrough });
+    view.rerender(
+      <I18nextProvider i18n={i18n}>
+        <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
+          <ChatList
+            conversationKey="global"
+            messages={[]}
+            identityCohort={[]}
+            viewerId={viewerId}
+            readState={{ readThrough: 0, seenAfter: [] }}
+            jumpToLatestToken={1}
+            emptyLabel="No messages"
+            onSnapshot={vi.fn()}
+            onVisible={vi.fn()}
+            onMarkThrough={onMarkThrough}
+          />
+        </VirtuosoMockContext.Provider>
+      </I18nextProvider>,
+    );
+    view.rerender(
+      <I18nextProvider i18n={i18n}>
+        <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
+          <ChatList
+            conversationKey="global"
+            messages={[message(1)]}
+            identityCohort={[]}
+            viewerId={viewerId}
+            readState={{ readThrough: 0, seenAfter: [] }}
+            jumpToLatestToken={1}
+            emptyLabel="No messages"
+            onSnapshot={vi.fn()}
+            onVisible={vi.fn()}
+            onMarkThrough={onMarkThrough}
+          />
+        </VirtuosoMockContext.Provider>
+      </I18nextProvider>,
+    );
+    view.rerender(
+      <I18nextProvider i18n={i18n}>
+        <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
+          <ChatList
+            conversationKey="global"
+            messages={[message(1)]}
+            identityCohort={[]}
+            viewerId={viewerId}
+            readState={{ readThrough: 0, seenAfter: [] }}
+            jumpToLatestToken={2}
+            emptyLabel="No messages"
+            onSnapshot={vi.fn()}
+            onVisible={vi.fn()}
+            onMarkThrough={onMarkThrough}
+          />
+        </VirtuosoMockContext.Provider>
+      </I18nextProvider>,
+    );
+    act(() => vi.runAllTimers());
+    expect(
+      control.scrolls.filter(
+        (location) =>
+          (location as { align?: string; behavior?: string }).align === "end" &&
+          (location as { behavior?: string }).behavior === "smooth",
+      ),
+    ).toHaveLength(0);
+    expect(onMarkThrough).not.toHaveBeenCalled();
+
+    view.rerender(
+      <I18nextProvider i18n={i18n}>
+        <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
+          <ChatList
+            conversationKey="global"
+            messages={[message(1), message(2)]}
+            identityCohort={[]}
+            viewerId={viewerId}
+            readState={{ readThrough: 0, seenAfter: [] }}
+            jumpToLatestToken={2}
+            emptyLabel="No messages"
+            onSnapshot={vi.fn()}
+            onVisible={vi.fn()}
+            onMarkThrough={onMarkThrough}
+          />
+        </VirtuosoMockContext.Provider>
+      </I18nextProvider>,
+    );
+    act(() => vi.runAllTimers());
+    expect(
+      control.scrolls.filter(
+        (location) =>
+          (location as { align?: string; behavior?: string }).align === "end" &&
+          (location as { behavior?: string }).behavior === "smooth",
+      ),
+    ).toHaveLength(1);
+    expect(onMarkThrough).toHaveBeenCalledWith(2);
+    expect(onMarkThrough).toHaveBeenCalledOnce();
+    view.unmount();
+  });
+
+  test("keeps ordinary nonempty append jumps intact", () => {
+    const onMarkThrough = vi.fn();
+    const view = renderList({ messages: [message(1)], onMarkThrough });
+    view.rerender(
+      <I18nextProvider i18n={i18n}>
+        <VirtuosoMockContext.Provider value={{ viewportHeight: 300, itemHeight: 40 }}>
+          <ChatList
+            conversationKey="global"
+            messages={[message(1), message(2)]}
+            identityCohort={[]}
+            viewerId={viewerId}
+            readState={{ readThrough: 0, seenAfter: [] }}
+            jumpToLatestToken={1}
+            emptyLabel="No messages"
+            onSnapshot={vi.fn()}
+            onVisible={vi.fn()}
+            onMarkThrough={onMarkThrough}
+          />
+        </VirtuosoMockContext.Provider>
+      </I18nextProvider>,
+    );
+    act(() => vi.runAllTimers());
+
+    expect(
+      control.scrolls.filter(
+        (location) =>
+          (location as { align?: string; behavior?: string }).align === "end" &&
+          (location as { behavior?: string }).behavior === "smooth",
+      ),
+    ).toHaveLength(1);
+    expect(onMarkThrough).toHaveBeenCalledOnce();
+    view.unmount();
+  });
+
   test("observer teardown clears geometry even when the root is reused", () => {
     const onSnapshot = vi.fn();
     const firstVisible = vi.fn();

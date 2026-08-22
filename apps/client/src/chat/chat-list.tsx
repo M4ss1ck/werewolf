@@ -89,6 +89,7 @@ export function ChatList({
   const positionedConversationRef = useRef<string | null>(null);
   const previousToken = useRef(jumpToLatestToken);
   const pendingJumpToken = useRef<number | undefined>(undefined);
+  const scheduledJump = useRef<{ conversationKey: string; token: number } | undefined>(undefined);
   const previousMessageIds = useRef<number[]>(messages.map((message) => message.id));
   const [atBottom, setAtBottom] = useState(true);
   const [isVisible, setIsVisible] = useState(document.visibilityState === "visible");
@@ -396,27 +397,46 @@ export function ChatList({
     previousMessageIds.current = [...jumpIdsRef.current];
     previousToken.current = latestJumpTokenRef.current;
     pendingJumpToken.current = undefined;
+    scheduledJump.current = undefined;
   }, [conversationKey]);
 
   useEffect(() => {
     const previousLatest = previousMessageIds.current.at(-1);
     const latest = ids.at(-1);
     const appendedLatest =
-      previousLatest !== undefined && latest !== undefined && latest > previousLatest;
-    let shouldJump = false;
+      latest !== undefined &&
+      (previousLatest === undefined
+        ? previousMessageIds.current.length === 0
+        : latest > previousLatest);
+    const scheduledForCurrentToken =
+      scheduledJump.current?.conversationKey === conversationKey &&
+      scheduledJump.current.token === jumpToLatestToken;
+    if (scheduledJump.current?.conversationKey === conversationKey && !scheduledForCurrentToken) {
+      scheduledJump.current = undefined;
+    }
+    let shouldJump = scheduledForCurrentToken;
     if (jumpToLatestToken !== previousToken.current) {
       previousToken.current = jumpToLatestToken;
-      if (appendedLatest) shouldJump = true;
-      else pendingJumpToken.current = jumpToLatestToken;
+      if (appendedLatest) {
+        pendingJumpToken.current = undefined;
+        shouldJump = true;
+      } else pendingJumpToken.current = jumpToLatestToken;
     } else if (pendingJumpToken.current !== undefined && appendedLatest) {
       pendingJumpToken.current = undefined;
       shouldJump = true;
     }
     previousMessageIds.current = [...ids];
     if (!shouldJump || messages.length === 0) return;
-    const frame = requestAnimationFrame(() => scrollTo("LAST", "end", 0, true));
+    pendingJumpToken.current = undefined;
+    const request = { conversationKey, token: jumpToLatestToken };
+    scheduledJump.current = request;
+    const frame = requestAnimationFrame(() => {
+      if (scheduledJump.current !== request) return;
+      scheduledJump.current = undefined;
+      scrollTo("LAST", "end", 0, true);
+    });
     return () => cancelAnimationFrame(frame);
-  }, [ids, jumpToLatestToken, messages.length, scrollTo]);
+  }, [conversationKey, ids, jumpToLatestToken, messages.length, scrollTo]);
 
   const greatestVisibleIndex = Math.max(
     ...[...visibleIdsRef.current].map((id) => ids.indexOf(id)),
