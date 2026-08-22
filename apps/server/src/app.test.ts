@@ -14,6 +14,10 @@ test("unmatched api routes 404 rather than falling through to the SPA", async ()
   expect(response.status).toBe(404);
 });
 
+test("global chat requires a database at app construction", () => {
+  expect(() => createApp({ globalChat: {} as never })).toThrow("globalChat requires db");
+});
+
 test("an OPTIONS preflight from a trusted origin is allowed with credentials", async () => {
   const app = createApp({ trustedOrigins: ["https://werewolf.example.com"] });
   const response = await app.request("/api/games", {

@@ -47,6 +47,8 @@ export type AppOptions = {
 };
 
 export function createApp(options: AppOptions = {}) {
+  const globalChatDb = options.db;
+  if (options.globalChat && !globalChatDb) throw new Error("globalChat requires db");
   const app = new Hono();
 
   app.get("/health", (c) => c.json({ status: "ok" }));
@@ -142,7 +144,8 @@ export function createApp(options: AppOptions = {}) {
       );
     if (options.globalChat) {
       const { repository, hub, now } = options.globalChat;
-      app.route("/api", chatRoutes(repository, hub, now));
+      if (!globalChatDb) throw new Error("globalChat requires db");
+      app.route("/api", chatRoutes(globalChatDb, repository, hub, now));
       app.get(
         "/api/chat/live",
         requireTrustedOrigin,

@@ -19,6 +19,7 @@ import { GameCoordinator } from "./game/coordinator.ts";
 import { PhaseScheduler } from "./game/scheduler.ts";
 import { GameHub } from "./live/game-hub.ts";
 import { GlobalChatHub } from "./live/global-chat-hub.ts";
+import { WEBSOCKET_MAX_PAYLOAD_BYTES } from "./live/websocket-limits.ts";
 import { clientAssetRoot } from "./static/serve-client.ts";
 import { createTelegramBot, startTelegramBot } from "./telegram/bot.ts";
 
@@ -85,7 +86,7 @@ const server = Bun.serve({
   fetch: app.fetch,
   // Hono's own dispatcher: it routes open/close/message to the handlers
   // registered by upgradeWebSocket. A stub here silently drops every one.
-  websocket,
+  websocket: { ...websocket, maxPayloadLength: WEBSOCKET_MAX_PAYLOAD_BYTES },
 });
 await scheduler.start();
 
