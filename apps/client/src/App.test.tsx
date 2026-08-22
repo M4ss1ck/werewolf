@@ -1202,6 +1202,42 @@ test("a game route offers a way back to the games list", async () => {
   await screen.findByRole("heading", { name: "Open games" });
 });
 
+test("a navigation that beats the popstate listener is still picked up", async () => {
+  // The route is read from the URL when the shell mounts and re-read only on
+  // popstate. Between those two moments nothing is listening, so a navigation
+  // there is lost and the URL and the screen disagree for the rest of the
+  // session — pathname "/" with the game route still on screen, which is what
+  // CI reported. Move the URL as the listener registers to land in that window.
+  window.history.replaceState({}, "", "/games/g1");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn<(input: RequestInfo | URL) => Promise<Response>>((input) =>
+      Promise.resolve(
+        new Response(
+          String(input) === "/api/auth/get-session"
+            ? JSON.stringify({ user: { id: "me", username: "wren" } })
+            : JSON.stringify([]),
+          { status: 200 },
+        ),
+      ),
+    ),
+  );
+  let moved = false;
+  const addEventListener = window.addEventListener.bind(window);
+  vi.spyOn(window, "addEventListener").mockImplementation((type, listener, options) => {
+    if (type === "popstate" && !moved) {
+      moved = true;
+      window.history.pushState({}, "", "/");
+    }
+    addEventListener(type, listener, options);
+  });
+
+  render(<App />);
+
+  await screen.findByRole("heading", { name: "Open games" });
+  expect(window.location.pathname).toBe("/");
+});
+
 test("associates game snapshots with the requested route and clears failed loads", async () => {
   const snapshot = (id: string, name: string): ViewerGameSnapshot => ({
     game: {

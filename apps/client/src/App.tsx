@@ -217,6 +217,10 @@ function SignedInShell({
   useEffect(() => {
     const update = () => setRoute(currentRoute());
     window.addEventListener("popstate", update);
+    // The route was read during render, and nothing was listening between then
+    // and now. Re-read it, or a navigation landing in that window is lost and
+    // the URL and the screen disagree for the rest of the session.
+    update();
     return () => window.removeEventListener("popstate", update);
   }, []);
 
