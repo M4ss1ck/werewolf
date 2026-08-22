@@ -73,7 +73,10 @@ function describeEvent(input: BotDecisionInput, event: GameEvent): string | null
           : event.payload.channel === "cult"
             ? "cult chat"
             : "village";
-      return `[${room}] ${speaker}: ${event.payload.text}`;
+      const direct = event.payload.mentions.some((mention) => mention.userId === input.playerId)
+        ? " — DIRECTLY MENTIONS YOU"
+        : "";
+      return `[${room}] ${speaker}: ${event.payload.text}${direct}`;
     }
     case "vote.resolved":
       return event.payload.eliminated
@@ -131,10 +134,22 @@ export function buildUserPrompt(input: BotDecisionInput): string {
     .filter((line): line is string => line !== null)
     .join("\n");
 
+  const directMentions = input.directMentions
+    .map((event) => describeEvent(input, event))
+    .filter((line): line is string => line !== null)
+    .join("\n");
+
   const digest = input.digest.join("\n");
 
   const actions = input.legalActions
     .map((action) => `${action.id}. ${describeAction(input, action)}`)
+    .join("\n");
+
+  const mentionChoices = input.mentionCandidates
+    .map(
+      (candidate) =>
+        `${candidate.id}. @${candidate.displayName} (${candidate.channels.join(", ")})`,
+    )
     .join("\n");
 
   const sections = [
@@ -145,11 +160,15 @@ export function buildUserPrompt(input: BotDecisionInput): string {
     history ? `What you know so far (oldest first):\n${history}` : null,
     digest ? `Earlier days:\n${digest}` : null,
     phaseChat ? `This phase's conversation (newest last):\n${phaseChat}` : null,
+    directMentions ? `DIRECT MENTIONS (newest last):\n${directMentions}` : null,
     actions ? `Legal actions:\n${actions}` : "Legal actions: none this turn.",
     input.speakableChannels.length > 0
       ? `You may speak on: ${input.speakableChannels.join(", ")}.`
       : "You cannot speak this turn; set say and channel to null.",
-    'Reply as {"actionId": <id or null>, "say": <text or null>, "channel": <channel or null>, "done": <true when you have nothing further to say this phase>}.',
+    mentionChoices
+      ? `Mention choices (use their numeric ids only when addressing someone; choose at most 8):\n${mentionChoices}`
+      : "Mention choices: none.",
+    'Reply as {"actionId": <id or null>, "say": <text or null>, "channel": <channel or null>, "mentionIds": [numeric ids], "done": <true when you have nothing further to say this phase>}.',
   ].filter((section): section is string => section !== null);
 
   return sections.join("\n\n");

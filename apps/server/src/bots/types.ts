@@ -21,6 +21,13 @@ import type {
 } from "@werewolf/protocol";
 import { z } from "zod";
 
+export type BotMentionCandidate = {
+  id: number;
+  userId: UserId;
+  displayName: string;
+  channels: ChatChannel[];
+};
+
 /** One command the bot may pick, addressed by a small stable index so a model
  * can never name a target that was not offered. */
 export interface LegalAction {
@@ -48,12 +55,15 @@ export interface BotDecisionInput {
   /** Chat messages from the current phase this bot may see, newest last,
    * capped at BOT_PHASE_CHAT_LIMIT. This is what makes a reply a reply. */
   phaseChat: GameEvent[];
+  /** Structured chat messages that directly addressed this bot, newest last. */
+  directMentions: GameEvent[];
   /** One compact line per earlier day — who was voted out, who died in the
    * night — oldest first, capped at BOT_DIGEST_DAYS. Built deterministically
    * from the bot's visible public events, never by a model. */
   digest: string[];
   legalActions: LegalAction[];
   speakableChannels: ChatChannel[];
+  mentionCandidates: BotMentionCandidate[];
 }
 
 /** An untrusted suggestion. The server validates it again before executing. */
@@ -62,6 +72,7 @@ export interface BotDecision {
   actionId: number | null;
   say: string | null;
   channel: ChatChannel | null;
+  mentionIds: number[];
   /** True when the bot has nothing further to say this phase. The manager
    * readies the seat on it, which is what lets the phase end early. */
   done: boolean;
@@ -81,9 +92,13 @@ export const BotDecisionSchema = z.object({
     .nullish()
     .transform((value) => value ?? null),
   channel: z
-    .enum(["public", "wolves", "cult"])
+    .enum(["public", "wolves", "cult", "grave"])
     .nullish()
     .transform((value) => value ?? null),
+  mentionIds: z
+    .array(z.number().int())
+    .nullish()
+    .transform((value) => (value ?? []).slice(0, 8)),
   done: z
     .boolean()
     .nullish()

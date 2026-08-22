@@ -17,6 +17,8 @@ import {
   type GameState,
   getLegalCommands,
   getSpeakableChannels,
+  knownMentionTargets,
+  projectedPlayerLabel,
   projectSnapshot,
 } from "@werewolf/game-engine";
 import type {
@@ -30,7 +32,8 @@ import type {
 import { CoordinatorError, type GameCoordinator } from "../game/coordinator.ts";
 import type { BotRuntimeConfig } from "./config.ts";
 import { type BotLogger, silentBotLogger } from "./log.ts";
-import type { BotAgent, BotDecision, BotDecisionInput } from "./types.ts";
+import { composeBotChatContent } from "./mentions.ts";
+import type { BotAgent, BotDecision, BotDecisionInput, BotMentionCandidate } from "./types.ts";
 
 /** Per-game bookkeeping for the phase currently in progress. Keying on the
  * phase id makes it self-pruning: a new phase simply replaces the record, so
@@ -39,6 +42,7 @@ type PhaseRecord = {
   phaseId: PhaseId;
   turns: Map<UserId, number>;
   inFlight: Set<UserId>;
+  pendingMentions: Map<UserId, GameEvent[]>;
 };
 
 export interface BotManagerOptions {
@@ -134,25 +138,40 @@ export class BotManager {
     for (const player of Object.values(state.players)) {
       const controller = player.controller;
       if (controller?.type !== "bot" || player.status !== "alive") continue;
-      if (record.inFlight.has(player.id)) continue;
+      const directMentions = this.directMentions(state, player.id, events);
+      if (record.inFlight.has(player.id)) {
+        if (directMentions.length > 0) this.rememberPending(record, player.id, directMentions);
+        continue;
+      }
+      if (record.pendingMentions.has(player.id)) {
+        await this.schedulePending(gameId, player.id, phase.id, controller.config, record);
+        continue;
+      }
       const used = record.turns.get(player.id) ?? 0;
       // First turn of the phase is unconditional; a further turn only happens
       // in discussion or voting, and only because somebody else said something.
-      if (used > 0 && !this.reactsToChat(state, player.id, used, events)) continue;
+      if (used > 0 && !this.reactsToChat(state, player.id, used, events, directMentions)) continue;
       const mustAct = getLegalCommands(state, player.id, now).length > 0;
       const maySpeak = getSpeakableChannels(state, player.id, now).length > 0;
       // A villager at night has neither an action nor a channel: no call, no cost.
       if (!mustAct && !maySpeak) continue;
       record.turns.set(player.id, used + 1);
       record.inFlight.add(player.id);
-      this.track(() => this.decide(gameId, player.id, phase.id, used, controller.config, record));
+      this.track(() =>
+        this.decide(gameId, player.id, phase.id, used, controller.config, record, directMentions),
+      );
     }
   }
 
   private recordFor(gameId: GameId, phaseId: PhaseId): PhaseRecord {
     const existing = this.games.get(gameId);
     if (existing && existing.phaseId === phaseId) return existing;
-    const record: PhaseRecord = { phaseId, turns: new Map(), inFlight: new Set() };
+    const record: PhaseRecord = {
+      phaseId,
+      turns: new Map(),
+      inFlight: new Set(),
+      pendingMentions: new Map(),
+    };
     this.games.set(gameId, record);
     return record;
   }
@@ -165,14 +184,18 @@ export class BotManager {
     playerId: UserId,
     used: number,
     events: GameEvent[],
+    directMentions: GameEvent[],
   ): boolean {
     if (state.phase?.type !== "discussion" && state.phase?.type !== "voting") return false;
     if (used >= this.options.config.BOT_CHAT_TURNS) return false;
-    return events.some(
-      (event) =>
-        event.kind === "chat.message" &&
-        event.actorUserId !== playerId &&
-        canViewEvent(event, playerId, state),
+    return (
+      directMentions.length > 0 ||
+      events.some(
+        (event) =>
+          event.kind === "chat.message" &&
+          event.actorUserId !== playerId &&
+          canViewEvent(event, playerId, state),
+      )
     );
   }
 
@@ -183,6 +206,7 @@ export class BotManager {
     turn: number,
     config: BotConfig,
     record: PhaseRecord,
+    directMentions: GameEvent[],
   ): Promise<void> {
     const decisionId = `${gameId}:${playerId}:${phaseId}:${turn}`;
     const startedAt = this.now();
@@ -192,7 +216,14 @@ export class BotManager {
         this.log("skipped", { decisionId, gameId, playerId, reason: "window_closed" });
         return;
       }
-      const input = await this.buildInput(state!, playerId, phaseId, decisionId, config);
+      const input = await this.buildInput(
+        state!,
+        playerId,
+        phaseId,
+        decisionId,
+        config,
+        directMentions,
+      );
       // The pause runs alongside the model call rather than after it, so the
       // provider's own latency counts towards looking human instead of adding
       // to it. Neither blocks the game loop: the phase ends on its clock.
@@ -203,6 +234,7 @@ export class BotManager {
       await this.submit(gameId, playerId, phaseId, decisionId, decision, input, startedAt, turn);
     } finally {
       record.inFlight.delete(playerId);
+      await this.schedulePending(gameId, playerId, phaseId, config, record);
     }
   }
 
@@ -212,6 +244,7 @@ export class BotManager {
     phaseId: PhaseId,
     decisionId: string,
     config: BotConfig,
+    directMentions: GameEvent[],
   ): Promise<BotDecisionInput> {
     const now = this.now();
     // The bot's whole picture of the game is the viewer projection a human
@@ -243,6 +276,35 @@ export class BotManager {
     const names = (userId: UserId) =>
       playerView.players.find((player) => player.userId === userId)?.displayName ?? userId;
     const digest = buildDigest(contextVisible, names, this.options.config.BOT_DIGEST_DAYS);
+    const speakableChannels = getSpeakableChannels(state, playerId, now);
+    const candidatesByUser = new Map<
+      UserId,
+      { displayName: string; channels: Set<(typeof speakableChannels)[number]> }
+    >();
+    for (const channel of speakableChannels) {
+      for (const target of knownMentionTargets(state, playerId, channel)) {
+        const existing = candidatesByUser.get(target.id);
+        if (existing) existing.channels.add(channel);
+        else
+          candidatesByUser.set(target.id, {
+            displayName: projectedPlayerLabel(target),
+            channels: new Set([channel]),
+          });
+      }
+    }
+    const channelOrder = new Map(
+      ["public", "wolves", "grave", "cult"].map((channel, index) => [channel, index]),
+    );
+    const mentionCandidates: BotMentionCandidate[] = [...candidatesByUser.entries()]
+      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+      .map(([userId, candidate], index) => ({
+        id: index + 1,
+        userId,
+        displayName: candidate.displayName,
+        channels: [...candidate.channels].sort(
+          (left, right) => (channelOrder.get(left) ?? 99) - (channelOrder.get(right) ?? 99),
+        ),
+      }));
     return {
       decisionId,
       gameId: state.id,
@@ -258,7 +320,9 @@ export class BotManager {
       phaseChat,
       digest,
       legalActions: getLegalCommands(state, playerId, now).map((command, id) => ({ id, command })),
-      speakableChannels: getSpeakableChannels(state, playerId, now),
+      speakableChannels,
+      mentionCandidates,
+      directMentions,
     };
   }
 
@@ -287,13 +351,20 @@ export class BotManager {
       });
       return;
     }
-    if (decision.say !== null && decision.channel !== null)
-      await this.send(decisionId, gameId, playerId, {
-        commandId: `${decisionId}:say`,
-        phaseId,
-        type: "chat.send",
-        payload: { channel: decision.channel, text: decision.say },
-      });
+    const speakableChannels = getSpeakableChannels(state!, playerId, this.now());
+    if (decision.channel !== null && speakableChannels.includes(decision.channel)) {
+      const currentTargetIds = new Set(
+        knownMentionTargets(state!, playerId, decision.channel).map((target) => target.id),
+      );
+      const content = composeBotChatContent(decision, input, currentTargetIds);
+      if (content !== null)
+        await this.send(decisionId, gameId, playerId, {
+          commandId: `${decisionId}:say`,
+          phaseId,
+          type: "chat.send",
+          payload: { channel: decision.channel, ...content },
+        });
+    }
     const action = input.legalActions.find((entry) => entry.id === decision.actionId)?.command;
     if (action)
       await this.send(decisionId, gameId, playerId, {
@@ -336,6 +407,74 @@ export class BotManager {
       action: action?.type ?? "none",
       spoke: decision.say !== null,
     });
+  }
+
+  private directMentions(state: GameState, playerId: UserId, events: GameEvent[]): GameEvent[] {
+    if (state.phase?.type !== "discussion" && state.phase?.type !== "voting") return [];
+    return events.filter(
+      (event) =>
+        event.kind === "chat.message" &&
+        event.actorUserId !== playerId &&
+        canViewEvent(event, playerId, state) &&
+        (event.payload.mentions ?? []).some((mention) => mention.userId === playerId),
+    );
+  }
+
+  private rememberPending(record: PhaseRecord, playerId: UserId, events: GameEvent[]): void {
+    const existing = record.pendingMentions.get(playerId) ?? [];
+    const byId = new Map(existing.map((event) => [event.id, event]));
+    for (const event of events) byId.set(event.id, event);
+    const ordered = [...byId.values()].sort((left, right) => left.id - right.id);
+    record.pendingMentions.set(playerId, ordered.slice(-this.options.config.BOT_PHASE_CHAT_LIMIT));
+  }
+
+  private async schedulePending(
+    gameId: GameId,
+    playerId: UserId,
+    phaseId: PhaseId,
+    config: BotConfig,
+    record: PhaseRecord,
+  ): Promise<void> {
+    const pending = record.pendingMentions.get(playerId);
+    if (!pending || pending.length === 0) return;
+    if (record.inFlight.has(playerId)) return;
+    const state = await this.coordinator.loadGameState(gameId);
+    if (record.inFlight.has(playerId)) return;
+    const currentPending = record.pendingMentions.get(playerId);
+    if (!currentPending || currentPending.length === 0) return;
+    const phase = state?.phase;
+    const player = state?.players[playerId];
+    if (
+      !state ||
+      !phase ||
+      state.status !== "running" ||
+      this.games.get(gameId) !== record ||
+      phase.id !== phaseId ||
+      (phase.type !== "discussion" && phase.type !== "voting") ||
+      player?.status !== "alive" ||
+      this.now() >= phase.endsAt
+    ) {
+      record.pendingMentions.delete(playerId);
+      return;
+    }
+    const used = record.turns.get(playerId) ?? 0;
+    if (used >= this.options.config.BOT_CHAT_TURNS) {
+      record.pendingMentions.delete(playerId);
+      return;
+    }
+    const hasWork =
+      getLegalCommands(state, playerId, this.now()).length > 0 ||
+      getSpeakableChannels(state, playerId, this.now()).length > 0;
+    if (!hasWork) {
+      record.pendingMentions.delete(playerId);
+      return;
+    }
+    // Reserve the turn and consume the pending batch together, before tracking
+    // the call, so commits racing this reservation cannot schedule duplicates.
+    record.turns.set(playerId, used + 1);
+    record.inFlight.add(playerId);
+    record.pendingMentions.delete(playerId);
+    this.track(() => this.decide(gameId, playerId, phaseId, used, config, record, currentPending));
   }
 
   /** The command ids are derived from the decision id, so a retry of the same

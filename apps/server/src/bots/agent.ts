@@ -12,6 +12,7 @@
 import { createRng } from "@werewolf/game-engine";
 import { type BotRuntimeConfig, loadBotConfig } from "./config.ts";
 import { type BotLogger, silentBotLogger } from "./log.ts";
+import { truncateUtf16 } from "./mentions.ts";
 import { BOT_SYSTEM_PROMPT, buildUserPrompt } from "./prompt.ts";
 import {
   type BotAgent,
@@ -22,7 +23,13 @@ import {
   BotProviderError,
 } from "./types.ts";
 
-const SILENT: BotDecision = { actionId: null, say: null, channel: null, done: true };
+const SILENT: BotDecision = {
+  actionId: null,
+  say: null,
+  channel: null,
+  mentionIds: [],
+  done: true,
+};
 
 /** Deterministic given the decision id, which is itself derived from the game,
  * player, phase and turn — so a replayed test picks the same action. */
@@ -31,7 +38,13 @@ export class FallbackBotAgent implements BotAgent {
     if (input.legalActions.length === 0) return Promise.resolve(SILENT);
     const rng = createRng(input.decisionId);
     const choice = input.legalActions[rng.int(input.legalActions.length)]!;
-    return Promise.resolve({ actionId: choice.id, say: null, channel: null, done: true });
+    return Promise.resolve({
+      actionId: choice.id,
+      say: null,
+      channel: null,
+      mentionIds: [],
+      done: true,
+    });
   }
 }
 
@@ -139,21 +152,39 @@ export class LlmBotAgent implements BotAgent {
       actionId: number | null;
       say: string | null;
       channel: string | null;
+      mentionIds: number[];
       done: boolean;
     },
     input: BotDecisionInput,
   ): BotDecision {
     const offered = input.legalActions.some((action) => action.id === decision.actionId);
-    const say = decision.say?.trim() ? decision.say.trim().slice(0, 300) : null;
+    const say = decision.say?.trim() ? truncateUtf16(decision.say.trim(), 300) : null;
+    const requested = decision.channel as (typeof input.speakableChannels)[number] | null;
     const channel =
-      decision.channel === "public" || decision.channel === "wolves"
-        ? decision.channel
+      requested !== null && input.speakableChannels.includes(requested)
+        ? requested
         : (input.speakableChannels[0] ?? null);
-    const maySpeak = channel !== null && input.speakableChannels.includes(channel);
+    const maySpeak = channel !== null;
+    const mentionIds: number[] = [];
+    const mentionedUsers = new Set<string>();
+    for (const id of decision.mentionIds) {
+      const candidate = input.mentionCandidates.find((entry) => entry.id === id);
+      if (
+        candidate &&
+        channel !== null &&
+        candidate.channels.includes(channel) &&
+        !mentionedUsers.has(candidate.userId)
+      ) {
+        mentionedUsers.add(candidate.userId);
+        mentionIds.push(id);
+      }
+      if (mentionIds.length === 8) break;
+    }
     return {
       actionId: offered ? decision.actionId : null,
       say: say !== null && maySpeak ? say : null,
-      channel: say !== null && maySpeak ? channel : null,
+      channel: (say !== null && maySpeak) || mentionIds.length > 0 ? channel : null,
+      mentionIds,
       done: decision.done,
     };
   }

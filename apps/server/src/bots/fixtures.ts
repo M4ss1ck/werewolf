@@ -25,6 +25,10 @@ import type {
   BotModelResponse,
 } from "./types.ts";
 
+type BotReply = (input: BotDecisionInput) => Omit<BotDecision, "mentionIds"> & {
+  mentionIds?: number[];
+};
+
 export const BOT_CONFIG: BotConfig = {
   botId: "fake",
   provider: "fake",
@@ -45,16 +49,18 @@ export function testBotConfig(overrides: Record<string, string> = {}): BotRuntim
 export class RecordingBotAgent implements BotAgent {
   readonly inputs: BotDecisionInput[] = [];
   constructor(
-    private readonly reply: (input: BotDecisionInput) => BotDecision = () => ({
+    private readonly reply: BotReply = () => ({
       actionId: null,
       say: null,
       channel: null,
+      mentionIds: [],
       done: true,
     }),
   ) {}
   decide(input: BotDecisionInput): Promise<BotDecision> {
     this.inputs.push(input);
-    return Promise.resolve(this.reply(input));
+    const reply = this.reply(input);
+    return Promise.resolve({ ...reply, mentionIds: reply.mentionIds ?? [] });
   }
   forPlayer(playerId: string): BotDecisionInput[] {
     return this.inputs.filter((input) => input.playerId === playerId);
@@ -71,14 +77,18 @@ export class GatedBotAgent implements BotAgent {
   private release: (() => void)[] = [];
   constructor(
     private readonly gate: (input: BotDecisionInput) => boolean,
-    private readonly reply: (input: BotDecisionInput) => BotDecision,
+    private readonly reply: BotReply,
   ) {}
   async decide(input: BotDecisionInput): Promise<BotDecision> {
     this.inputs.push(input);
-    if (!this.gate(input)) return this.reply(input);
+    if (!this.gate(input)) {
+      const reply = this.reply(input);
+      return { ...reply, mentionIds: reply.mentionIds ?? [] };
+    }
     this.gated.push(input);
     await new Promise<void>((resolve) => this.release.push(resolve));
-    return this.reply(input);
+    const reply = this.reply(input);
+    return { ...reply, mentionIds: reply.mentionIds ?? [] };
   }
   /** Resolves every outstanding call. */
   releaseAll() {

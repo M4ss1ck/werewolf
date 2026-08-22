@@ -2,11 +2,12 @@
 // the same small deterministic fallback rather than at a malformed command.
 
 import { describe, expect, test } from "bun:test";
-import type { GameId, PhaseId, UserId, ViewerGameSnapshot } from "@werewolf/protocol";
+import type { GameEvent, GameId, PhaseId, UserId, ViewerGameSnapshot } from "@werewolf/protocol";
 import { FallbackBotAgent, LlmBotAgent } from "./agent.ts";
 import { BOT_CONFIG, FakeModelProvider, testBotConfig } from "./fixtures.ts";
+import { buildUserPrompt } from "./prompt.ts";
 import { OpenAiCompatibleProvider } from "./provider-openai.ts";
-import { type BotDecisionInput, BotProviderError } from "./types.ts";
+import { type BotDecisionInput, BotDecisionSchema, BotProviderError } from "./types.ts";
 
 /** The fallback picked something, and it was one of the offered ids. */
 function expectLegalPick(actionId: number | null) {
@@ -53,6 +54,7 @@ function input(overrides: Partial<BotDecisionInput> = {}): BotDecisionInput {
     playerView,
     visibleEvents: [],
     phaseChat: [],
+    directMentions: [],
     digest: [],
     legalActions: [
       {
@@ -62,6 +64,7 @@ function input(overrides: Partial<BotDecisionInput> = {}): BotDecisionInput {
       { id: 1, command: { type: "vote.abstain", phaseId: 1 as PhaseId, payload: {} } },
     ],
     speakableChannels: ["public"],
+    mentionCandidates: [],
     ...overrides,
   };
 }
@@ -109,7 +112,13 @@ describe("fallback bot agent", () => {
 
   test("stays silent when there is nothing legal to do", async () => {
     const decision = await new FallbackBotAgent().decide(input({ legalActions: [] }));
-    expect(decision).toEqual({ actionId: null, say: null, channel: null, done: true });
+    expect(decision).toEqual({
+      actionId: null,
+      say: null,
+      channel: null,
+      mentionIds: [],
+      done: true,
+    });
   });
 
   test("always says done, so the manager can ready the seat", async () => {
@@ -128,8 +137,85 @@ describe("llm bot agent", () => {
       actionId: 1,
       say: "I'll sit this one out.",
       channel: "public",
+      mentionIds: [],
       done: false,
     });
+  });
+
+  test("accepts mention ids, caps them, and preserves legal speech", async () => {
+    const { agent } = agentWith([
+      JSON.stringify({
+        actionId: 1,
+        say: "Look here",
+        channel: "public",
+        mentionIds: [1, 2, 3, 4, 5, 6, 7, 8, 9],
+      }),
+    ]);
+    const result = await agent.decide(
+      input({
+        mentionCandidates: [
+          { id: 1, userId: id("p1"), displayName: "Tobias", channels: ["public"] },
+          { id: 2, userId: id("p2"), displayName: "Mira", channels: ["public"] },
+        ],
+      }),
+    );
+    expect(result.mentionIds).toEqual([1, 2]);
+    expect(result.say).toBe("Look here");
+  });
+
+  test("missing and null mention ids become empty, while a ninth choice is ignored", async () => {
+    expect(BotDecisionSchema.parse({}).mentionIds).toEqual([]);
+    expect(BotDecisionSchema.parse({ mentionIds: null }).mentionIds).toEqual([]);
+    const parsed = BotDecisionSchema.parse({ mentionIds: [1, 2, 3, 4, 5, 6, 7, 8, 9] });
+    expect(parsed.mentionIds).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+  });
+
+  test("caps speech at 300 UTF-16 units without splitting emoji", async () => {
+    const { agent } = agentWith([
+      JSON.stringify({ actionId: null, say: "😀".repeat(200), channel: "public" }),
+    ]);
+    const result = await agent.decide(input());
+    expect(result.say).toBe("😀".repeat(150));
+    expect(result.say!.length).toBe(300);
+  });
+
+  test("falls back to the first available channel and supports cult", async () => {
+    const { agent } = agentWith([
+      JSON.stringify({ actionId: null, say: "Cult news", channel: "wolves" }),
+    ]);
+    const result = await agent.decide(input({ speakableChannels: ["cult"] }));
+    expect(result.channel).toBe("cult");
+    expect(result.say).toBe("Cult news");
+  });
+
+  test("prompt exposes stable mention choices and structured direct mentions", () => {
+    const event = {
+      id: 1,
+      kind: "chat.message",
+      scope: "public",
+      actorUserId: id("p1"),
+      createdAt: 1,
+      payload: {
+        channel: "public",
+        text: "@Mira please answer",
+        mentions: [{ userId: id("p0"), start: 0, length: 5 }],
+      },
+    } as GameEvent;
+    const prompt = buildUserPrompt(
+      input({
+        visibleEvents: [event],
+        directMentions: [event],
+        mentionCandidates: [
+          { id: 1, userId: id("p0"), displayName: "Mira", channels: ["public"] },
+          { id: 2, userId: id("p1"), displayName: "Tobias", channels: ["public", "cult"] },
+        ],
+      }),
+    );
+    expect(prompt).toContain("1. @Mira (public)");
+    expect(prompt).toContain("2. @Tobias (public, cult)");
+    expect(prompt).toContain('"mentionIds": [numeric ids]');
+    expect(prompt).toContain("DIRECT MENTIONS (newest last)");
+    expect(prompt).toContain("DIRECTLY MENTIONS YOU");
   });
 
   test("a decision without a done field parses and is treated as still talking", async () => {
@@ -176,14 +262,14 @@ describe("llm bot agent", () => {
     expect(decision.say).toBe("Tobias is lying.");
   });
 
-  test("drops a line addressed to a channel this seat cannot speak on", async () => {
+  test("falls back to the first channel when the model picks one this seat cannot use", async () => {
     const { agent } = agentWith([
       JSON.stringify({ actionId: 0, say: "Take Mira tonight.", channel: "wolves" }),
     ]);
     const decision = await agent.decide(input({ speakableChannels: ["public"] }));
     expect(decision.actionId).toBe(0);
-    expect(decision.say).toBeNull();
-    expect(decision.channel).toBeNull();
+    expect(decision.say).toBe("Take Mira tonight.");
+    expect(decision.channel).toBe("public");
   });
 
   test("stays silent when no channel is open at all", async () => {
