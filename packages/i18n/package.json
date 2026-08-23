@@ -12,6 +12,6 @@
   },
   "dependencies": {
     "@werewolf/protocol": "workspace:*",
-    "i18next": "^25.6.0"
+    "i18next": "^26.4.0"
   }
 }

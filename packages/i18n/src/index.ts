@@ -36,11 +36,8 @@ export function createI18n(locale: Locale = FALLBACK_LOCALE): i18n {
       en: { translation: en },
       es: { translation: es },
     },
-    // Bundled resources: no async loading, so `t` is ready synchronously.
-    initImmediate: false,
     // No DOM: values are plain text and player names must not be escaped.
     interpolation: { escapeValue: false },
-    showSupportNotice: false,
   });
   return instance;
 }
