@@ -16,7 +16,7 @@
     "@libsql/client": "^0.15.15",
     "@werewolf/game-engine": "workspace:*",
     "@werewolf/protocol": "workspace:*",
-    "drizzle-orm": "^0.44.6"
+    "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {
     "drizzle-kit": "^0.31.5"
