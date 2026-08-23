@@ -163,7 +163,6 @@ function props(overrides: Partial<ComponentProps<typeof GlobalChatScreen>> = {})
   return {
     candidates: [],
     draft: { text: "", mentions: [] },
-    error: undefined,
     jumpToLatestToken: 0,
     mentionSource: {
       kind: "remote" as const,
@@ -321,7 +320,6 @@ test("keeps exact draft ranges and viewport on an invalid-mention failure", () =
     <GlobalChatScreen
       {...props({
         draft,
-        error: { code: "INVALID_MENTION" },
         onInvalidMention,
         viewport: {
           virtuoso: { ranges: [], scrollTop: 12 },
@@ -343,17 +341,21 @@ test("keeps exact draft ranges and viewport on an invalid-mention failure", () =
       anchorOffset: -8,
     }),
   );
-  expect(screen.getByRole("alert")).toHaveTextContent("INVALID_MENTION");
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "invalid-mention" }));
   expect(onInvalidMention).toHaveBeenCalledOnce();
 });
 
-test("send errors are surfaced without changing the controlled draft", () => {
+test("a failed send keeps the controlled draft and renders no error region", async () => {
   renderWithI18n(
     <GlobalChatScreen
-      {...props({ draft: { text: "hello", mentions: [] }, error: new Error("failed") })}
+      {...props({
+        draft: { text: "hello", mentions: [] },
+        onSend: vi.fn().mockRejectedValue(new Error("failed")),
+      })}
     />,
   );
-  expect(screen.getByRole("alert")).toHaveTextContent("Error: failed");
-  expect(screen.getByLabelText("Message")).toHaveValue("hello");
+  fireEvent.submit(screen.getByLabelText("Message").closest("form")!);
+  await vi.waitFor(() => expect(screen.getByLabelText("Message")).toHaveValue("hello"));
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });

@@ -29,6 +29,7 @@ import type { ConversationReadState } from "../chat/read-state.ts";
 import type { ChatReadStoreController } from "../chat/read-store.ts";
 import { ErrorMessage } from "../components.tsx";
 import { i18n } from "../i18n/i18n.ts";
+import { ToastProvider } from "../toast.tsx";
 import { Act } from "./act.tsx";
 import { CreateGameScreen } from "./create-game.tsx";
 import { GameScreen } from "./game.tsx";
@@ -1086,7 +1087,11 @@ test("game: a rejected command renders the error and keeps the typed text", asyn
   const snapshot = makeGameSnapshot({
     game: { phase: { id: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 } },
   });
-  renderWithI18n(<GameScreen initial={snapshot} onUpdate={noopUpdate} />);
+  renderWithI18n(
+    <ToastProvider>
+      <GameScreen initial={snapshot} onUpdate={noopUpdate} />
+    </ToastProvider>,
+  );
 
   fireEvent.click(screen.getByRole("button", { name: "Talk" }));
   const input = screen.getByLabelText(/Message/);
@@ -1110,7 +1115,11 @@ test("game: a failed send does not let a later remote row consume stale pending 
   vi.spyOn(api, "postCommand").mockRejectedValue({ code: "PHASE_CLOSED" });
   const read = fakeReadStore();
   const snapshot = makeGameSnapshot();
-  renderWithI18n(<GameScreen initial={snapshot} onUpdate={noopUpdate} readStore={read.store} />);
+  renderWithI18n(
+    <ToastProvider>
+      <GameScreen initial={snapshot} onUpdate={noopUpdate} readStore={read.store} />
+    </ToastProvider>,
+  );
   const connection = MockLiveGameConnection.instances[0];
   expect(connection).toBeDefined();
 

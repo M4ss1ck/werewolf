@@ -9,6 +9,7 @@ import type {
 } from "@werewolf/protocol";
 import { forwardRef, type ReactElement, useEffect, useImperativeHandle, useRef } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { ToastProvider } from "./toast.tsx";
 
 const virtuosoControl = vi.hoisted(() => ({
   scrolls: [] as { location: unknown; rowPresent: boolean }[],
@@ -1660,7 +1661,7 @@ test("holds at most 1000 global rows while retaining the truncation boundary", a
   expect(screen.getByText("Earlier messages are no longer available")).toBeInTheDocument();
 });
 
-test("clears the chat send error when the route changes", async () => {
+test("a failed send shows the error as a toast that survives route changes", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>((input, init) => {
@@ -1677,20 +1678,24 @@ test("clears the chat send error when the route changes", async () => {
     }),
   );
   window.history.replaceState({}, "", "/chat");
-  render(<App />);
+  render(
+    <ToastProvider>
+      <App />
+    </ToastProvider>,
+  );
 
   const input = await screen.findByLabelText("Message");
   fireEvent.change(input, { target: { value: "hello" } });
   fireEvent.click(screen.getByLabelText("Send message"));
 
-  await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("too quickly"));
+  await screen.findByText(/too quickly/);
 
   fireEvent.click(screen.getByRole("button", { name: "Games" }));
   await screen.findByRole("heading", { name: "Open games" });
 
   fireEvent.click(screen.getByRole("button", { name: "Chat" }));
   await screen.findByRole("heading", { name: "Global chat" });
-  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(screen.getByText(/too quickly/)).toBeInTheDocument();
 });
 
 test("preserves a failed draft and refreshes current candidates after INVALID_MENTION", async () => {
@@ -1717,14 +1722,18 @@ test("preserves a failed draft and refreshes current candidates after INVALID_ME
     }),
   );
   window.history.replaceState({}, "", "/chat");
-  render(<App />);
+  render(
+    <ToastProvider>
+      <App />
+    </ToastProvider>,
+  );
 
   const input = await screen.findByLabelText("Message");
   fireEvent.change(input, { target: { value: "hello @abc" } });
   await waitFor(() => expect(candidateCalls).toBe(1), { timeout: 1_000 });
   fireEvent.click(screen.getByLabelText("Send message"));
 
-  await screen.findByRole("alert");
+  await screen.findByText(/no longer valid/);
   expect(screen.getByLabelText("Message")).toHaveValue("hello @abc");
   await waitFor(() => expect(candidateCalls).toBeGreaterThanOrEqual(2), { timeout: 1_000 });
 });

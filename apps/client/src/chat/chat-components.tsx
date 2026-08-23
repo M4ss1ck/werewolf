@@ -3,7 +3,7 @@ import { CHAT_MAX_TEXT_LENGTH, normalizeMentionSearch } from "@werewolf/protocol
 import { type CSSProperties, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { Avatar, ErrorMessage } from "../components.tsx";
+import { Avatar } from "../components.tsx";
 import { allocateIdentityMarks, type IdentityMark, IdentitySigil } from "./identity.tsx";
 import {
   applyChatEdit,
@@ -34,7 +34,6 @@ export type ChatComposerProps = {
   draft: ChatDraft;
   source: MentionCandidateSource;
   readOnly: boolean;
-  error?: unknown;
   onDraftChange(draft: ChatDraft): void;
   onSend(content: ChatContent): Promise<void>;
   onSent(): void;
@@ -60,7 +59,6 @@ export function ChatComposer({
   draft,
   source,
   readOnly,
-  error,
   onDraftChange,
   onSend,
   onSent,
@@ -350,7 +348,6 @@ export function ChatComposer({
           </div>
         )}
       </div>
-      {error !== undefined && <ErrorMessage error={error} />}
       <button
         aria-label={sendLabel}
         className="chat-composer__send"

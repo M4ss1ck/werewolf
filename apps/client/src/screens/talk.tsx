@@ -24,6 +24,7 @@ import {
 } from "../chat/model.ts";
 import { unreadSummary } from "../chat/read-state.ts";
 import { Chip } from "../components.tsx";
+import { useToast } from "../toast.tsx";
 
 export type GameChatRecord = {
   draft: ChatDraft;
@@ -60,7 +61,6 @@ export function Talk({
   activeChannel: controlledChannel,
   records: controlledRecords,
   readStore,
-  errors,
   onChannelChange,
   onDraftChange,
   onSend,
@@ -76,7 +76,6 @@ export function Talk({
   activeChannel?: ChatChannel;
   records?: Record<ChatChannel, GameChatRecord>;
   readStore?: ChatReadStoreController;
-  errors?: Partial<Record<ChatChannel, unknown>>;
   onChannelChange?(channel: ChatChannel): void;
   onDraftChange?(draft: ChatDraft): void;
   onSend?(content: ChatContent): Promise<void>;
@@ -86,6 +85,7 @@ export function Talk({
   onMarkThrough?(latestId: number): void;
 }) {
   const { t } = useTranslation();
+  const { showError } = useToast();
   const [localChannel, setLocalChannel] = useState<ChatChannel>("public");
   const [localRecords, setLocalRecords] = useState(emptyRecords);
   const activeChannel = controlledChannel ?? localChannel;
@@ -112,7 +112,7 @@ export function Talk({
         payload: { channel: activeChannel, ...content },
       });
     });
-  const reportError = onError ?? (() => undefined);
+  const reportError = onError ?? showError;
   const reportSnapshot = onSnapshot ?? (() => undefined);
   const reportVisible = onVisible ?? (() => undefined);
   const reportMarkThrough = onMarkThrough ?? (() => undefined);
@@ -204,7 +204,6 @@ export function Talk({
       <ChatComposer
         className="border-t border-paper/10 bg-bar px-3.5 py-2.5"
         draft={record.draft}
-        error={errors?.[activeChannel]}
         inputId={`game-${activeChannel}-message`}
         label={t("ui.messageLabel")}
         onDraftChange={changeDraft}

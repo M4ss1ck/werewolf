@@ -484,7 +484,7 @@ describe("ChatComposer async search and controlled errors", () => {
     expect(screen.getByText("1 results")).toBeInTheDocument();
   });
 
-  test("success clears only after resolve and rejection reports translated errors without changing draft", async () => {
+  test("success clears only after resolve and rejection reports through onError without changing draft", async () => {
     const send = deferred<void>();
     const onError = vi.fn();
     const onInvalidMention = vi.fn();
@@ -497,7 +497,6 @@ describe("ChatComposer async search and controlled errors", () => {
         text: "@Alice ",
         mentions: [{ userId: "alice" as never, start: 0, length: 6 }],
       });
-      const [error, setError] = useState<unknown>();
       restoreDraft = () =>
         setCurrent({
           text: "@Alice ",
@@ -512,14 +511,10 @@ describe("ChatComposer async search and controlled errors", () => {
           draft={current}
           source={remoteSource}
           readOnly={false}
-          error={error}
           onDraftChange={setCurrent}
           onSend={() => (rejectNext ? rejected() : send.promise)}
           onSent={onSent}
-          onError={(sendError) => {
-            onError(sendError);
-            setError(sendError);
-          }}
+          onError={onError}
           onInvalidMention={onInvalidMention}
         />
       );
@@ -536,10 +531,32 @@ describe("ChatComposer async search and controlled errors", () => {
     rejectNext = true;
     act(restoreDraft);
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Send" })));
-    expect(screen.getByRole("alert")).toHaveTextContent("That mention is no longer valid");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(onError).toHaveBeenCalled();
     expect(onInvalidMention).toHaveBeenCalled();
     expect(screen.getByRole("combobox")).toHaveValue("@Alice ");
+  });
+
+  test("composer renders no error region even after a failed send", async () => {
+    const onSend = vi.fn().mockRejectedValue(new ApiError("PHASE_CLOSED"));
+    render(
+      wrap(
+        <ChatComposer
+          inputId="chat"
+          label="Message"
+          placeholder="Say"
+          sendLabel="Send"
+          draft={{ text: "hello", mentions: [] }}
+          source={source}
+          readOnly={false}
+          onDraftChange={vi.fn()}
+          onSend={onSend}
+          onSent={vi.fn()}
+        />,
+      ),
+    );
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Send" })));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   test("Escape closes an in-flight query and ignores its late response", async () => {

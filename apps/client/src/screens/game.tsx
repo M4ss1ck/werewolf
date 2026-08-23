@@ -24,6 +24,7 @@ import {
 } from "../chat/model.ts";
 import { unreadSummary } from "../chat/read-state.ts";
 import { Chip, ErrorMessage, PhaseHeader, TabBar } from "../components.tsx";
+import { useToast } from "../toast.tsx";
 import { Act } from "./act.tsx";
 import { INTEL_KINDS, Me } from "./me.tsx";
 import { type GameChatRecord, Talk } from "./talk.tsx";
@@ -95,13 +96,13 @@ export function GameScreen({
   readStore?: ChatReadStoreController;
 }) {
   const { t } = useTranslation();
+  const { showError, dismiss } = useToast();
   const [snapshot, setSnapshot] = useState(initial);
   const [events, setEvents] = useState<GameEvent[]>([]);
   const [status, setStatus] = useState<LiveStatus>("connected");
   const [tab, setTab] = useState<TabId>("village");
   const [channel, setChannel] = useState<ChatChannel>("public");
   const [records, setRecords] = useState<Record<ChatChannel, GameChatRecord>>(emptyRecords);
-  const [chatErrors, setChatErrors] = useState<Partial<Record<ChatChannel, unknown>>>({});
   const [commandError, setCommandError] = useState<{
     phaseId: PhaseId | undefined;
     error: unknown;
@@ -347,10 +348,10 @@ export function GameScreen({
       await send({ type: "chat.send", phaseId: phase.id, payload: { channel, ...content } });
       pending.httpSettled = true;
       if (pending.rowReceived) removePendingSend(channel, pending.attemptId);
-      setChatErrors((current) => ({ ...current, [channel]: undefined }));
+      dismiss();
     } catch (error) {
       removePendingSend(channel, pending.attemptId);
-      setChatErrors((current) => ({ ...current, [channel]: error }));
+      showError(error);
       throw error;
     }
   };
@@ -417,7 +418,6 @@ export function GameScreen({
           <Talk
             activeChannel={channel}
             chatRows={rows}
-            errors={chatErrors}
             onChannelChange={setChannel}
             onDraftChange={(next: ChatDraft) =>
               updateRecords((current) => ({
@@ -425,7 +425,6 @@ export function GameScreen({
                 [channel]: { ...current[channel], draft: next },
               }))
             }
-            onError={(error) => setChatErrors((current) => ({ ...current, [channel]: error }))}
             onMarkThrough={(latest) =>
               readStore?.markThrough(conversationKey(snapshot.game.id, channel), latest)
             }

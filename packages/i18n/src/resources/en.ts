@@ -341,6 +341,7 @@ export const en = {
       count_other: "{{count}} seconds remaining",
     },
     sendMessage: "Send message",
+    dismiss: "Dismiss",
     publicChat: "Public chat",
     wolfChat: "Wolf chat",
     graveChat: "Grave chat",

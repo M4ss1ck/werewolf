@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
 import { clearStoredTokenOnCookieRuntime } from "./auth/token.ts";
 import "./index.css";
+import { ToastProvider } from "./toast.tsx";
 
 const container = document.getElementById("root");
 
@@ -15,6 +16,8 @@ clearStoredTokenOnCookieRuntime();
 
 createRoot(container).render(
   <StrictMode>
-    <App />
+    <ToastProvider>
+      <App />
+    </ToastProvider>
   </StrictMode>,
 );

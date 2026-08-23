@@ -340,6 +340,7 @@ export const es: TranslationResource = {
       count_other: "quedan {{count}} segundos",
     },
     sendMessage: "Enviar mensaje",
+    dismiss: "Descartar",
     publicChat: "Chat público",
     wolfChat: "Chat de los lobos",
     graveChat: "Chat de los muertos",

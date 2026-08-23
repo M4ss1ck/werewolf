@@ -48,6 +48,7 @@ import {
   SignInScreen,
   UsernameScreen,
 } from "./screens/index.ts";
+import { useToast } from "./toast.tsx";
 
 export function App() {
   return (
@@ -185,6 +186,7 @@ function SignedInShell({
   onRefreshSession: () => void;
 }) {
   const { t } = useTranslation();
+  const { showError } = useToast();
   const userId = session.user.id as UserId;
   const username = session.user.username!;
   const [route, setRoute] = useState<Route>(currentRoute());
@@ -196,7 +198,6 @@ function SignedInShell({
   const snapshotRequest = useRef(0);
   const [chat, setChat] = useState<ChatState>(initialChatState);
   const chatRef = useRef(chat);
-  const [chatSendError, setChatSendError] = useState<unknown>();
   const [draft, setDraft] = useState<ChatDraft>(EMPTY_CHAT_DRAFT);
   const [viewport, setViewport] = useState<ChatViewportSnapshot | undefined>();
   const [jumpToLatestToken, setJumpToLatestToken] = useState(0);
@@ -232,7 +233,6 @@ function SignedInShell({
   }, []);
 
   useEffect(() => {
-    setChatSendError(undefined);
     const requestId = ++snapshotRequest.current;
     setSnapshot(null);
     setSnapshotRouteKey(undefined);
@@ -408,7 +408,6 @@ function SignedInShell({
     const next = withPostedMessage(chatRef.current, message);
     chatRef.current = next;
     setChat(next);
-    setChatSendError(undefined);
     if (wasPresent) {
       markGlobalThrough(message.id);
     } else if (next.messages.some((row) => row.id === message.id)) {
@@ -449,11 +448,10 @@ function SignedInShell({
         <GlobalChatScreen
           candidates={mentionCandidates}
           draft={draft}
-          error={chatSendError}
           jumpToLatestToken={jumpToLatestToken}
           mentionSource={mentionSource}
           onDraftChange={setDraft}
-          onError={(error) => setChatSendError(error)}
+          onError={(error) => showError(error)}
           onInvalidMention={() => setCandidateRefreshToken((token) => token + 1)}
           onLoadOlder={loadOlderChat}
           onMarkThrough={markGlobalThrough}

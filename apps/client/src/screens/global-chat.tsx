@@ -21,7 +21,6 @@ export function GlobalChatScreen({
   mentionSource,
   viewport,
   jumpToLatestToken,
-  error,
   onDraftChange,
   onSend,
   onSent,
@@ -40,7 +39,6 @@ export function GlobalChatScreen({
   mentionSource: MentionCandidateSource;
   viewport?: ChatViewportSnapshot;
   jumpToLatestToken: number;
-  error?: unknown;
   onDraftChange(draft: ChatDraft): void;
   onSend(content: ChatContent): Promise<void>;
   onSent(): void;
@@ -89,7 +87,6 @@ export function GlobalChatScreen({
       <ChatComposer
         className="border-t border-paper/10 bg-bar px-3.5 py-2.5"
         draft={draft}
-        error={error}
         inputId="global-chat-message"
         label={t("ui.messageLabel")}
         onDraftChange={onDraftChange}
