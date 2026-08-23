@@ -46,21 +46,33 @@ services:
     ports:
       - "3000:3000"
       - "1420:1420"
+    # Reconcile dependencies with the lockfile on every boot, then serve. A
+    # no-op in milliseconds when they already match, so this costs nothing in
+    # the steady state and makes a stale container impossible. --frozen-lockfile
+    # is load-bearing twice over: it fails loudly on a manifest the lockfile
+    # does not cover, and it guarantees nothing writes bun.lock back into the
+    # bind mount as root.
+    command: sh -c "bun install --frozen-lockfile && bun run dev"
     volumes:
       # Live source, so edits on the host reload in the container.
       - .:/app
-      # Keep the image's installed dependencies rather than the host's. Bun
-      # installs a workspace's links into that workspace's OWN node_modules,
-      # not into the root one (the production Dockerfile hit this too), so the
-      # root volume alone leaves the bind mount above masking every one of them
-      # and the server dies on boot with "Cannot find module 'better-auth'".
-      - /app/node_modules
-      - /app/apps/client/node_modules
-      - /app/apps/server/node_modules
-      - /app/packages/protocol/node_modules
-      - /app/packages/game-engine/node_modules
-      - /app/packages/db/node_modules
-      - /app/packages/i18n/node_modules
+      # Dependencies live here and nowhere else. Bun installs a workspace's
+      # links into that workspace's OWN node_modules, not into the root one, so
+      # every one of them needs a volume or the bind mount above hides it.
+      #
+      # NAMED, not anonymous, and filled by the `command:` below rather than by
+      # the image. Anonymous volumes survive container recreation, so baking
+      # dependencies into the image gave two sources of truth with the stale
+      # one winning: `--build` could not reach a running container and you got
+      # "Cannot find module" until you also remembered --renew-anon-volumes.
+      # Installing at boot makes the lockfile the only authority.
+      - deps-root:/app/node_modules
+      - deps-client:/app/apps/client/node_modules
+      - deps-server:/app/apps/server/node_modules
+      - deps-protocol:/app/packages/protocol/node_modules
+      - deps-game-engine:/app/packages/game-engine/node_modules
+      - deps-db:/app/packages/db/node_modules
+      - deps-i18n:/app/packages/i18n/node_modules
       # Persist the development database across restarts.
       - ./data:/app/data
       # Read-only: the plugin only needs to read the host's pairing token.
@@ -71,3 +83,12 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+
+volumes:
+  deps-root:
+  deps-client:
+  deps-server:
+  deps-protocol:
+  deps-game-engine:
+  deps-db:
+  deps-i18n:

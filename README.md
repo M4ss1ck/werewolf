@@ -50,19 +50,27 @@ and proxies `/api` to the API on port 3000. Sources are bind-mounted, so edits
 on the host reload in the container. The database is a file under `./data`, so
 it survives restarts and needs no Turso account.
 
-Dependencies live in the image, not in the bind mount — `/app/node_modules` is an
-anonymous volume filled by `bun install` when the image was built. Installing a
-package on the host therefore does not reach the container. After any change to a
-`package.json`, rebuild and replace that volume:
+Dependencies live in named volumes, one per workspace, and the container fills
+them from `bun.lock` on every boot. Installing or upgrading a package on the
+host therefore reaches the container by restarting it — no rebuild, no volume
+juggling:
 
 ```bash
-docker compose -f docker-compose.dev.yml up --build --renew-anon-volumes
+docker compose -f docker-compose.dev.yml restart app
 ```
 
-`--build` on its own is not enough: anonymous volumes survive container
-recreation, so the stale `node_modules` comes back and Vite fails with `Failed to
-resolve import`. The healthcheck only probes the API, so the container still
-reports healthy while the client is broken.
+The install is a no-op in a few milliseconds when the lockfile and the volumes
+already agree, so it costs nothing in the steady state. It runs with
+`--frozen-lockfile`, which fails loudly on a manifest the lockfile does not
+cover and keeps anything from writing `bun.lock` back as root.
+
+One gap: `bun install` adds and upgrades, but does not prune. **Removing** a
+dependency leaves it resolvable inside the container, so an import that would
+fail in CI still works locally. Reset the volumes when you remove one:
+
+```bash
+docker compose -f docker-compose.dev.yml down -v
+```
 
 `docker-compose.yml` (no `.dev`) is the production stack instead: one container
 serving the built SPA and the API together.

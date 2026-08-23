@@ -11,18 +11,12 @@ WORKDIR /app
 # so Vite's WebSocket proxy cannot forward /api/*/live under Bun.
 RUN apk add --no-cache git curl nodejs
 
-# Dependencies are installed into the image so a bind mount of the source does
-# not drag node_modules across the host boundary. docker-compose.dev.yml mounts
-# an anonymous volume over /app/node_modules to keep this layer.
-COPY package.json bun.lock ./
-COPY apps/client/package.json apps/client/
-COPY apps/server/package.json apps/server/
-COPY packages/protocol/package.json packages/protocol/
-COPY packages/game-engine/package.json packages/game-engine/
-COPY packages/db/package.json packages/db/
-COPY packages/i18n/package.json packages/i18n/
-RUN bun install --frozen-lockfile
-
+# Deliberately no `bun install` here. docker-compose.dev.yml mounts named
+# volumes over every node_modules directory and fills them from the lockfile on
+# each boot, so anything installed into the image would be shadowed and never
+# used — two sources of truth with the stale one winning. The sources are
+# bind-mounted over this COPY in development; it exists so the image is still
+# runnable on its own.
 COPY . .
 
 EXPOSE 3000 1420
