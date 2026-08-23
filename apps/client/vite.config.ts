@@ -1,7 +1,11 @@
 import { reticle } from "@reticlehq/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig, type PluginOption } from "vite";
+import type { PluginOption } from "vite";
+// vitest 4 dropped the module augmentation that taught vite's own
+// defineConfig about the `test` key; vitest/config re-exports the same
+// function with it typed.
+import { defineConfig } from "vitest/config";
 
 const SERVER_ORIGIN = process.env.VITE_SERVER_ORIGIN ?? "http://localhost:3000";
 
