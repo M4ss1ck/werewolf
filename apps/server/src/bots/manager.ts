@@ -139,7 +139,7 @@ export class BotManager {
     for (const player of Object.values(state.players)) {
       const controller = player.controller;
       if (controller?.type !== "bot" || player.status !== "alive") continue;
-      const directMentions = this.directMentions(state, player.id, events);
+      const directMentions = this.directMentions(state, player.id, events, now);
       if (record.inFlight.has(player.id)) {
         if (directMentions.length > 0) this.rememberPending(record, player.id, directMentions);
         continue;
@@ -150,8 +150,10 @@ export class BotManager {
       }
       const used = record.turns.get(player.id) ?? 0;
       // First turn of the phase is unconditional; a further turn only happens
-      // in discussion or voting, and only because somebody else said something.
-      if (used > 0 && !this.reactsToChat(state, player.id, used, events, directMentions)) continue;
+      // in discussion or voting, or at night on a secret channel, and only
+      // because somebody else said something.
+      if (used > 0 && !this.reactsToChat(state, player.id, used, events, directMentions, now))
+        continue;
       const mustAct = getLegalCommands(state, player.id, now).length > 0;
       const maySpeak = getSpeakableChannels(state, player.id, now).length > 0;
       // A villager at night has neither an action nor a channel: no call, no cost.
@@ -177,26 +179,41 @@ export class BotManager {
     return record;
   }
 
+  /** A chat message the bot may answer: anything it can hear during the day,
+   * and at night only a message on a secret channel it is entitled to speak
+   * on. Public chat is closed at night, and a channel the bot cannot speak on
+   * must never reach it. */
+  private chatWakes(state: GameState, playerId: UserId, event: GameEvent, now: number): boolean {
+    if (event.kind !== "chat.message" || event.actorUserId === playerId) return false;
+    if (!canViewEvent(event, playerId, state)) return false;
+    if (state.phase?.type === "discussion" || state.phase?.type === "voting") return true;
+    if (state.phase?.type === "night") {
+      return (
+        event.scope === "faction" &&
+        (event.scopeId === "wolves" || event.scopeId === "cult") &&
+        getSpeakableChannels(state, playerId, now).includes(event.scopeId)
+      );
+    }
+    return false;
+  }
+
   /** A bot answers back in a discussion or voting phase when another player
-   * spoke where it could hear, up to its per-phase turn budget. The budget is
-   * the hard cap on model calls. */
+   * spoke where it could hear, up to its per-phase turn budget. At night it
+   * answers only on a secret channel it is entitled to speak on, so the pack
+   * can build a story in its own channel. The budget is the hard cap on model
+   * calls. */
   private reactsToChat(
     state: GameState,
     playerId: UserId,
     used: number,
     events: GameEvent[],
     directMentions: GameEvent[],
+    now: number,
   ): boolean {
-    if (state.phase?.type !== "discussion" && state.phase?.type !== "voting") return false;
     if (used >= this.options.config.BOT_CHAT_TURNS) return false;
     return (
       directMentions.length > 0 ||
-      events.some(
-        (event) =>
-          event.kind === "chat.message" &&
-          event.actorUserId !== playerId &&
-          canViewEvent(event, playerId, state),
-      )
+      events.some((event) => this.chatWakes(state, playerId, event, now))
     );
   }
 
@@ -382,12 +399,15 @@ export class BotManager {
     // the phase at its floor the moment every bot had spoken once, and never
     // readying would hold every phase to its hard deadline.
     //
-    // At night `reactsToChat` is always false, so a bot's first decision is
-    // also its last: `moreTurnsPossible` is false and the seat readies
-    // unconditionally. That is intended — a night action is a single decision,
-    // not a conversation — so do not "fix" it.
+    // At night a seat keeps its turns only while it can speak on a secret
+    // channel it is entitled to: the pack needs to build a story in its own
+    // channel while playing innocent in public. A villager at night has no
+    // such channel, so its first decision is still its last.
     const moreTurnsPossible =
-      (input.phase === "discussion" || input.phase === "voting") &&
+      (input.phase === "discussion" ||
+        input.phase === "voting" ||
+        (input.phase === "night" &&
+          (speakableChannels.includes("wolves") || speakableChannels.includes("cult")))) &&
       turn + 1 < this.options.config.BOT_CHAT_TURNS;
     if (decision.done || !moreTurnsPossible)
       await this.send(decisionId, gameId, playerId, {
@@ -410,13 +430,16 @@ export class BotManager {
     });
   }
 
-  private directMentions(state: GameState, playerId: UserId, events: GameEvent[]): GameEvent[] {
-    if (state.phase?.type !== "discussion" && state.phase?.type !== "voting") return [];
+  private directMentions(
+    state: GameState,
+    playerId: UserId,
+    events: GameEvent[],
+    now: number,
+  ): GameEvent[] {
     return events.filter(
       (event) =>
         event.kind === "chat.message" &&
-        event.actorUserId !== playerId &&
-        canViewEvent(event, playerId, state) &&
+        this.chatWakes(state, playerId, event, now) &&
         (event.payload.mentions ?? []).some((mention) => mention.userId === playerId),
     );
   }
@@ -445,13 +468,21 @@ export class BotManager {
     if (!currentPending || currentPending.length === 0) return;
     const phase = state?.phase;
     const player = state?.players[playerId];
+    // A pending mention may be delivered at night only while the seat can
+    // still speak on a secret channel: entitlement can lapse between the
+    // mention and the delivery, so a bot that lost the channel is dropped.
+    const speakableChannels =
+      state && phase ? getSpeakableChannels(state, playerId, this.now()) : [];
+    const mayChatAtNight =
+      phase?.type === "night" &&
+      (speakableChannels.includes("wolves") || speakableChannels.includes("cult"));
     if (
       !state ||
       !phase ||
       state.status !== "running" ||
       this.games.get(gameId) !== record ||
       phase.id !== phaseId ||
-      (phase.type !== "discussion" && phase.type !== "voting") ||
+      (phase.type !== "discussion" && phase.type !== "voting" && !mayChatAtNight) ||
       player?.status !== "alive" ||
       this.now() >= phase.endsAt
     ) {

@@ -5,6 +5,8 @@
 import { describe, expect, test } from "bun:test";
 import {
   type GameState,
+  getLegalCommands,
+  getSpeakableChannels,
   isCultMember,
   isPackMember,
   knownMentionTargets,
@@ -707,48 +709,30 @@ describe("bot command path", () => {
     );
   });
 
-  test("night is one decision, ignores valid wolf mentions, and stays ready", async () => {
-    let hold = false;
-    const agent = new GatedBotAgent(
-      (input) => hold && input.phase === "night",
-      (input) => ({
-        actionId: input.legalActions[0]?.id ?? null,
-        say: null,
-        channel: null,
-        mentionIds: [],
-        done: false,
-      }),
-    );
+  test("a wolf-chat mention at night wakes a pack seat that may speak on the channel", async () => {
+    const agent = new RecordingBotAgent((input) => ({
+      actionId: input.legalActions[0]?.id ?? null,
+      say: null,
+      channel: null,
+      mentionIds: [],
+      done: false,
+    }));
     const harness = await setupBots({ agent, config: testBotConfig({ BOT_CHAT_TURNS: "3" }) });
     const gameId = await harness.startBotGame(8, "pack-1", "cult");
     await harness.advancePhase(gameId); // discussion -> voting
     const voting = await harness.state(gameId);
-    const pack = Object.values(voting.players).filter(
-      (player) => player.status === "alive" && isPackMember(player),
-    );
-    expect(pack.length).toBeGreaterThanOrEqual(2);
-    hold = true;
     harness.clock.now = voting.phase!.endsAt;
     await harness.coordinator.resolvePhase(gameId); // voting -> night
+    await harness.bots.whenIdle();
     const night = await harness.state(gameId);
-    await waitFor(
-      () =>
-        agent.gated.some(
-          (input) => input.phase === "night" && isPackMember(night.players[input.playerId]!),
-        ),
-      "night target in-flight",
-    );
     expect(night.phase?.type).toBe("night");
-    const targetInput = agent.gated.find(
-      (input) => input.phase === "night" && isPackMember(night.players[input.playerId]!),
-    )!;
-    const target = night.players[targetInput.playerId]!;
     const nightPack = Object.values(night.players).filter(
       (player) => player.status === "alive" && isPackMember(player),
     );
-    const speaker = nightPack.find((player) => player.id !== target.id)!;
-    expect(speaker).toBeDefined();
-    const targetInputsBeforeMention = agent.inputs.filter((input) => input.playerId === target.id);
+    expect(nightPack.length).toBeGreaterThanOrEqual(2);
+    const speaker = nightPack[0]!;
+    const target = nightPack[1]!;
+    const before = agent.forPlayer(target.id).length;
     const text = `@${target.displayName} wolf business`;
     expect(knownMentionTargets(night, speaker.id, "wolves").map((player) => player.id)).toContain(
       target.id,
@@ -763,14 +747,16 @@ describe("bot command path", () => {
         mentions: [{ userId: target.id, start: 0, length: target.displayName!.length + 1 }],
       },
     });
-    hold = false;
-    agent.releaseAll();
     await harness.bots.whenIdle();
-    const targetInputs = agent.inputs.filter((input) => input.playerId === target.id);
-    expect(targetInputs).toHaveLength(targetInputsBeforeMention.length);
-    expect(targetInputs[0]!.directMentions).toEqual([]);
+    const targetInputs = agent.forPlayer(target.id);
+    expect(targetInputs).toHaveLength(before + 1);
+    const followUp = targetInputs.at(-1)!;
+    expect(followUp.directMentions).toHaveLength(1);
+    expect(followUp.directMentions[0]!.payload).toMatchObject({ text });
     const after = await harness.state(gameId);
-    expect(after.players[target.id]!.phaseState.ready).toBe(true);
+    // Turns remain and the decision did not say done, so the seat holds its
+    // ready instead of collapsing the night under the pack's conversation.
+    expect(after.players[target.id]!.phaseState.ready === true).toBe(false);
     expect(after.phase?.id).toBe(night.phase!.id);
   });
 
@@ -1181,5 +1167,231 @@ describe("bot command path", () => {
     // exactly the rule: phases end on time, not on completion.
     expect(["running", "finished"]).toContain(state.status);
     expect(harness.logs.some((entry) => entry.event === "error")).toBe(true);
+  });
+});
+
+describe("night secret-channel chat", () => {
+  // A message on a secret channel at night wakes a pack seat that may speak
+  // on it; a public message wakes nobody. Each case drives a game to night
+  // and sends one message from a pack mate.
+  const messageCases = [
+    {
+      name: "a wolf bot replies to a human wolf-chat message at night",
+      channel: "wolves" as const,
+      expectFollowUp: true,
+    },
+    {
+      name: "a public-channel event at night wakes nobody",
+      channel: "public" as const,
+      expectFollowUp: false,
+    },
+  ];
+  for (const c of messageCases) {
+    test(c.name, async () => {
+      const agent = new RecordingBotAgent((input) =>
+        input.phase === "night"
+          ? {
+              actionId: input.legalActions[0]?.id ?? null,
+              say: null,
+              channel: null,
+              mentionIds: [],
+              done: false,
+            }
+          : { actionId: null, say: null, channel: null, mentionIds: [], done: false },
+      );
+      const harness = await setupBots({ agent, config: testBotConfig({ BOT_CHAT_TURNS: "3" }) });
+      const gameId = await harness.startBotGame(8, "pack-1", "cult");
+      await harness.advancePhase(gameId); // discussion -> voting
+      const voting = await harness.state(gameId);
+      harness.clock.now = voting.phase!.endsAt;
+      await harness.coordinator.resolvePhase(gameId); // voting -> night
+      await harness.bots.whenIdle();
+      const night = await harness.state(gameId);
+      expect(night.phase?.type).toBe("night");
+      const nightPack = Object.values(night.players).filter(
+        (player) => player.status === "alive" && isPackMember(player),
+      );
+      expect(nightPack.length).toBeGreaterThanOrEqual(2);
+      const speaker = nightPack[0]!;
+      const target = nightPack[1]!;
+      const before = agent.forPlayer(target.id).length;
+      const send = harness.coordinator.executeCommand(gameId, speaker.id, {
+        commandId: `night-${c.channel}`,
+        phaseId: night.phase!.id,
+        type: "chat.send",
+        payload: { channel: c.channel, text: "Who do we take?", mentions: [] },
+      });
+      if (c.channel === "public") {
+        // Public chat is closed at night, so the engine refuses the message
+        // before any event exists to wake a seat.
+        await expect(send).rejects.toBeInstanceOf(CoordinatorError);
+      } else {
+        await send;
+      }
+      await harness.bots.whenIdle();
+      expect(agent.forPlayer(target.id).length).toBe(c.expectFollowUp ? before + 1 : before);
+    });
+  }
+
+  test("a villager bot at night still takes exactly one turn and readies", async () => {
+    const agent = new RecordingBotAgent((input) => ({
+      actionId: input.legalActions[0]?.id ?? null,
+      say: null,
+      channel: null,
+      mentionIds: [],
+      done: false,
+    }));
+    const harness = await setupBots({ agent, config: testBotConfig({ BOT_CHAT_TURNS: "3" }) });
+    const gameId = await harness.startBotGame(8, "pack-1", "cult");
+    await harness.advancePhase(gameId); // discussion -> voting
+    const voting = await harness.state(gameId);
+    harness.clock.now = voting.phase!.endsAt;
+    await harness.coordinator.resolvePhase(gameId); // voting -> night
+    await harness.bots.whenIdle();
+    const night = await harness.state(gameId);
+    expect(night.phase?.type).toBe("night");
+    // A seat with a night action but no secret channel: its first decision is
+    // still its last, and it readies — the night-chat change only touches
+    // seats that can speak on a secret channel.
+    const lone = Object.values(night.players).find(
+      (player) =>
+        player.status === "alive" &&
+        player.controller?.type === "bot" &&
+        getLegalCommands(night, player.id, harness.clock.now).length > 0 &&
+        !getSpeakableChannels(night, player.id, harness.clock.now).includes("wolves") &&
+        !getSpeakableChannels(night, player.id, harness.clock.now).includes("cult"),
+    );
+    expect(lone).toBeDefined();
+    const nightInputs = agent.forPlayer(lone!.id).filter((input) => input.phase === "night");
+    expect(nightInputs).toHaveLength(1);
+    expect(night.players[lone!.id]!.phaseState.ready === true).toBe(true);
+  });
+
+  test("a wolf bot does not exceed BOT_CHAT_TURNS at night", async () => {
+    // Chat only, no action: a decision then commits exactly one command, so
+    // the reply cascade is deterministic instead of racing the action commit.
+    const agent = new RecordingBotAgent((input) =>
+      input.phase === "night"
+        ? {
+            actionId: null,
+            say: "Understood.",
+            channel: "wolves",
+            mentionIds: [],
+            done: false,
+          }
+        : { actionId: null, say: null, channel: null, mentionIds: [], done: false },
+    );
+    const harness = await setupBots({ agent, config: testBotConfig({ BOT_CHAT_TURNS: "2" }) });
+    const gameId = await harness.startBotGame(8, "pack-1", "cult");
+    await harness.advancePhase(gameId); // discussion -> voting
+    const voting = await harness.state(gameId);
+    harness.clock.now = voting.phase!.endsAt;
+    await harness.coordinator.resolvePhase(gameId); // voting -> night
+    await harness.bots.whenIdle();
+    const night = await harness.state(gameId);
+    expect(night.phase?.type).toBe("night");
+    const nightPack = Object.values(night.players).filter(
+      (player) => player.status === "alive" && isPackMember(player),
+    );
+    expect(nightPack.length).toBeGreaterThanOrEqual(2);
+    const counts = nightPack.map(
+      (wolf) => agent.forPlayer(wolf.id).filter((input) => input.phase === "night").length,
+    );
+    // The cap terminates the night cascade, and the cascade actually happened:
+    // at least one seat earned a reply turn.
+    for (const count of counts) expect(count).toBeLessThanOrEqual(2);
+    expect(counts.some((count) => count > 1)).toBe(true);
+  });
+
+  test("a wolf bot does not ready after its first night turn while turns remain, and does ready when its decision says done", async () => {
+    const cases = [
+      { done: false, expectReady: false },
+      { done: true, expectReady: true },
+    ];
+    for (const c of cases) {
+      const agent = new RecordingBotAgent((input) => ({
+        actionId: input.legalActions[0]?.id ?? null,
+        say: null,
+        channel: null,
+        mentionIds: [],
+        done: c.done,
+      }));
+      const harness = await setupBots({ agent, config: testBotConfig({ BOT_CHAT_TURNS: "3" }) });
+      const gameId = await harness.startBotGame(8, "pack-1", "cult");
+      await harness.advancePhase(gameId); // discussion -> voting
+      const voting = await harness.state(gameId);
+      harness.clock.now = voting.phase!.endsAt;
+      await harness.coordinator.resolvePhase(gameId); // voting -> night
+      await harness.bots.whenIdle();
+      const night = await harness.state(gameId);
+      expect(night.phase?.type).toBe("night");
+      const wolf = Object.values(night.players).find(
+        (player) => player.status === "alive" && isPackMember(player),
+      )!;
+      expect(wolf).toBeDefined();
+      expect(wolf.phaseState.ready === true).toBe(c.expectReady);
+    }
+  });
+
+  test("a wolf-chat mention that lands while a pack seat is in flight is delivered once the decision settles", async () => {
+    let hold = false;
+    let targetId: UserId | null = null;
+    const agent = new GatedBotAgent(
+      (input) => hold && input.phase === "night" && input.playerId === targetId,
+      (input) => ({
+        actionId: input.legalActions[0]?.id ?? null,
+        say: null,
+        channel: null,
+        mentionIds: [],
+        done: false,
+      }),
+    );
+    const harness = await setupBots({ agent, config: testBotConfig({ BOT_CHAT_TURNS: "3" }) });
+    const gameId = await harness.startBotGame(8, "pack-1", "cult");
+    await harness.advancePhase(gameId); // discussion -> voting
+    const voting = await harness.state(gameId);
+    const pack = Object.values(voting.players).filter(
+      (player) => player.status === "alive" && isPackMember(player),
+    );
+    expect(pack.length).toBeGreaterThanOrEqual(2);
+    hold = true;
+    targetId = pack[0]!.id;
+    harness.clock.now = voting.phase!.endsAt;
+    await harness.coordinator.resolvePhase(gameId); // voting -> night
+    const night = await harness.state(gameId);
+    await waitFor(
+      () => agent.gated.some((input) => input.playerId === targetId),
+      "night target in-flight",
+    );
+    expect(night.phase?.type).toBe("night");
+    const target = night.players[targetId]!;
+    const nightPack = Object.values(night.players).filter(
+      (player) => player.status === "alive" && isPackMember(player),
+    );
+    const speaker = nightPack.find((player) => player.id !== targetId)!;
+    expect(speaker).toBeDefined();
+    const before = agent.inputs.filter((input) => input.playerId === targetId).length;
+    const text = `@${target.displayName} wolf business`;
+    expect(knownMentionTargets(night, speaker.id, "wolves").map((player) => player.id)).toContain(
+      targetId,
+    );
+    await harness.coordinator.executeCommand(gameId, speaker.id, {
+      commandId: "night-in-flight-mention",
+      phaseId: night.phase!.id,
+      type: "chat.send",
+      payload: {
+        channel: "wolves",
+        text,
+        mentions: [{ userId: targetId, start: 0, length: target.displayName!.length + 1 }],
+      },
+    });
+    hold = false;
+    agent.releaseAll();
+    await harness.bots.whenIdle();
+    const targetInputs = agent.inputs.filter((input) => input.playerId === targetId);
+    expect(targetInputs).toHaveLength(before + 1);
+    const followUp = targetInputs.at(-1)!;
+    expect(followUp.directMentions).toHaveLength(1);
+    expect(followUp.directMentions[0]!.payload).toMatchObject({ text });
   });
 });
