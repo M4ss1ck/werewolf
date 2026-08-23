@@ -3,7 +3,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { apiUrl } from "../api/origin.ts";
 import { i18n } from "../i18n/i18n.ts";
 import { startLoopbackHandoff } from "./loopback.ts";
-import { startTelegramHandoff, telegramWebApp } from "./telegram.ts";
+import { loadTelegramSdk, startTelegramHandoff, telegramWebApp } from "./telegram.ts";
 import { captureAuthToken, clearAuthToken, getAuthToken } from "./token.ts";
 
 export interface SessionUser {
@@ -34,6 +34,10 @@ export async function getSession(): Promise<Session | null> {
 }
 
 export async function signInWithGoogle() {
+  // The Mini App SDK is injected on demand, only inside a Mini App; make sure
+  // it is present before the Telegram branch below asks for it.
+  await loadTelegramSdk();
+
   // The packaged app runs the whole OAuth leg in the system browser. On desktop
   // it first binds a loopback listener and tells the server where to redirect
   // the browser when it is done; on Android there is no such listener and the

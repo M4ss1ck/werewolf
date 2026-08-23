@@ -8,14 +8,36 @@
 
 import { apiUrl } from "../api/origin.ts";
 import { type AuthDeepLinkResult, exchangeOneTimeToken } from "./deep-link.ts";
+import { isTelegramWebview } from "./runtime.ts";
 
 type TelegramWebApp = { initData: string; openLink: (url: string) => void };
 
 const POLL_INTERVAL_MS = 1500;
 const POLL_TIMEOUT_MS = 300_000;
 
-/** The Mini App SDK, and only when this really is a Mini App: the script tag
- * also loads in an ordinary browser tab, where initData is the empty string. */
+let sdkPromise: Promise<void> | undefined;
+
+/** Load the Mini App SDK, and only inside a Mini App: the script tag used to
+ * load in every browser tab, where it logs a wall of "not supported" noise.
+ * Injected once; resolves on load, and also on error so a network failure
+ * cannot wedge sign-in. */
+export function loadTelegramSdk(): Promise<void> {
+  if (!isTelegramWebview()) return Promise.resolve();
+  if (!sdkPromise) {
+    sdkPromise = new Promise((resolve) => {
+      const script = document.createElement("script");
+      script.src = "https://telegram.org/js/telegram-web-app.js";
+      script.addEventListener("load", () => resolve());
+      script.addEventListener("error", () => resolve());
+      document.head.appendChild(script);
+    });
+  }
+  return sdkPromise;
+}
+
+/** The Mini App SDK, and only when this really is a Mini App: Telegram opens
+ * a Mini App link in an ordinary tab too, where initData is the empty string.
+ * Null until loadTelegramSdk() has resolved. */
 export function telegramWebApp(): TelegramWebApp | null {
   const webApp = (globalThis as { Telegram?: { WebApp?: unknown } }).Telegram?.WebApp;
   if (
