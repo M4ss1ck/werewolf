@@ -49,8 +49,18 @@ services:
     volumes:
       # Live source, so edits on the host reload in the container.
       - .:/app
-      # Keep the image's installed dependencies rather than the host's.
+      # Keep the image's installed dependencies rather than the host's. Bun
+      # installs a workspace's links into that workspace's OWN node_modules,
+      # not into the root one (the production Dockerfile hit this too), so the
+      # root volume alone leaves the bind mount above masking every one of them
+      # and the server dies on boot with "Cannot find module 'better-auth'".
       - /app/node_modules
+      - /app/apps/client/node_modules
+      - /app/apps/server/node_modules
+      - /app/packages/protocol/node_modules
+      - /app/packages/game-engine/node_modules
+      - /app/packages/db/node_modules
+      - /app/packages/i18n/node_modules
       # Persist the development database across restarts.
       - ./data:/app/data
       # Read-only: the plugin only needs to read the host's pairing token.
