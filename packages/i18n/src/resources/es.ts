@@ -389,6 +389,7 @@ export const es: TranslationResource = {
     yourMove: "Tu jugada",
     yourIntel: "Tus pistas",
     messageLabel: "Mensaje",
+    channelMembers: "En este canal",
     messagePlaceholder: "Di algo",
     chatEmpty: "Aún no hay mensajes: la noche está en calma. Rompe el silencio.",
     ready: "Listo",

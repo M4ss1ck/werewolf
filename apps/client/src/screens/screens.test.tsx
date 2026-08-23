@@ -2406,3 +2406,140 @@ test("game over: the replay gutter stamps the day of each phase, not the final d
   // The final day (3) is not stamped on either row.
   expect(screen.queryByText("D3")).not.toBeInTheDocument();
 });
+
+test("talk: the wolves channel lists the other wolves and never the viewer", () => {
+  const snapshot = makeGameSnapshot({
+    me: { userId: "wren" as UserId, status: "alive", role: "werewolf" },
+    availableChannels: ["public", "wolves"] as ChatChannel[],
+    knownChannelMemberIds: { wolves: ["odile" as UserId, "mattias" as UserId] },
+  });
+  renderWithI18n(<Talk events={[]} send={vi.fn()} snapshot={snapshot} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Wolf chat" }));
+  const roster = screen.getByRole("group", { name: "In this channel" });
+  expect(roster.textContent).toContain("Odile");
+  expect(roster.textContent).toContain("Mattias");
+  expect(roster.textContent).not.toContain("Wren");
+});
+
+test("talk: a converted viewer sees only the channel members they know", () => {
+  const snapshot = makeGameSnapshot({
+    me: { userId: "wren" as UserId, status: "alive", role: "werewolf" },
+    availableChannels: ["public", "wolves"] as ChatChannel[],
+    // Converted mid-game: the projection only names the wolves met since.
+    knownChannelMemberIds: { wolves: ["odile" as UserId] },
+  });
+  renderWithI18n(<Talk events={[]} send={vi.fn()} snapshot={snapshot} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Wolf chat" }));
+  const roster = screen.getByRole("group", { name: "In this channel" });
+  expect(roster.textContent).toContain("Odile");
+  expect(roster.textContent).not.toContain("Mattias");
+  expect(roster.textContent).not.toContain("Kestrel");
+  expect(roster.textContent).not.toContain("Anna");
+});
+
+test("talk: the public and grave channels render no roster row", () => {
+  const publicView = renderWithI18n(
+    <Talk events={[]} send={vi.fn()} snapshot={makeGameSnapshot()} />,
+  );
+  expect(screen.queryByRole("group", { name: "In this channel" })).not.toBeInTheDocument();
+  publicView.unmount();
+
+  renderWithI18n(
+    <Talk
+      events={[]}
+      send={vi.fn()}
+      snapshot={makeGameSnapshot({
+        me: { userId: "wren" as UserId, status: "dead", role: "villager" },
+        players: [
+          {
+            userId: "wren" as UserId,
+            displayName: "Wren",
+            status: "dead",
+            revealedRole: "villager",
+          },
+          {
+            userId: "odile" as UserId,
+            displayName: "Odile",
+            status: "dead",
+            revealedRole: "werewolf",
+          },
+          { userId: "mattias" as UserId, displayName: "Mattias", status: "alive" },
+        ],
+        availableChannels: ["public", "grave"] as ChatChannel[],
+      })}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Grave chat" }));
+  expect(screen.queryByRole("group", { name: "In this channel" })).not.toBeInTheDocument();
+});
+
+test("the ready control appears for a living player in a running game and is absent for a dead player", () => {
+  const alive = renderWithI18n(
+    <GameScreen
+      initial={makeGameSnapshot({
+        game: { phase: { id: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 } },
+      })}
+      onUpdate={noopUpdate}
+    />,
+  );
+  expect(screen.getByRole("button", { name: "Ready" })).toBeInTheDocument();
+  alive.unmount();
+
+  renderWithI18n(
+    <GameScreen
+      initial={makeGameSnapshot({
+        game: { phase: { id: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 } },
+        me: { userId: "wren" as UserId, status: "dead", role: "villager" },
+      })}
+      onUpdate={noopUpdate}
+    />,
+  );
+  expect(screen.queryByRole("button", { name: "Ready" })).not.toBeInTheDocument();
+});
+
+test("pressing the ready control posts phase.ready, toggling between ready and not ready", () => {
+  vi.spyOn(api, "postCommand").mockResolvedValue(undefined);
+  const notReady = renderWithI18n(
+    <GameScreen
+      initial={makeGameSnapshot({
+        game: { phase: { id: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 } },
+      })}
+      onUpdate={noopUpdate}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Ready" }));
+  expect(api.postCommand).toHaveBeenCalledWith("g1", {
+    type: "phase.ready",
+    phaseId: 1,
+    payload: { ready: true },
+  });
+  notReady.unmount();
+
+  // Already ready: pressing again posts ready: false.
+  renderWithI18n(
+    <GameScreen
+      initial={makeGameSnapshot({
+        game: { phase: { id: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 } },
+        me: { userId: "wren" as UserId, status: "alive", role: "villager", ready: true },
+      })}
+      onUpdate={noopUpdate}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Ready" }));
+  expect(api.postCommand).toHaveBeenCalledWith("g1", {
+    type: "phase.ready",
+    phaseId: 1,
+    payload: { ready: false },
+  });
+});
+
+test("the vote screen renders no acted/eligible readout", () => {
+  const snapshot = makeGameSnapshot({
+    game: { phase: { id: 7 as PhaseId, type: "voting", startedAt: 1000, endsAt: 10_000 } },
+  });
+  renderWithI18n(<Act events={[]} send={vi.fn()} snapshot={snapshot} />);
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  expect(screen.queryByText(/voted/)).not.toBeInTheDocument();
+});

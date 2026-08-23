@@ -388,6 +388,7 @@ export const en = {
     yourMove: "Your move",
     yourIntel: "Your intel",
     messageLabel: "Message",
+    channelMembers: "In this channel",
     messagePlaceholder: "Say something",
     chatEmpty: "No messages yet — the night is quiet. Break the silence.",
     ready: "Ready",

@@ -144,6 +144,8 @@ export function Talk({
     () => gameMentionCandidates(snapshot, activeChannel),
     [activeChannel, snapshot],
   );
+  const showChannelMembers =
+    (activeChannel === "wolves" || activeChannel === "cult") && candidates.length > 0;
   const source = useMemo(() => ({ kind: "local" as const, candidates }), [candidates]);
   const conversationKey = keyFor(snapshot.game.id, activeChannel);
   const phase = snapshot.game.phase;
@@ -187,6 +189,16 @@ export function Talk({
           );
         })}
       </div>
+      {showChannelMembers && (
+        <fieldset
+          aria-label={t("ui.channelMembers")}
+          className="flex items-center gap-1.5 border-t border-paper/10 bg-bar px-4.5 py-2"
+        >
+          <span className="min-w-0 flex-1 truncate text-xs text-fog">
+            {candidates.map((candidate) => candidate.displayName).join(", ")}
+          </span>
+        </fieldset>
+      )}
       <ChatList
         conversationKey={conversationKey}
         emptyLabel={t("ui.chatEmpty")}
