@@ -1,7 +1,7 @@
 import type { UserId, ViewerGameSnapshot, ViewerIntent, ViewerPlayer } from "@werewolf/protocol";
 import { availableChatChannels, knownMentionTargets, projectedPlayerLabel } from "../chat.ts";
 import { getPerceivedRole } from "../roles/perceived.ts";
-import { getRoleDefinition } from "../roles/registry.ts";
+import { getRoleDefinition, isPackMember } from "../roles/registry.ts";
 import type { GameState, PlayerState } from "../state.ts";
 import { getAvailableActions } from "./available-actions.ts";
 
@@ -49,6 +49,28 @@ function voteTallies(state: GameState): { targetId: UserId; count: number }[] | 
     );
 }
 
+/** The pack's live attack ballot. Visible ONLY to a living pack member, and
+ * only at night: fellow wolves coordinate by identity, while the village
+ * vote stays a bare tally. Returns undefined for everyone else, so a missing
+ * field fails closed. */
+function packBallot(
+  state: GameState,
+  member: PlayerState | undefined,
+): { playerId: UserId; targetId: UserId }[] | undefined {
+  if (!state.phase || state.phase.type !== "night") return undefined;
+  if (!member || member.status !== "alive" || !isPackMember(member)) return undefined;
+  const ballot: { playerId: UserId; targetId: UserId }[] = [];
+  for (const player of Object.values(state.players)) {
+    if (player.status !== "alive") continue;
+    if (!isPackMember(player)) continue;
+    if (player.phaseState.phaseId !== state.phase.id) continue;
+    const targetId = player.phaseState.actions?.["wolf.attack"]?.targetId;
+    if (targetId === undefined) continue;
+    ballot.push({ playerId: player.id, targetId });
+  }
+  return ballot.sort((a, b) => (a.playerId < b.playerId ? -1 : a.playerId > b.playerId ? 1 : 0));
+}
+
 export function projectSnapshot(
   state: GameState,
   viewer: SnapshotViewer | UserId,
@@ -59,6 +81,7 @@ export function projectSnapshot(
   const member = state.players[userId];
   const actions = member?.status === "alive" ? getAvailableActions(state, userId) : [];
   const tallies = voteTallies(state);
+  const ballot = packBallot(state, member);
   const channels = availableChatChannels(member);
   const knownChannelMemberIds: ViewerGameSnapshot["knownChannelMemberIds"] = {};
   if (member) {
@@ -96,6 +119,7 @@ export function projectSnapshot(
       viewerPlayer(player, state.status === "finished"),
     ),
     ...(tallies ? { voteTallies: tallies } : {}),
+    ...(ballot ? { packBallot: ballot } : {}),
     availableActions: actions,
     ...(hasKnownChannelMemberIds ? { knownChannelMemberIds } : {}),
     availableChannels: channels,

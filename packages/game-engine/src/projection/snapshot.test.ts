@@ -293,6 +293,116 @@ describe("voting tallies", () => {
   });
 });
 
+describe("pack ballot", () => {
+  test("a living wolf sees every pack member's pick, sorted by playerId, including its own", () => {
+    const state = makeState();
+    addPlayer(state, "wolf2", "werewolf", "alive");
+    state.players[id("wolf")]!.phaseState = {
+      phaseId: 1 as never,
+      actions: { "wolf.attack": { targetId: id("seer") } },
+    };
+    state.players[id("wolf2")]!.phaseState = {
+      phaseId: 1 as never,
+      actions: { "wolf.attack": { targetId: id("seer") } },
+    };
+    const snapshot = projectSnapshot(state, id("wolf"));
+    expect(snapshot.packBallot).toEqual([
+      { playerId: id("wolf"), targetId: id("seer") },
+      { playerId: id("wolf2"), targetId: id("seer") },
+    ]);
+  });
+
+  test("the same ballot is projected for the other wolf", () => {
+    const state = makeState();
+    addPlayer(state, "wolf2", "werewolf", "alive");
+    state.players[id("wolf")]!.phaseState = {
+      phaseId: 1 as never,
+      actions: { "wolf.attack": { targetId: id("seer") } },
+    };
+    state.players[id("wolf2")]!.phaseState = {
+      phaseId: 1 as never,
+      actions: { "wolf.attack": { targetId: id("seer") } },
+    };
+    const snapshot = projectSnapshot(state, id("wolf2"));
+    expect(snapshot.packBallot).toEqual([
+      { playerId: id("wolf"), targetId: id("seer") },
+      { playerId: id("wolf2"), targetId: id("seer") },
+    ]);
+  });
+
+  test("a non-pack viewer has no packBallot property", () => {
+    const state = makeState();
+    state.players[id("wolf")]!.phaseState = {
+      phaseId: 1 as never,
+      actions: { "wolf.attack": { targetId: id("seer") } },
+    };
+    const snapshot = projectSnapshot(state, id("seer"));
+    expect(snapshot).not.toHaveProperty("packBallot");
+  });
+
+  test("a sorcerer is wolf-flavoured but not a pack member: no packBallot", () => {
+    const state = makeState();
+    addPlayer(state, "sorcerer", "sorcerer", "alive");
+    state.players[id("wolf")]!.phaseState = {
+      phaseId: 1 as never,
+      actions: { "wolf.attack": { targetId: id("seer") } },
+    };
+    const snapshot = projectSnapshot(state, id("sorcerer"));
+    expect(snapshot).not.toHaveProperty("packBallot");
+  });
+
+  test("a dead pack member has no packBallot", () => {
+    const state = makeState();
+    state.players[id("dead-wolf")]!.phaseState = {
+      phaseId: 1 as never,
+      actions: { "wolf.attack": { targetId: id("seer") } },
+    };
+    const snapshot = projectSnapshot(state, id("dead-wolf"));
+    expect(snapshot).not.toHaveProperty("packBallot");
+  });
+
+  test("a spectator has no packBallot", () => {
+    const state = makeState();
+    state.players[id("wolf")]!.phaseState = {
+      phaseId: 1 as never,
+      actions: { "wolf.attack": { targetId: id("seer") } },
+    };
+    const snapshot = projectSnapshot(state, id("spectator"));
+    expect(snapshot).not.toHaveProperty("packBallot");
+  });
+
+  test("outside the night phase a wolf has no packBallot", () => {
+    const state = makeState();
+    state.phase!.type = "discussion";
+    state.players[id("wolf")]!.phaseState = {
+      phaseId: 1 as never,
+      actions: { "wolf.attack": { targetId: id("seer") } },
+    };
+    const snapshot = projectSnapshot(state, id("wolf"));
+    expect(snapshot).not.toHaveProperty("packBallot");
+  });
+
+  test("a stale pick from a previous phase is excluded, a current one is listed", () => {
+    const state = makeState();
+    addPlayer(state, "wolf2", "werewolf", "alive");
+    state.players[id("wolf")]!.phaseState = {
+      phaseId: 1 as never,
+      actions: { "wolf.attack": { targetId: id("seer") } },
+    };
+    state.players[id("wolf2")]!.phaseState = {
+      phaseId: 0 as never,
+      actions: { "wolf.attack": { targetId: id("seer") } },
+    };
+    const snapshot = projectSnapshot(state, id("wolf"));
+    expect(snapshot.packBallot).toEqual([{ playerId: id("wolf"), targetId: id("seer") }]);
+  });
+
+  test("an eligible wolf with no picks yet gets an empty array", () => {
+    const snapshot = projectSnapshot(makeState(), id("wolf"));
+    expect(snapshot.packBallot).toEqual([]);
+  });
+});
+
 describe("readiness projection", () => {
   test("the snapshot no longer carries progress", () => {
     const snapshot = projectSnapshot(makeState(), id("seer"));

@@ -1723,6 +1723,60 @@ test("night regression: the night branch still renders its actions and posts nig
   });
 });
 
+test("night: a wolf sees which pack member picked which target on the attack rows", () => {
+  const send = vi.fn(() => Promise.resolve());
+  renderWithI18n(
+    <Act
+      events={[]}
+      send={send}
+      snapshot={makeGameSnapshot({
+        game: { phase: { id: 2 as PhaseId, type: "night", startedAt: 1000, endsAt: 10_000 } },
+        me: { userId: "wren" as UserId, status: "alive", role: "werewolf" },
+        availableActions: [
+          {
+            id: "wolf.attack" as ActionId,
+            type: "target",
+            targets: [
+              { userId: "odile" as UserId, enabled: true },
+              { userId: "kestrel" as UserId, enabled: true },
+            ],
+          },
+        ],
+        packBallot: [{ playerId: "mattias" as UserId, targetId: "odile" as UserId }],
+      })}
+    />,
+  );
+
+  const odileRow = screen.getByRole("button", { name: /Odile/ });
+  expect(within(odileRow).getByText("Mattias")).toBeInTheDocument();
+});
+
+test("night: without a packBallot no picker names are rendered", () => {
+  const send = vi.fn(() => Promise.resolve());
+  renderWithI18n(
+    <Act
+      events={[]}
+      send={send}
+      snapshot={makeGameSnapshot({
+        game: { phase: { id: 2 as PhaseId, type: "night", startedAt: 1000, endsAt: 10_000 } },
+        me: { userId: "wren" as UserId, status: "alive", role: "werewolf" },
+        availableActions: [
+          {
+            id: "wolf.attack" as ActionId,
+            type: "target",
+            targets: [
+              { userId: "odile" as UserId, enabled: true },
+              { userId: "kestrel" as UserId, enabled: true },
+            ],
+          },
+        ],
+      })}
+    />,
+  );
+
+  expect(screen.queryByText("Mattias")).not.toBeInTheDocument();
+});
+
 test("targets: a count-2 action renders its rows, including the viewer's own row", () => {
   renderWithI18n(
     <Act

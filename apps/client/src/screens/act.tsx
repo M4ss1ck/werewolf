@@ -201,6 +201,7 @@ function ActionList({
   send,
   heading,
   footnote,
+  ballot,
 }: {
   actions: AvailableAction[];
   players: ViewerGameSnapshot["players"];
@@ -208,9 +209,16 @@ function ActionList({
   send: Send;
   heading?: ReactNode;
   footnote?: ReactNode;
+  ballot?: { playerId: UserId; targetId: UserId }[] | undefined;
 }) {
   const { t } = useTranslation();
   const names = new Map(players.map((player) => [player.userId, player.displayName]));
+  const pickersByTarget = new Map<UserId, string[]>();
+  for (const entry of ballot ?? []) {
+    const list = pickersByTarget.get(entry.targetId) ?? [];
+    list.push(names.get(entry.playerId) ?? entry.playerId);
+    pickersByTarget.set(entry.targetId, list);
+  }
   const commandType = phase.type === "night" ? "night.action.set" : "day.action.set";
   const [picked, setPicked] = useState<{
     phaseId: PhaseId;
@@ -389,6 +397,11 @@ function ActionList({
                           <Avatar name={name} />
                         </span>
                         <span className="relative row__name text-[17px] font-medium">{name}</span>
+                        {action.id === "wolf.attack" && pickersByTarget.has(target.userId) && (
+                          <span className="relative text-sm text-fog">
+                            {pickersByTarget.get(target.userId)?.join(", ")}
+                          </span>
+                        )}
                         <CheckMark on={selected} />
                       </button>
                     </li>
@@ -440,6 +453,7 @@ function NightBranch({
       players={snapshot.players}
       phase={phase}
       send={send}
+      ballot={snapshot.packBallot}
       heading={
         role !== undefined ? (
           <p className="eyebrow">{t("ui.night.yourMove", { role: t(`roles.${role}.name`) })}</p>

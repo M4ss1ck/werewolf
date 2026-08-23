@@ -100,12 +100,20 @@ phases, event kinds, error codes and statuses are stable wire values.
 Translation only affects presentation.
 
 **Hidden information stays hidden.** Role composition, other players' roles,
-individual votes during a match, wolf chat, grave chat, and server audit events
-must never reach a viewer projection. Wolf-chat history before a converted
+individual day votes during a match, wolf chat, grave chat, and server audit
+events must never reach a viewer projection. Wolf-chat history before a converted
 player's conversion is not theirs to read. The graveyard is invisible to the
 living: a dead player sees its whole history, a living one sees none of it, and
 a spectator who never played is not dead. Channel entitlement is a per-channel
 marker on the player and a missing marker fails closed. Treat these as security tests, not UI tests.
+
+The pack's night ballot is the one deliberate exception, and it is scoped: a
+living pack member sees which wolf picked which target, live, through
+`packBallot`. The village vote stays a bare tally with no voter identities. The
+exception is membership-scoped, not faction-scoped — the Sorcerer is wolf-faction
+but never one of the pack, so it never sees the ballot — and the field is absent
+rather than empty for everyone outside it, so a missing marker still fails closed.
+The cult has no ballot: `cult.convert` belongs to the leader alone.
 
 **The engine returns patches, not mutations.** Domain operations return explicit
 state changes plus events; persistence applies them. Do not mutate state in

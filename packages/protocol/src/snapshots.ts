@@ -90,6 +90,9 @@ export interface ViewerGameSnapshot {
   knownChannelMemberIds?: Partial<Record<"wolves" | "cult", UserId[]>>;
   /** Aggregate live tally. Voter identities are deliberately absent. */
   voteTallies?: { targetId: UserId; count: number }[];
+  /** The pack's live attack ballot, by identity. Present only for a living
+   *  pack member during the night. The village vote stays a bare tally. */
+  packBallot?: { playerId: UserId; targetId: UserId }[];
   /** Present only when the viewer is a member of the game. */
   me?: {
     userId: UserId;
@@ -187,6 +190,7 @@ export const ViewerGameSnapshotSchema = z.object({
     .strict()
     .optional(),
   voteTallies: z.array(z.object({ targetId: UserIdSchema, count: z.number() })).optional(),
+  packBallot: z.array(z.object({ playerId: UserIdSchema, targetId: UserIdSchema })).optional(),
   me: z
     .object({
       userId: UserIdSchema,
