@@ -21,13 +21,14 @@ import {
   projectedPlayerLabel,
   projectSnapshot,
 } from "@werewolf/game-engine";
-import type {
-  BotConfig,
-  GameEvent,
-  GameId,
-  GameplayCommand,
-  PhaseId,
-  UserId,
+import {
+  type BotConfig,
+  dayOfPhase,
+  type GameEvent,
+  type GameId,
+  type GameplayCommand,
+  type PhaseId,
+  type UserId,
 } from "@werewolf/protocol";
 import { CoordinatorError, type GameCoordinator } from "../game/coordinator.ts";
 import type { BotRuntimeConfig } from "./config.ts";
@@ -530,9 +531,6 @@ function buildDigest(
   names: (userId: UserId) => string,
   maxDays: number,
 ): string[] {
-  // The engine numbers phases sequentially and bumps the day after each night,
-  // so a phase id maps to a day: ids 1-3 are day 1, 4-6 day 2, and so on.
-  const dayOfPhase = (phaseId: PhaseId) => Math.floor((Number(phaseId) - 1) / 3) + 1;
   // vote.resolved names its own phase; night.resolved does not, so each night
   // resolution is paired with the most recent vote resolution before it —
   // which is the same day's vote. A night whose vote fell outside the window

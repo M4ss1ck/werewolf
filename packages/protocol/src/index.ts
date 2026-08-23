@@ -1,6 +1,7 @@
 // Shared wire vocabulary between client and server. This package only
 // describes the wire: schema and type definitions, no helpers or runtime
-// logic, and no internal dependencies.
+// logic, and no internal dependencies. The one exception is a pure
+// derivation over wire values (dayOfPhase), which carries no state or I/O.
 
 export const MIN_PLAYERS = 5;
 export const BALANCE_VERSION = 1;

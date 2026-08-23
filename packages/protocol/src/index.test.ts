@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test";
-import type { EventId, GameEvent, UserId } from "./index.ts";
+import type { EventId, GameEvent, PhaseId, UserId } from "./index.ts";
 import {
   BALANCE_VERSION,
   ChatSendCommandSchema,
   ChatSubscribeFrameSchema,
+  dayOfPhase,
   ErrorCodeSchema,
   EVENT_KINDS,
   GameEventSchema,
@@ -26,6 +27,14 @@ test("a game needs at least five active players", () => {
 
 test("games start on balance version 1", () => {
   expect(BALANCE_VERSION).toBe(1);
+});
+
+test("dayOfPhase maps phase ids to days in blocks of three", () => {
+  expect(dayOfPhase(1 as PhaseId)).toBe(1);
+  expect(dayOfPhase(3 as PhaseId)).toBe(1);
+  expect(dayOfPhase(4 as PhaseId)).toBe(2);
+  expect(dayOfPhase(6 as PhaseId)).toBe(2);
+  expect(dayOfPhase(7 as PhaseId)).toBe(3);
 });
 
 test("a valid vote.set command parses", () => {

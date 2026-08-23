@@ -1,4 +1,5 @@
 import {
+  dayOfPhase,
   type GameEvent,
   type VictoryReason,
   type ViewerGameSnapshot,
@@ -10,6 +11,19 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client.ts";
 import { Avatar } from "../components.tsx";
 import { navigate } from "../routes.tsx";
+
+const REPLAY_KINDS = [
+  "player.eliminated",
+  "phase.started",
+  "vote.resolved",
+  "night.resolved",
+  "game.finished",
+] as const;
+type ReplayEvent = Extract<GameEvent, { kind: (typeof REPLAY_KINDS)[number] }>;
+
+function isReplayEvent(event: GameEvent): event is ReplayEvent {
+  return (REPLAY_KINDS as readonly string[]).includes(event.kind);
+}
 
 const REASON_KEYS: Record<VictoryReason, string> = {
   wolves_eliminated: "ui.over.reasonWolvesEliminated",
@@ -63,9 +77,11 @@ export function GameOverScreen({
             ? "ui.over.cultWins"
             : "ui.over.serialKillerWins";
   const reasonKey = winner ? REASON_KEYS[winner.reason] : "ui.over.reasonSerialKillerSurvives";
-  const publicEvents = loadedEvents.filter((event) => event.scope === "public");
+  const publicEvents = loadedEvents.filter(
+    (event): event is ReplayEvent => event.scope === "public" && isReplayEvent(event),
+  );
   const names = new Map(snapshot.players.map((player) => [player.userId, player.displayName]));
-  const line = (event: GameEvent) => {
+  const line = (event: ReplayEvent) => {
     switch (event.kind) {
       case "player.eliminated":
         return t("events.public.player.eliminated", {
@@ -82,8 +98,6 @@ export function GameOverScreen({
         return t("events.public.game.finished", {
           faction: t(factionWinKey),
         });
-      default:
-        return null;
     }
   };
   const wolves = snapshot.players.filter(
@@ -139,7 +153,7 @@ export function GameOverScreen({
           {publicEvents.map((event) => (
             <li className="flex gap-3.5 px-2 py-2 text-sm text-paper-dim" key={event.id}>
               <span className="w-9 flex-none font-mono text-[11px] text-fog-dim">
-                {event.kind === "phase.started" ? `D${snapshot.game.day}` : "·"}
+                {event.kind === "phase.started" ? `D${dayOfPhase(event.payload.phaseId)}` : "·"}
               </span>
               {line(event)}
             </li>

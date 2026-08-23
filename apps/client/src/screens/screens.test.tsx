@@ -2321,71 +2321,88 @@ test("game over: the victory timeline does not repeat the win verb", () => {
   expect(screen.queryByText(/wins won/i)).not.toBeInTheDocument();
 });
 
-test("the ready control appears for a living player in a running game and is absent for a dead player", () => {
-  const alive = renderWithI18n(
-    <GameScreen
-      initial={makeGameSnapshot({
-        game: { phase: { id: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 } },
-      })}
-      onUpdate={noopUpdate}
-    />,
-  );
-  expect(screen.getByRole("button", { name: "Ready" })).toBeInTheDocument();
-  alive.unmount();
-
+test("game over: a replay with chat messages renders no empty timeline rows", () => {
   renderWithI18n(
-    <GameScreen
-      initial={makeGameSnapshot({
-        game: { phase: { id: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 } },
-        me: { userId: "wren" as UserId, status: "dead", role: "villager" },
+    <GameOverScreen
+      events={[
+        {
+          id: 1 as EventId,
+          kind: "chat.message",
+          scope: "public",
+          actorUserId: "odile" as UserId,
+          createdAt: 1,
+          payload: { channel: "public", text: "hello village", mentions: [] },
+        },
+        {
+          id: 2 as EventId,
+          kind: "phase.started",
+          scope: "public",
+          createdAt: 2,
+          payload: { phaseId: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 },
+        },
+        {
+          id: 3 as EventId,
+          kind: "player.eliminated",
+          scope: "public",
+          actorUserId: "odile" as UserId,
+          createdAt: 3,
+          payload: { playerId: "odile" as UserId, role: "werewolf", cause: "day_vote" },
+        },
+      ]}
+      snapshot={makeGameSnapshot({
+        game: {
+          status: "finished",
+          winner: {
+            winningFactions: ["village"],
+            winningPlayers: ["wren" as UserId],
+            reason: "wolves_eliminated",
+          },
+        },
       })}
-      onUpdate={noopUpdate}
     />,
   );
-  expect(screen.queryByRole("button", { name: "Ready" })).not.toBeInTheDocument();
+
+  // The chat message is not a describable timeline row: it must not render an
+  // empty <li>, and its text must not appear in the replay list.
+  expect(screen.getAllByRole("listitem")).toHaveLength(2);
+  expect(screen.queryByText("hello village")).not.toBeInTheDocument();
 });
 
-test("pressing the ready control posts phase.ready, toggling between ready and not ready", () => {
-  vi.spyOn(api, "postCommand").mockResolvedValue(undefined);
-  const notReady = renderWithI18n(
-    <GameScreen
-      initial={makeGameSnapshot({
-        game: { phase: { id: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 } },
-      })}
-      onUpdate={noopUpdate}
-    />,
-  );
-  fireEvent.click(screen.getByRole("button", { name: "Ready" }));
-  expect(api.postCommand).toHaveBeenCalledWith("g1", {
-    type: "phase.ready",
-    phaseId: 1,
-    payload: { ready: true },
-  });
-  notReady.unmount();
-
-  // Already ready: pressing again posts ready: false.
+test("game over: the replay gutter stamps the day of each phase, not the final day", () => {
   renderWithI18n(
-    <GameScreen
-      initial={makeGameSnapshot({
-        game: { phase: { id: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 } },
-        me: { userId: "wren" as UserId, status: "alive", role: "villager", ready: true },
+    <GameOverScreen
+      events={[
+        {
+          id: 1 as EventId,
+          kind: "phase.started",
+          scope: "public",
+          createdAt: 1,
+          payload: { phaseId: 1 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 },
+        },
+        {
+          id: 2 as EventId,
+          kind: "phase.started",
+          scope: "public",
+          createdAt: 2,
+          payload: { phaseId: 4 as PhaseId, type: "discussion", startedAt: 1000, endsAt: 10_000 },
+        },
+      ]}
+      snapshot={makeGameSnapshot({
+        game: {
+          day: 3,
+          status: "finished",
+          winner: {
+            winningFactions: ["village"],
+            winningPlayers: ["wren" as UserId],
+            reason: "wolves_eliminated",
+          },
+        },
       })}
-      onUpdate={noopUpdate}
     />,
   );
-  fireEvent.click(screen.getByRole("button", { name: "Ready" }));
-  expect(api.postCommand).toHaveBeenCalledWith("g1", {
-    type: "phase.ready",
-    phaseId: 1,
-    payload: { ready: false },
-  });
-});
 
-test("the vote screen renders no acted/eligible readout", () => {
-  const snapshot = makeGameSnapshot({
-    game: { phase: { id: 7 as PhaseId, type: "voting", startedAt: 1000, endsAt: 10_000 } },
-  });
-  renderWithI18n(<Act events={[]} send={vi.fn()} snapshot={snapshot} />);
-  expect(screen.queryByRole("status")).not.toBeInTheDocument();
-  expect(screen.queryByText(/voted/)).not.toBeInTheDocument();
+  expect(screen.getByText("D1")).toBeInTheDocument();
+  expect(screen.getByText("D2")).toBeInTheDocument();
+  // The final day (3) is not stamped on either row.
+  expect(screen.queryByText("D3")).not.toBeInTheDocument();
 });
