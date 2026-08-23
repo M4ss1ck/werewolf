@@ -2,7 +2,7 @@
 # Auth, the WebSocket endpoint, the scheduler and the game coordinator.
 # Deployment builds from this file, not from Nixpacks.
 
-FROM oven/bun:1.3-alpine AS base
+FROM oven/bun:1.4.0-alpine AS base
 WORKDIR /app
 
 # --- dependencies -----------------------------------------------------------
