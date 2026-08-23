@@ -5,6 +5,7 @@ import type { Bot } from "grammy";
 import { websocket } from "hono/bun";
 import { createApp } from "./app.ts";
 import { createAuth, resolveAuthSession } from "./auth/auth.ts";
+import { seedDevUser } from "./auth/dev-user.ts";
 import { allowedOrigins } from "./auth/origins.ts";
 import { createAuthTables } from "./auth/schema.ts";
 import { LlmBotAgent } from "./bots/agent.ts";
@@ -31,6 +32,9 @@ const { client, db } = createDb(env.TURSO_DATABASE_URL, env.TURSO_AUTH_TOKEN);
 await applyMigrations(db);
 await createAuthTables(client);
 const auth = createAuth(db, env);
+// The dev sign-in user, created on localhost only. A no-op on any
+// non-localhost deployment.
+await seedDevUser(auth, db, env);
 const repository = new GameRepository(db);
 const coordinator = new GameCoordinator(repository);
 const scheduler = new PhaseScheduler(repository, coordinator);

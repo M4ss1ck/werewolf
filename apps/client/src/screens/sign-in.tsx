@@ -41,6 +41,17 @@ export function SignInScreen({ error }: { error?: string | undefined }) {
           >
             {t("ui.signIn")} · Google
           </button>
+          {import.meta.env.DEV ? (
+            <button
+              className="btn btn--ghost w-full"
+              onClick={() =>
+                void import("../auth/session.ts").then(({ signInAsDevUser }) => signInAsDevUser())
+              }
+              type="button"
+            >
+              {t("ui.signInDev")}
+            </button>
+          ) : null}
           <Segmented
             label={t("ui.language")}
             onChange={(value) => void changeLocale(value as Locale, false)}

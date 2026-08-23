@@ -296,6 +296,7 @@ export const en = {
   },
   ui: {
     signIn: "Sign in",
+    signInDev: "Sign in as developer",
     signInFailed: "Sign-in could not be completed.",
     signOut: "Sign out",
     createGame: "Create game",

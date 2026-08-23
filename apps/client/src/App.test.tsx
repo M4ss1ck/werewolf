@@ -185,7 +185,7 @@ afterEach(() => {
 test("renders the sign-in screen when signed out", () => {
   render(<App />);
   expect(screen.getByRole("heading", { name: "Werewolf" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: /Sign in/ })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /Sign in · Google/ })).toBeInTheDocument();
 });
 
 test("a failed sign-in handoff is shown on the sign-in screen, not swallowed", async () => {
@@ -225,7 +225,7 @@ test("a successful sign-in handoff leaves the sign-in screen", async () => {
     ),
   );
   render(<App />);
-  await screen.findByRole("button", { name: /Sign in/ });
+  await screen.findByRole("button", { name: /Sign in · Google/ });
   await waitFor(() => expect(onResult).toBeDefined());
 
   signedIn = true;
@@ -243,7 +243,7 @@ test("does not open the chat socket for a signed-out visitor", async () => {
   );
   render(<App />);
 
-  await screen.findByRole("button", { name: /Sign in/ });
+  await screen.findByRole("button", { name: /Sign in · Google/ });
   expect(StubWebSocket.instances).toHaveLength(0);
 });
 

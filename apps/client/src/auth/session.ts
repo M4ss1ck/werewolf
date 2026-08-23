@@ -81,6 +81,27 @@ export async function signInWithGoogle() {
   }
 }
 
+// Development-only: signs the fixed dev user in through the ordinary
+// email+password endpoint, so the session cookie, getSession, the bearer
+// plugin and the WebSocket upgrade all behave exactly as in production. The
+// button that calls this is stripped from the production bundle, and the
+// server only enables the endpoint on a localhost instance. Web-only: no
+// Tauri or Telegram branch, no loopback.
+export async function signInAsDevUser() {
+  const response = await fetch(apiUrl("/api/auth/sign-in/email"), {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: "dev@werewolf.local", password: "developer" }),
+  });
+  captureAuthToken(response);
+  if (!response.ok) throw new Error(`Dev sign-in failed (${response.status})`);
+  // The Google web path ends in a navigation, which is what re-reads the
+  // session. This one answers in place, so nothing would move without a
+  // reload — the screen has no refresh callback of its own.
+  globalThis.location.reload();
+}
+
 export function signOut() {
   const token = getAuthToken();
   return fetch(apiUrl("/api/auth/sign-out"), {

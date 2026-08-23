@@ -6,6 +6,7 @@ import { oneTimeToken } from "better-auth/plugins/one-time-token";
 import type { MiddlewareHandler } from "hono";
 import { createMiddleware } from "hono/factory";
 import type { Env } from "../env.ts";
+import { isLocalInstance } from "./dev-user.ts";
 import { allowedOrigins } from "./origins.ts";
 import { authSchema } from "./schema.ts";
 
@@ -55,6 +56,11 @@ export function createAuth(db: Db, env: Env) {
     socialProviders: {
       google: { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET },
     },
+    // Server-side gate for the dev sign-in: the email+password endpoint exists
+    // only on a localhost instance, and a real deployment's hostname turns it
+    // off. The dev user signs in through this ordinary endpoint, so every auth
+    // path behaves exactly as in production.
+    emailAndPassword: { enabled: isLocalInstance(env.BETTER_AUTH_URL) },
     // Exposed on the session so the game layer can name players without a
     // second query. Written only through PATCH /api/me/username, never by the
     // client directly.

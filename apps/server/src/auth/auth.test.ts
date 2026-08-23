@@ -183,3 +183,19 @@ test("auth bootstrap propagates unexpected ALTER TABLE failures", async () => {
   ).rejects.toBe(failure);
   expect(statements).toHaveLength(2);
 });
+
+test("a production BETTER_AUTH_URL has no email+password credentials endpoint", async () => {
+  const { client, authDb } = setup();
+  await createAuthTables(client);
+  const prodEnv = { ...env, BETTER_AUTH_URL: "https://werewolf.example.com" };
+  const auth = createAuth(authDb as unknown as Db, prodEnv);
+
+  // Assert the specific refusal, not merely that something threw: a missing
+  // user throws too, so a bare rejects.toThrow() would stay green with the
+  // credentials endpoint live.
+  const error = await auth.api
+    .signInEmail({ body: { email: "dev@werewolf.local", password: "developer" } })
+    .then(() => null)
+    .catch((thrown: unknown) => thrown as { body?: { code?: string } });
+  expect(error?.body?.code).toBe("EMAIL_PASSWORD_DISABLED");
+});
