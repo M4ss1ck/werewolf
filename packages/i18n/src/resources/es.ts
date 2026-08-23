@@ -258,7 +258,7 @@ export const es: TranslationResource = {
         count_one: "{{count}} jugador murió durante la noche.",
         count_other: "{{count}} jugadores murieron durante la noche.",
       },
-      "game.finished": "La partida ha terminado. La victoria es de {{faction}}.",
+      "game.finished": "La partida ha terminado: {{faction}}.",
       "chat.message": "{{text}}",
       "game.start_deferred": {
         count_one:

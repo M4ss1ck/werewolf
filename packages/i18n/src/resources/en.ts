@@ -261,7 +261,7 @@ export const en = {
         count_one: "{{count}} player died during the night.",
         count_other: "{{count}} players died during the night.",
       },
-      "game.finished": "The game is over. {{faction}} won.",
+      "game.finished": "The game is over — {{faction}}.",
       "chat.message": "{{text}}",
       "game.start_deferred": {
         count_one: "Only {{count}} player has joined; the game needs at least {{minimum}}.",

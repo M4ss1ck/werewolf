@@ -2212,6 +2212,39 @@ test("game over: a veteran win and a serial killer win each render their own tit
   expect(screen.getByText("The serial killer outlived everyone.")).toBeInTheDocument();
 });
 
+test("game over: the victory timeline does not repeat the win verb", () => {
+  renderWithI18n(
+    <GameOverScreen
+      events={[
+        {
+          id: 1 as EventId,
+          kind: "game.finished",
+          scope: "public",
+          createdAt: 1000,
+          payload: {
+            winningFactions: ["village"],
+            winningPlayers: ["wren" as UserId],
+            reason: "wolves_eliminated",
+          },
+        },
+      ]}
+      snapshot={makeGameSnapshot({
+        game: {
+          status: "finished",
+          winner: {
+            winningFactions: ["village"],
+            winningPlayers: ["wren" as UserId],
+            reason: "wolves_eliminated",
+          },
+        },
+      })}
+    />,
+  );
+
+  expect(screen.getByText("The game is over — the village wins.")).toBeInTheDocument();
+  expect(screen.queryByText(/wins won/i)).not.toBeInTheDocument();
+});
+
 test("the ready control appears for a living player in a running game and is absent for a dead player", () => {
   const alive = renderWithI18n(
     <GameScreen
