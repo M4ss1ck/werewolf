@@ -1,8 +1,8 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import type { Bot } from "grammy";
 import { InputFile } from "grammy";
 import type { Update } from "grammy/types";
-import { createTelegramBot, TELEGRAM_COMMANDS } from "./bot.ts";
+import { createTelegramBot, startTelegramBot, TELEGRAM_COMMANDS } from "./bot.ts";
 
 const WEB_APP_URL = "https://werewolf.example.com";
 
@@ -127,5 +127,29 @@ describe("telegram bot", () => {
     expect(edit).toBeDefined();
     expect(edit!.payload.message_id).toBe(42);
     expect(edit!.payload.chat_id).toBe(sendMessage!.payload.chat_id);
+  });
+
+  // grammY retries every polling error except 401 and 409, which it rethrows
+  // out of bot.start(). start() is deliberately not awaited — it only settles
+  // when the bot stops — so without its own catch that rejection is unhandled
+  // and Bun kills the whole server. The game must outlive a dead side surface.
+  test("a rethrown polling failure is logged, not left unhandled", async () => {
+    const { bot } = makeBot(null);
+    const conflict = new Error("Call to getUpdates failed! (409: Conflict)");
+    bot.start = () => Promise.reject(conflict);
+
+    const logged: unknown[] = [];
+    const spy = spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      logged.push(...args);
+    });
+    try {
+      await startTelegramBot(bot);
+      await Promise.resolve();
+      await Promise.resolve();
+    } finally {
+      spy.mockRestore();
+    }
+
+    expect(logged).toContain(conflict);
   });
 });

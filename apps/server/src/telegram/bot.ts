@@ -76,7 +76,15 @@ export function createTelegramBot(options: TelegramBotOptions): Bot {
 // polling. bot.start() only resolves when the bot stops, so it is not awaited.
 export async function startTelegramBot(bot: Bot): Promise<void> {
   await bot.api.setMyCommands([...TELEGRAM_COMMANDS]);
-  void bot.start({
-    onStart: (botInfo) => console.log(`telegram bot @${botInfo.username} started`),
-  });
+  // grammY retries every polling error except 401 and 409, which it rethrows.
+  // start() only settles when the bot stops, so it cannot be awaited here and
+  // its rejection needs catching on the spot: unhandled, it takes the whole
+  // server down with it.
+  void bot
+    .start({
+      onStart: (botInfo) => console.log(`telegram bot @${botInfo.username} started`),
+    })
+    .catch((error) => {
+      console.error("telegram bot polling stopped:", error);
+    });
 }
