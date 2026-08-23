@@ -120,7 +120,16 @@ function isDuplicateColumnError(error: unknown): boolean {
   const message = "message" in error && typeof error.message === "string" ? error.message : "";
   if (!/duplicate column(?: name)?/i.test(message)) return false;
   const code = "code" in error && typeof error.code === "string" ? error.code : undefined;
-  return code === undefined || code === "SQLITE_ERROR" || code === "SQLITE_CONSTRAINT";
+  // SQLITE_UNKNOWN is what a hosted Turso database reports: it is reached over
+  // hrana HTTP, which collapses every SQLite error to that one code. Leaving it
+  // out narrowed this to local file: databases only, and the deployment died on
+  // its second boot re-running an ALTER that had already been applied.
+  return (
+    code === undefined ||
+    code === "SQLITE_ERROR" ||
+    code === "SQLITE_CONSTRAINT" ||
+    code === "SQLITE_UNKNOWN"
+  );
 }
 
 /**
