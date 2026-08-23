@@ -23,13 +23,24 @@ export function LobbyScreen({
   const { t } = useTranslation();
   const [error, setError] = useState<unknown>();
   const [bots, setBots] = useState<BotRosterEntry[]>([]);
+  // Seating a bot is a slow round trip in production, so the seat is shown as
+  // taken the moment it is clicked and the server's snapshot reconciles it.
+  const [seatingBotIds, setSeatingBotIds] = useState<string[]>([]);
   const isOwner = snapshot.game.ownerUserId === snapshot.me?.userId;
-  const ready = snapshot.players.length >= MIN_PLAYERS;
-  const emptySeats = Math.max(0, MIN_PLAYERS - snapshot.players.length);
-  const emptySeatNumbers = Array.from(
-    { length: emptySeats },
-    (_, index) => snapshot.players.length + index + 1,
+  // The socket can deliver the seated bot before the request that seated it
+  // resolves, so drop a pending seat whose bot is already at the table rather
+  // than showing it twice. Roster names are unique, and the projection carries
+  // no bot id to match on.
+  const seatedBotNames = new Set(
+    snapshot.players.filter((player) => player.isBot).map((player) => player.displayName),
   );
+  const seatingBots = bots.filter(
+    (bot) => seatingBotIds.includes(bot.id) && !seatedBotNames.has(bot.displayName),
+  );
+  const seatCount = snapshot.players.length + seatingBots.length;
+  const ready = seatCount >= MIN_PLAYERS;
+  const emptySeats = Math.max(0, MIN_PLAYERS - seatCount);
+  const emptySeatNumbers = Array.from({ length: emptySeats }, (_, index) => seatCount + index + 1);
   // Only the host may list bots, and a failed load just means no roster: the
   // lobby still works, it simply offers nobody to add.
   const loadBots = useCallback(() => {
@@ -62,6 +73,13 @@ export function LobbyScreen({
       setError(caught);
     }
   };
+  // A failed seating clears the optimistic seat along with the pending mark,
+  // because `act` turns the rejection into a message rather than a throw.
+  const seatBot = async (bot: BotRosterEntry) => {
+    setSeatingBotIds((current) => [...current, bot.id]);
+    await act(() => api.addBot(snapshot.game.id, bot.id));
+    setSeatingBotIds((current) => current.filter((id) => id !== bot.id));
+  };
   // The owner's cancel feeds the snapshot back so the shell lands on the
   // cancelled screen; a guest just leaves and heads home to the list.
   const leave = async () => {
@@ -91,13 +109,13 @@ export function LobbyScreen({
           <div className="flex items-baseline justify-between gap-3">
             <h2 className="text-base text-paper-dim">{t("ui.lobby.waitingForPlayers")}</h2>
             <span className="font-mono text-base">
-              {t("ui.lobby.seatsFilled", { count: snapshot.players.length, min: MIN_PLAYERS })}
+              {t("ui.lobby.seatsFilled", { count: seatCount, min: MIN_PLAYERS })}
             </span>
           </div>
-          <Meter max={MIN_PLAYERS} value={snapshot.players.length} />
+          <Meter max={MIN_PLAYERS} value={seatCount} />
           {!ready && (
             <p className="text-sm text-fog">
-              {t("ui.lobby.oneMoreNeeded.count", { count: MIN_PLAYERS - snapshot.players.length })}
+              {t("ui.lobby.oneMoreNeeded.count", { count: MIN_PLAYERS - seatCount })}
             </p>
           )}
         </section>
@@ -134,6 +152,15 @@ export function LobbyScreen({
                 </li>
               );
             })}
+            {seatingBots.map((bot) => (
+              <li className="row opacity-50" key={`seating-${bot.id}`}>
+                <Avatar name={bot.displayName} size="md" />
+                <span className="row__name text-[17px]">{bot.displayName}</span>
+                <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-fog">
+                  {t("ui.lobby.botTag")}
+                </span>
+              </li>
+            ))}
             {emptySeatNumbers.map((seat) => (
               <li
                 className="flex items-center gap-3.5 rounded-[14px] border border-dashed border-paper/15 px-3.5 py-3 text-fog-dim"
@@ -153,9 +180,9 @@ export function LobbyScreen({
               {bots.map((bot) => (
                 <button
                   className="flex items-center gap-3.5 rounded-[14px] border border-dashed border-paper/20 px-3.5 py-3 text-left text-[17px] text-fog transition-colors enabled:hover:border-paper/40 enabled:hover:text-paper disabled:opacity-40"
-                  disabled={!bot.available}
+                  disabled={!bot.available || seatingBotIds.includes(bot.id)}
                   key={bot.id}
-                  onClick={() => void act(() => api.addBot(snapshot.game.id, bot.id))}
+                  onClick={() => void seatBot(bot)}
                   type="button"
                 >
                   <span
@@ -197,7 +224,7 @@ export function LobbyScreen({
           >
             {ready
               ? t("ui.start")
-              : t("ui.lobby.startNeeds.count", { count: MIN_PLAYERS - snapshot.players.length })}
+              : t("ui.lobby.startNeeds.count", { count: MIN_PLAYERS - seatCount })}
           </button>
         )}
       </div>

@@ -605,6 +605,73 @@ test("lobby: the host picks a bot from the roster, and unavailable ones are disa
   expect(api.listBots).toHaveBeenCalledTimes(2);
 });
 
+test("lobby: a seated bot fills its seat before the server answers", async () => {
+  vi.spyOn(api, "listBots").mockResolvedValue([
+    { id: "mira", displayName: "Mira", model: "deepseek-v4-flash", available: true },
+  ]);
+  // Hold the round trip open, so the assertions land on the optimistic seat
+  // rather than on the snapshot the request eventually returns.
+  let seat: (snapshot: ViewerGameSnapshot) => void = () => undefined;
+  vi.spyOn(api, "addBot").mockReturnValue(
+    new Promise<ViewerGameSnapshot>((resolve) => {
+      seat = resolve;
+    }),
+  );
+  renderWithI18n(
+    <LobbyScreen
+      onUpdate={noopUpdate}
+      snapshot={makeGameSnapshot({
+        game: { ownerUserId: "owner" as UserId, status: "lobby", phase: null },
+        me: { userId: "owner" as UserId, status: "lobby" },
+        players: [{ userId: "owner" as UserId, displayName: "Owner", status: "lobby" }],
+      })}
+    />,
+  );
+
+  expect(await screen.findByText("1 / 5")).toBeInTheDocument();
+  const mira = screen.getByRole("button", { name: /^Mira/ });
+  await reactAct(async () => {
+    fireEvent.click(mira);
+  });
+
+  // The seat is taken and the roster entry unclickable while the request runs.
+  expect(screen.getByText("2 / 5")).toBeInTheDocument();
+  expect(within(screen.getByRole("list")).getByText("Mira")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /^Mira/ })).toBeDisabled();
+
+  // Once the server answers, the optimistic seat gives way to the snapshot.
+  await reactAct(async () => {
+    seat(makeGameSnapshot({ game: { status: "lobby", phase: null } }));
+  });
+  await waitFor(() => expect(screen.getByText("1 / 5")).toBeInTheDocument());
+});
+
+test("lobby: a rejected bot gives its seat back and reports the error", async () => {
+  vi.spyOn(api, "listBots").mockResolvedValue([
+    { id: "mira", displayName: "Mira", model: "deepseek-v4-flash", available: true },
+  ]);
+  vi.spyOn(api, "addBot").mockRejectedValue(new ApiError("GAME_ALREADY_STARTED"));
+  renderWithI18n(
+    <LobbyScreen
+      onUpdate={noopUpdate}
+      snapshot={makeGameSnapshot({
+        game: { ownerUserId: "owner" as UserId, status: "lobby", phase: null },
+        me: { userId: "owner" as UserId, status: "lobby" },
+        players: [{ userId: "owner" as UserId, displayName: "Owner", status: "lobby" }],
+      })}
+    />,
+  );
+
+  const mira = await screen.findByRole("button", { name: /^Mira/ });
+  await reactAct(async () => {
+    fireEvent.click(mira);
+  });
+
+  expect(screen.getByText("1 / 5")).toBeInTheDocument();
+  expect(within(screen.getByRole("list")).queryByText("Mira")).not.toBeInTheDocument();
+  expect(screen.getByText(en.errors.GAME_ALREADY_STARTED)).toBeInTheDocument();
+});
+
 test("lobby: removing a bot re-reads the roster, so it can be added again", async () => {
   // The roster's availability lives on the server; the lobby must re-read it
   // after any seat change, not only after adding.
