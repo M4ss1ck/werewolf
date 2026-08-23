@@ -36,6 +36,10 @@ export const authSession = sqliteTable("session", {
 
 export const authAccount = sqliteTable("account", {
   id: text("id").primaryKey(),
+  // Better Auth 1.7 identifies an external account by (issuer, accountId)
+  // rather than by providerId alone. Required: the library writes it on every
+  // insert, and createAuthTables backfills the rows that predate it.
+  issuer: text("issuer").notNull(),
   accountId: text("accountId").notNull(),
   providerId: text("providerId").notNull(),
   userId: text("userId")
@@ -92,6 +96,7 @@ CREATE TABLE IF NOT EXISTS "session" (
 );
 CREATE TABLE IF NOT EXISTS "account" (
   "id" text PRIMARY KEY NOT NULL,
+  "issuer" text NOT NULL,
   "accountId" text NOT NULL,
   "providerId" text NOT NULL,
   "userId" text NOT NULL REFERENCES "user" ("id"),
@@ -168,6 +173,35 @@ export async function createAuthTables(client: {
   } catch (error) {
     if (!isDuplicateColumnError(error)) throw error;
   }
+
+  // Better Auth 1.7 scopes account identity by (issuer, accountId). SQLite
+  // cannot ADD COLUMN ... NOT NULL to a populated table, so the column arrives
+  // nullable on an existing database and is filled immediately below; a
+  // database created fresh from AUTH_TABLES_SQL above gets the constraint. The
+  // library itself always writes issuer, so no NULL can appear after this.
+  try {
+    await client.executeMultiple(`ALTER TABLE "account" ADD COLUMN "issuer" text;`);
+  } catch (error) {
+    if (!isDuplicateColumnError(error)) throw error;
+  }
+  // The issuer each existing row should have carried, per Better Auth's 1.7
+  // upgrade guide. Email+password accounts are "local:credential"; a social
+  // provider uses its real issuer; anything else falls back to the documented
+  // local:oauth:<providerId> form rather than being left unusable.
+  await client.executeMultiple(`
+    UPDATE "account" SET "issuer" = 'local:credential'
+      WHERE "issuer" IS NULL AND "providerId" = 'credential';
+    UPDATE "account" SET "issuer" = 'https://accounts.google.com'
+      WHERE "issuer" IS NULL AND "providerId" = 'google';
+    UPDATE "account" SET "issuer" = 'local:oauth:' || "providerId"
+      WHERE "issuer" IS NULL;
+  `);
+  // Deliberately unguarded: if two rows collide on (issuer, accountId) the
+  // boot must fail loudly. Better Auth relies on this pair being unique, and
+  // swallowing the error would leave it silently violated.
+  await client.executeMultiple(
+    `CREATE UNIQUE INDEX IF NOT EXISTS "account_issuer_accountId_uidx" ON "account" ("issuer", "accountId");`,
+  );
 
   const rows = await client.execute(
     `SELECT "id", "username", "usernameSearch" FROM "user" WHERE "username" IS NOT NULL`,
