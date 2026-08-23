@@ -3,8 +3,13 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { ApiError, api } from "./client.ts";
 
+const mocks = vi.hoisted(() => ({ isTauri: vi.fn() }));
+
+vi.mock("@tauri-apps/api/core", () => ({ isTauri: mocks.isTauri }));
+
 afterEach(() => {
   vi.unstubAllGlobals();
+  mocks.isTauri.mockReset();
 });
 
 describe("api client", () => {
@@ -40,6 +45,7 @@ describe("api client", () => {
   });
 
   test("sends the bearer token when one is stored and omits it entirely when none is", async () => {
+    mocks.isTauri.mockReturnValue(true);
     const fetchMock = vi
       .fn()
       .mockImplementation(() => Promise.resolve(new Response("[]", { status: 200 })));
@@ -73,6 +79,7 @@ describe("api client", () => {
   });
 
   test("captures a set-auth-token header from an API response", async () => {
+    mocks.isTauri.mockReturnValue(true);
     const storage = { getItem: vi.fn(() => null), setItem: vi.fn(), removeItem: vi.fn() };
     vi.stubGlobal("localStorage", storage);
     vi.stubGlobal(

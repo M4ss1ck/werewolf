@@ -1,13 +1,18 @@
-// The packaged Tauri desktop/Android build loads from tauri://localhost, which
-// is cross-site to the server, so its webview never returns the session cookie.
+// The packaged Tauri build and the Telegram Mini App webview load from a
+// cross-site origin, so their webviews never return the session cookie.
 // Better Auth's bearer plugin answers with a `set-auth-token` response header
-// instead, and the client holds the token here. The web build never receives
-// the header in practice and keeps using cookies, so every storage access
-// degrades to null / no-op when a webview has storage disabled.
+// instead, and the client holds the token here. The web build must NOT hold a
+// bearer token: it would then request a WebSocket bearer subprotocol, and the
+// production edge does not relay Sec-WebSocket-Protocol, failing the handshake
+// per RFC 6455. Every storage access degrades to null / no-op when a webview
+// has storage disabled.
+
+import { needsBearerAuth } from "./runtime.ts";
 
 const TOKEN_KEY = "werewolf.auth-token";
 
 export function getAuthToken(): string | null {
+  if (!needsBearerAuth()) return null;
   try {
     return localStorage.getItem(TOKEN_KEY);
   } catch {
@@ -16,6 +21,7 @@ export function getAuthToken(): string | null {
 }
 
 export function setAuthToken(token: string): void {
+  if (!needsBearerAuth()) return;
   try {
     localStorage.setItem(TOKEN_KEY, token);
   } catch {
@@ -29,6 +35,12 @@ export function clearAuthToken(): void {
   } catch {
     // Storage disabled; nothing to clear.
   }
+}
+
+/** Browsers that already hold a token from an older build must drop it on
+ * boot, or the web build would keep requesting the bearer subprotocol. */
+export function clearStoredTokenOnCookieRuntime(): void {
+  if (!needsBearerAuth()) clearAuthToken();
 }
 
 export function captureAuthToken(response: Response): void {

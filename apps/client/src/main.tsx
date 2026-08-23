@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { App } from "./App.tsx";
+import { clearStoredTokenOnCookieRuntime } from "./auth/token.ts";
 import "./index.css";
 
 const container = document.getElementById("root");
@@ -9,6 +10,8 @@ const container = document.getElementById("root");
 if (!container) {
   throw new Error("#root not found");
 }
+
+clearStoredTokenOnCookieRuntime();
 
 createRoot(container).render(
   <StrictMode>

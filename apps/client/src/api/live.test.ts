@@ -3,6 +3,10 @@ import { afterEach, expect, test, vi } from "vitest";
 
 import { LiveGameConnection, type LiveStatus } from "./live.ts";
 
+const mocks = vi.hoisted(() => ({ isTauri: vi.fn() }));
+
+vi.mock("@tauri-apps/api/core", () => ({ isTauri: mocks.isTauri }));
+
 /** Minimal WebSocket stand-in: records instances, exposes the event handlers
  * the live client wires up, and lets a test drive open/receive/drop. */
 class FakeWebSocket {
@@ -101,6 +105,7 @@ function sentFrame(socket: FakeWebSocket) {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  mocks.isTauri.mockReset();
   FakeWebSocket.instances.length = 0;
 });
 
@@ -143,7 +148,7 @@ test("delivers a sync batch atomically when onSync is provided", () => {
   expect(onEvent).not.toHaveBeenCalled();
 });
 
-test("passes a browser-safe bearer subprotocol when a token is stored and no second argument when none is", () => {
+test("on the web the socket is constructed without a subprotocol even when a token is stored", () => {
   vi.stubGlobal("WebSocket", FakeWebSocket);
   vi.stubGlobal("localStorage", {
     getItem: () => "session/token=",
@@ -151,21 +156,25 @@ test("passes a browser-safe bearer subprotocol when a token is stored and no sec
     removeItem: vi.fn(),
   });
 
-  const withToken = new LiveGameConnection(gameId, 0 as EventId);
-  withToken.connect();
-  expect(lastSocket().protocols).toEqual(["bearer", "c2Vzc2lvbi90b2tlbj0"]);
-  withToken.close();
+  const conn = new LiveGameConnection(gameId, 0 as EventId);
+  conn.connect();
+  expect(lastSocket().protocols).toBeUndefined();
+  conn.close();
+});
 
+test("in Tauri the bearer subprotocol is passed when a token is stored", () => {
+  mocks.isTauri.mockReturnValue(true);
+  vi.stubGlobal("WebSocket", FakeWebSocket);
   vi.stubGlobal("localStorage", {
-    getItem: () => null,
+    getItem: () => "session/token=",
     setItem: vi.fn(),
     removeItem: vi.fn(),
   });
 
-  const withoutToken = new LiveGameConnection(gameId, 0 as EventId);
-  withoutToken.connect();
-  expect(lastSocket().protocols).toBeUndefined();
-  withoutToken.close();
+  const conn = new LiveGameConnection(gameId, 0 as EventId);
+  conn.connect();
+  expect(lastSocket().protocols).toEqual(["bearer", "c2Vzc2lvbi90b2tlbj0"]);
+  conn.close();
 });
 
 test("advances the cursor as events arrive, so a reconnect subscribes from the newer cursor", () => {
