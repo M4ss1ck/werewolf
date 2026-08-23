@@ -20,6 +20,8 @@ const PLAYER_ID = "p1" as PlayerState["id"];
 function state(
   phase: "discussion" | "voting" | "night" = "discussion",
   player: Partial<PlayerState> = {},
+  phaseId = 1,
+  endsAt = 100,
 ): GameState {
   const id = PLAYER_ID;
   return {
@@ -27,7 +29,7 @@ function state(
     ownerUserId: id,
     status: "running",
     day: 1,
-    phase: { id: 1 as never, type: phase, startedAt: 0, endsAt: 100 },
+    phase: { id: phaseId as never, type: phase, startedAt: 0, endsAt },
     players: {
       [id]: {
         id,
@@ -52,10 +54,11 @@ function command(
   channel: ChatChannel,
   text = "hello",
   mentions: ChatMention[] = [],
+  phaseId = 1,
 ): Parameters<typeof validateCommand>[2] {
   return {
     commandId: "c1",
-    phaseId: 1 as never,
+    phaseId: phaseId as never,
     type: "chat.send" as const,
     payload: { channel, text, mentions },
   };
@@ -144,6 +147,74 @@ describe("chat commands", () => {
         ],
         ephemeral: [],
       },
+    });
+  });
+
+  describe("stale phase id", () => {
+    test.each([
+      ["discussion", "public", {}],
+      ["voting", "public", {}],
+      ["night", "wolves", { faction: "wolves", originalRole: "werewolf", role: "werewolf" }],
+      ["night", "grave", { status: "dead" }],
+    ] as const)(
+      "a chat.send carrying the previous phase's id is accepted during %s on %s",
+      (phase, channel, player) => {
+        const result = applyCommand(
+          state(phase, player as Partial<PlayerState>, 2),
+          PLAYER_ID,
+          command(channel, "hello", [], 1),
+          { now: 1 },
+        );
+        expect(result.ok).toBe(true);
+        if (!result.ok) throw new Error(result.error.code);
+        expect(result.transition.events).toEqual([
+          {
+            kind: "chat.message",
+            scope: channel === "public" ? "public" : "faction",
+            ...(channel !== "public" ? { scopeId: channel } : {}),
+            actorUserId: PLAYER_ID,
+            payload: { channel, text: "hello", mentions: [] },
+          },
+        ]);
+      },
+    );
+
+    test("a chat.send with a stale phase id after phase.endsAt is still PHASE_CLOSED", () => {
+      const result = validateCommand(
+        state("discussion", {}, 2, 10),
+        PLAYER_ID,
+        command("public", "hello", [], 1),
+        { now: 10 },
+      );
+      expect(result).toEqual({ code: "PHASE_CLOSED" });
+    });
+
+    test.each([
+      [
+        "vote.set",
+        {
+          commandId: "c1",
+          phaseId: 1 as never,
+          type: "vote.set",
+          payload: { targetId: PLAYER_ID },
+        },
+      ],
+      [
+        "night.action.set",
+        {
+          commandId: "c1",
+          phaseId: 1 as never,
+          type: "night.action.set",
+          payload: { action: "wolf.attack", targetId: PLAYER_ID },
+        },
+      ],
+      [
+        "phase.ready",
+        { commandId: "c1", phaseId: 1 as never, type: "phase.ready", payload: { ready: true } },
+      ],
+    ] as const)("a %s with a stale phase id is still PHASE_MISMATCH", (_name, command) => {
+      const result = validateCommand(state("discussion", {}, 2), PLAYER_ID, command, { now: 1 });
+      expect(result).toEqual({ code: "PHASE_MISMATCH" });
     });
   });
 

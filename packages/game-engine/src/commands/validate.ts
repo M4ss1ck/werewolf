@@ -22,7 +22,13 @@ export function validateCommand(
 ): DomainError | null {
   const player = state.players[actorId];
   if (!player) return { code: "NOT_A_MEMBER" };
-  if (!state.phase || command.phaseId !== state.phase.id) return { code: "PHASE_MISMATCH" };
+  if (!state.phase) return { code: "PHASE_MISMATCH" };
+  // chat.send is exempt from the phase-id equality check: applyCommand never
+  // reads command.phaseId for chat (the chat.send branch builds the event from
+  // the payload alone), so an accepted chat message with a stale id produces
+  // exactly the same event.
+  if (command.type !== "chat.send" && command.phaseId !== state.phase.id)
+    return { code: "PHASE_MISMATCH" };
   if (context.now >= state.phase.endsAt) return { code: "PHASE_CLOSED" };
   if (command.type === "chat.send") {
     if (command.payload.channel === "public") {

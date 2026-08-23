@@ -78,7 +78,7 @@ test("a command carrying a stale phaseId is rejected with PHASE_MISMATCH", async
     app,
     USERS[1]!,
     `/api/games/${gameId}/commands`,
-    jsonRequest("POST", chatCommand("c-1", 999), USERS[1]!),
+    jsonRequest("POST", voteCommand("c-1", 999, USERS[2]!), USERS[1]!),
   );
   expect(response.status).toBe(409);
   expect(await response.json()).toEqual({ error: { code: "PHASE_MISMATCH" } });
