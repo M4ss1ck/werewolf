@@ -25,10 +25,19 @@ const botEnvSchema = z.object({
    * simultaneous games. */
   BOT_MAX_CONCURRENT_CALLS: z.coerce.number().int().positive().max(64).default(4),
 
-  /** Artificial pause before a bot publishes, so it does not answer instantly.
-   * Set both to 0 in automated tests to run matches as fast as possible. */
+  /** Floor and ceiling on the computed wait before a bot publishes, then
+   * multiplied by seeded jitter. Set both to 0 in automated tests to run
+   * matches as fast as possible. */
   BOT_MIN_DELAY_MS: z.coerce.number().int().nonnegative().default(1_500),
-  BOT_MAX_DELAY_MS: z.coerce.number().int().nonnegative().default(6_000),
+  BOT_MAX_DELAY_MS: z.coerce.number().int().nonnegative().default(15_000),
+
+  /** Room pacing. Bot chat on a channel is spaced by
+   * `BOT_GAP_BASE_MS + BOT_GAP_PER_BOT_MS * (speakableBots - 1)`, so a busy
+   * ten-seat day reads slower than a two-wolf night channel. Both at 0
+   * disables pacing entirely. Only games with a human seat are paced: an
+   * unattended bot match has nobody to read it. */
+  BOT_GAP_BASE_MS: z.coerce.number().int().nonnegative().default(2_500),
+  BOT_GAP_PER_BOT_MS: z.coerce.number().int().nonnegative().default(1_200),
 
   /** How many turns one bot may take in a single discussion or voting phase,
    * counting the unconditional first one. This is the hard cap on model calls:

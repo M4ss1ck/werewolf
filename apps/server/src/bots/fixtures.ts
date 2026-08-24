@@ -127,11 +127,17 @@ export type BotHarness = {
   bots: BotManager;
   clock: { now: number };
   logs: { event: string; fields: BotLogFields }[];
+  sleeps: number[];
   /** Seat `count` bots plus a bot host, start the game, settle the bots. */
   /** `seed` pins the composition. Compositions are seeded from a per-game
    * random uuid, so any test that needs a particular role dealt must pass one
    * or it is rolling dice. `preset` picks the composition preset. */
-  startBotGame: (count?: number, seed?: string, preset?: PresetId) => Promise<GameId>;
+  startBotGame: (
+    count?: number,
+    seed?: string,
+    preset?: PresetId,
+    humanSeat?: boolean,
+  ) => Promise<GameId>;
   /** Run the current phase out and resolve it, then let the bots react. */
   advancePhase: (gameId: GameId) => Promise<void>;
   state: (gameId: GameId) => Promise<GameState>;
@@ -152,11 +158,20 @@ export async function setupBots(
   const clock = { now: 1_000_000 };
   const coordinator = new GameCoordinator(repository, new GameLock(), () => clock.now);
   const logs: { event: string; fields: BotLogFields }[] = [];
+  const sleeps: number[] = [];
   const bots = new BotManager(coordinator, {
     agent: options.agent ?? new FallbackBotAgent(),
     config: options.config ?? testBotConfig(),
     now: () => clock.now,
-    sleep: () => Promise.resolve(),
+    sleep: async (ms) => {
+      sleeps.push(ms);
+      await new Promise<void>((resolve) =>
+        setTimeout(() => {
+          clock.now += ms;
+          resolve();
+        }, 0),
+      );
+    },
     logger: (event, fields) => logs.push({ event, fields }),
   });
   cleanups.push(() => {
@@ -176,8 +191,9 @@ export async function setupBots(
     bots,
     clock,
     logs,
+    sleeps,
     state,
-    startBotGame: async (count = 5, seed?: string, preset?: PresetId) => {
+    startBotGame: async (count = 5, seed?: string, preset?: PresetId, humanSeat = false) => {
       const host = "bot:host" as UserId;
       const game = await coordinator.createGame({
         ownerUserId: host,
@@ -194,11 +210,13 @@ export async function setupBots(
         ownerController: { type: "bot", config: { ...BOT_CONFIG, botId: "fake-host" } },
       });
       const gameId = game!.id;
-      for (let seat = 0; seat < count; seat += 1)
+      const botCount = count - (humanSeat ? 1 : 0);
+      for (let seat = 0; seat < botCount; seat += 1)
         await coordinator.addBot(gameId, host, {
           displayName: `Bot ${seat + 1}`,
           config: { ...BOT_CONFIG, botId: `fake-${seat}` },
         });
+      if (humanSeat) await coordinator.joinGame(gameId, "human:1" as UserId, "Human");
       // The seed is read at start time, so it must be written before startGame.
       if (seed !== undefined)
         await db.update(games).set({ rngSeed: seed }).where(eq(games.id, gameId));

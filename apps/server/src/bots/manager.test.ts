@@ -1395,3 +1395,123 @@ describe("night secret-channel chat", () => {
     expect(followUp.directMentions[0]!.payload).toMatchObject({ text });
   });
 });
+
+describe("chat pacing", () => {
+  const pacing = {
+    BOT_MIN_DELAY_MS: "1",
+    BOT_MAX_DELAY_MS: "60000",
+    BOT_GAP_BASE_MS: "1000",
+    BOT_GAP_PER_BOT_MS: "500",
+  };
+
+  test("a bot-only game is never paced", async () => {
+    const harness = await setupBots({ config: testBotConfig(pacing) });
+    await harness.startBotGame(5);
+    expect(harness.sleeps).toEqual([]);
+  });
+
+  test("bots woken by one message are spaced by the channel gap", async () => {
+    const agent = new RecordingBotAgent();
+    const harness = await setupBots({ agent, config: testBotConfig(pacing) });
+    const gameId = await harness.startBotGame(5, undefined, undefined, true);
+    harness.sleeps.length = 0;
+    const state = await harness.state(gameId);
+    await harness.coordinator.executeCommand(gameId, "human:1" as UserId, {
+      commandId: "pace-wakeup",
+      phaseId: state.phase!.id,
+      type: "chat.send",
+      payload: { channel: "public", text: "hello", mentions: [] },
+    });
+    await harness.bots.whenIdle();
+    expect(harness.sleeps.length).toBeGreaterThan(1);
+    for (let index = 1; index < Math.min(4, harness.sleeps.length); index += 1)
+      expect(harness.sleeps[index]).toBeGreaterThan(harness.sleeps[index - 1]!);
+  });
+
+  test("an at-mentioned bot does not wait behind the queue", async () => {
+    const agent = new RecordingBotAgent();
+    const harness = await setupBots({ agent, config: testBotConfig(pacing) });
+    const gameId = await harness.startBotGame(5, undefined, undefined, true);
+    harness.sleeps.length = 0;
+    const state = await harness.state(gameId);
+    const target = Object.values(state.players).find(
+      (player) => player.controller?.type === "bot",
+    )!;
+    await harness.coordinator.executeCommand(gameId, "human:1" as UserId, {
+      commandId: "pace-mention",
+      phaseId: state.phase!.id,
+      type: "chat.send",
+      payload: {
+        channel: "public",
+        text: `@${target.displayName} answer`,
+        mentions: [{ userId: target.id, start: 0, length: target.displayName!.length + 1 }],
+      },
+    });
+    await harness.bots.whenIdle();
+    expect(harness.sleeps.length).toBeGreaterThan(1);
+    expect(harness.sleeps[0]).toBeLessThan(Math.max(...harness.sleeps.slice(1)));
+  });
+
+  test("a bot whose slot lands after the deadline readies instead of thinking", async () => {
+    const agent = new RecordingBotAgent();
+    const harness = await setupBots({
+      agent,
+      config: testBotConfig({ ...pacing, BOT_GAP_BASE_MS: "30000", BOT_GAP_PER_BOT_MS: "0" }),
+    });
+    const gameId = await harness.startBotGame(5, undefined, undefined, true);
+    harness.sleeps.length = 0;
+    const state = await harness.state(gameId);
+    await harness.coordinator.executeCommand(gameId, "human:1" as UserId, {
+      commandId: "expire-wakeup",
+      phaseId: state.phase!.id,
+      type: "chat.send",
+      payload: { channel: "public", text: "hello", mentions: [] },
+    });
+    await harness.bots.whenIdle();
+    const settled = await harness.state(gameId);
+    const skipped = harness.logs.filter(
+      (entry) => entry.event === "skipped" && entry.fields.reason === "slot_expired",
+    );
+    expect(skipped.length).toBeGreaterThan(0);
+    const skippedPlayer = skipped[0]!.fields.playerId as UserId;
+    expect(agent.forPlayer(skippedPlayer)).toHaveLength(0);
+    expect(settled.players[skippedPlayer]!.phaseState.ready).toBe(true);
+  });
+
+  test("a bot's prompt is built after its wait, not before", async () => {
+    const agent = new RecordingBotAgent();
+    // Two turns exactly: the unconditional one at phase start, which
+    // `startBotGame` already settles, and the one "first" wakes. That budget is
+    // what makes this test mean something — "second" arrives while the bots are
+    // queued but can no longer wake a turn of its own, so a prompt containing it
+    // can only have been built after its author's wait.
+    const harness = await setupBots({
+      agent,
+      config: testBotConfig({ ...pacing, BOT_CHAT_TURNS: "2" }),
+    });
+    const gameId = await harness.startBotGame(5, undefined, undefined, true);
+    harness.sleeps.length = 0;
+    const state = await harness.state(gameId);
+    await harness.coordinator.executeCommand(gameId, "human:1" as UserId, {
+      commandId: "prompt-first",
+      phaseId: state.phase!.id,
+      type: "chat.send",
+      payload: { channel: "public", text: "first", mentions: [] },
+    });
+    await waitFor(() => harness.sleeps.length > 0, "a bot to wait");
+    await harness.coordinator.executeCommand(gameId, "human:1" as UserId, {
+      commandId: "prompt-second",
+      phaseId: state.phase!.id,
+      type: "chat.send",
+      payload: { channel: "public", text: "second", mentions: [] },
+    });
+    await harness.bots.whenIdle();
+    expect(
+      agent.inputs.some((input) =>
+        input.phaseChat.some(
+          (event) => event.kind === "chat.message" && event.payload.text === "second",
+        ),
+      ),
+    ).toBe(true);
+  });
+});

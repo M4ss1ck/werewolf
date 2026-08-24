@@ -23,6 +23,7 @@ import {
 } from "@werewolf/game-engine";
 import {
   type BotConfig,
+  type ChatChannel,
   dayOfPhase,
   type GameEvent,
   type GameId,
@@ -44,6 +45,9 @@ type PhaseRecord = {
   turns: Map<UserId, number>;
   inFlight: Set<UserId>;
   pendingMentions: Map<UserId, GameEvent[]>;
+  /** Earliest time a bot may publish on each channel. Per channel, so the
+   * pack whispering at night never blocks public chat during the day. */
+  slots: Map<ChatChannel, number>;
 };
 
 export interface BotManagerOptions {
@@ -136,6 +140,18 @@ export class BotManager {
     const phase = state.phase;
     const record = this.recordFor(gameId, phase.id);
     const now = this.now();
+    if (this.isPaced(state)) {
+      // A human message occupies the room like any other. It buys no extra pause
+      // (that was decided against), but the room does not answer over the top of it.
+      for (const event of events) {
+        if (event.kind !== "chat.message") continue;
+        const actor = event.actorUserId ? state.players[event.actorUserId] : undefined;
+        if (!actor || actor.controller?.type === "bot") continue;
+        const channel = event.payload.channel;
+        const previous = record.slots.get(channel) ?? 0;
+        record.slots.set(channel, Math.max(previous, now + this.gapMs(state, channel, now)));
+      }
+    }
     for (const player of Object.values(state.players)) {
       const controller = player.controller;
       if (controller?.type !== "bot" || player.status !== "alive") continue;
@@ -174,6 +190,7 @@ export class BotManager {
       turns: new Map(),
       inFlight: new Set(),
       pendingMentions: new Map(),
+      slots: new Map(),
     };
     this.games.set(gameId, record);
     return record;
@@ -229,7 +246,23 @@ export class BotManager {
     const decisionId = `${gameId}:${playerId}:${phaseId}:${turn}`;
     const startedAt = this.now();
     try {
-      const state = await this.coordinator.loadGameState(gameId);
+      let state = await this.coordinator.loadGameState(gameId);
+      if (!this.isCurrent(state, phaseId, playerId)) {
+        this.log("skipped", { decisionId, gameId, playerId, reason: "window_closed" });
+        return;
+      }
+      const paced = await this.waitForSlot(state!, playerId, decisionId, record, directMentions);
+      if (paced === "expired") {
+        await this.send(decisionId, gameId, playerId, {
+          commandId: `${decisionId}:ready`,
+          phaseId,
+          type: "phase.ready",
+          payload: { ready: true },
+        });
+        this.log("skipped", { decisionId, gameId, playerId, reason: "slot_expired" });
+        return;
+      }
+      state = await this.coordinator.loadGameState(gameId);
       if (!this.isCurrent(state, phaseId, playerId)) {
         this.log("skipped", { decisionId, gameId, playerId, reason: "window_closed" });
         return;
@@ -242,13 +275,7 @@ export class BotManager {
         config,
         directMentions,
       );
-      // The pause runs alongside the model call rather than after it, so the
-      // provider's own latency counts towards looking human instead of adding
-      // to it. Neither blocks the game loop: the phase ends on its clock.
-      const [decision] = await Promise.all([
-        this.pool.run(() => this.options.agent.decide(input)),
-        this.pause(decisionId),
-      ]);
+      const decision = await this.pool.run(() => this.options.agent.decide(input));
       await this.submit(gameId, playerId, phaseId, decisionId, decision, input, startedAt, turn);
     } finally {
       record.inFlight.delete(playerId);
@@ -539,18 +566,76 @@ export class BotManager {
     return state.players[playerId]?.status === "alive";
   }
 
-  private async pause(decisionId: string): Promise<void> {
-    const min = this.options.config.BOT_MIN_DELAY_MS;
-    const max = Math.max(min, this.options.config.BOT_MAX_DELAY_MS);
-    if (max <= 0) return;
-    const spread = max - min;
-    const jitter =
-      spread === 0
-        ? 0
-        : createRng(decisionId)
-            .derive("delay")
-            .int(spread + 1);
-    await this.sleep(min + jitter);
+  /** Pacing exists so a human can read the room and get a word in. A game of
+   * nothing but bots has nobody to read it, so it runs unpaced — which is also
+   * what keeps `bots:match` fast. Seat presence, never connection state: the
+   * latter must never be authoritative over game flow. */
+  private isPaced(state: GameState): boolean {
+    return Object.values(state.players).some((player) => player.controller?.type !== "bot");
+  }
+
+  /** The channel a bot's turn is paced on. */
+  private pacingChannel(state: GameState, playerId: UserId, now: number): ChatChannel | null {
+    return getSpeakableChannels(state, playerId, now)[0] ?? null;
+  }
+
+  /** Wider rooms need more air between messages. */
+  private gapMs(state: GameState, channel: ChatChannel, now: number): number {
+    let speakers = 0;
+    for (const player of Object.values(state.players)) {
+      if (player.controller?.type !== "bot" || player.status !== "alive") continue;
+      if (getSpeakableChannels(state, player.id, now).includes(channel)) speakers += 1;
+    }
+    const config = this.options.config;
+    return config.BOT_GAP_BASE_MS + config.BOT_GAP_PER_BOT_MS * Math.max(0, speakers - 1);
+  }
+
+  /** Take the next free slot on this channel and push the channel's clock past it. */
+  private reserveSlot(record: PhaseRecord, channel: ChatChannel, gap: number, now: number): number {
+    const slotAt = Math.max(now, record.slots.get(channel) ?? 0);
+    record.slots.set(channel, slotAt + gap);
+    return slotAt;
+  }
+
+  /** Hold this turn until the room has space for it. */
+  private async waitForSlot(
+    state: GameState,
+    playerId: UserId,
+    decisionId: string,
+    record: PhaseRecord,
+    directMentions: GameEvent[],
+  ): Promise<"ok" | "expired"> {
+    const config = this.options.config;
+    const now = this.now();
+    const channel = this.pacingChannel(state, playerId, now);
+    if (channel === null || !this.isPaced(state)) return "ok";
+
+    const gap = this.gapMs(state, channel, now);
+    let slotAt: number;
+    if (directMentions.length > 0) {
+      slotAt = now;
+      record.slots.set(channel, Math.max(record.slots.get(channel) ?? 0, now + gap));
+    } else {
+      slotAt = this.reserveSlot(record, channel, gap, now);
+    }
+    if (slotAt >= state.phase!.endsAt) return "expired";
+
+    const wait = this.jitter(
+      Math.min(
+        Math.max(slotAt - now, config.BOT_MIN_DELAY_MS),
+        Math.max(config.BOT_MIN_DELAY_MS, config.BOT_MAX_DELAY_MS),
+      ),
+      decisionId,
+    );
+    if (wait > 0) await this.sleep(wait);
+    return "ok";
+  }
+
+  /** +/-20% off the seeded RNG. */
+  private jitter(ms: number, decisionId: string): number {
+    if (ms <= 0) return 0;
+    const roll = createRng(decisionId).derive("delay").int(41);
+    return Math.round((ms * (80 + roll)) / 100);
   }
 }
 
