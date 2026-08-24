@@ -49,7 +49,7 @@ function GameCard({ game }: { game: GameSummary }) {
           </span>
           {game.visibility === "private" && (
             <span className="shrink-0">
-              <Chip>[{t("ui.visibilityPrivate")}]</Chip>
+              <Chip>{t("ui.visibilityPrivate")}</Chip>
             </span>
           )}
         </div>
