@@ -1,4 +1,4 @@
-import type { PublicGameSummary } from "@werewolf/protocol";
+import type { GameSummary } from "@werewolf/protocol";
 import type { TFunction } from "i18next";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -15,7 +15,7 @@ const FILTERS: { id: Filter; labelKey: "filterAll" | "filterLobby" | "filterRunn
   { id: "running", labelKey: "filterRunning" },
 ];
 
-function secondaryLine(game: PublicGameSummary, t: TFunction) {
+function secondaryLine(game: GameSummary, t: TFunction) {
   const count = t("ui.players.count", { count: game.playerCount });
   if (game.status === "running" && game.phase !== undefined)
     return `${count} · ${t("ui.browser.dayPhase", {
@@ -34,7 +34,7 @@ function secondaryLine(game: PublicGameSummary, t: TFunction) {
   return count;
 }
 
-function GameCard({ game }: { game: PublicGameSummary }) {
+function GameCard({ game }: { game: GameSummary }) {
   const { t } = useTranslation();
   if (game.status === "finished") {
     return (
@@ -82,7 +82,7 @@ function GameCard({ game }: { game: PublicGameSummary }) {
 /** Design 03 · the public game browser. */
 export function GamesScreen({ username }: { username: string }) {
   const { t } = useTranslation();
-  const [games, setGames] = useState<PublicGameSummary[]>([]);
+  const [games, setGames] = useState<GameSummary[]>([]);
   const [error, setError] = useState<unknown>();
   const [filter, setFilter] = useState<Filter>("lobby");
   useEffect(() => {
@@ -92,8 +92,8 @@ export function GamesScreen({ username }: { username: string }) {
     filter === "all"
       ? true
       : filter === "lobby"
-        ? game.status === "lobby" || game.status === "scheduled"
-        : game.status === "running",
+        ? (game.status === "lobby" || game.status === "scheduled") && game.visibility !== "private"
+        : game.status === "running" && game.visibility !== "private",
   );
   return (
     <div className="screen__scroll flex flex-col gap-5 px-4.5 pb-5 pt-6">

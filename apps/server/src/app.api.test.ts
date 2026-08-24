@@ -430,7 +430,31 @@ test("a signed-out visitor can browse public games but cannot act", async () => 
   expect(await created.json()).toEqual({ error: { code: "UNAUTHENTICATED" } });
 });
 
-test("GET /api/games returns the PublicGameSummary allowlist, never raw game rows", async () => {
+test("GET /api/games shows a private game only to its participating players", async () => {
+  const { app } = await setup();
+  const created = await as(
+    app,
+    USERS[0]!,
+    "/api/games",
+    jsonRequest("POST", { name: "Private", visibility: "private" }, USERS[0]!),
+  );
+  expect(created.status).toBe(200);
+  const game = (await created.json()) as GameState;
+  await as(app, USERS[1]!, `/api/games/${game.id}/join`, jsonRequest("POST", {}, USERS[1]!));
+  await as(app, USERS[2]!, `/api/games/${game.id}/spectate`, jsonRequest("POST", {}, USERS[2]!));
+
+  for (const participant of [USERS[0]!, USERS[1]!]) {
+    const listing = await as(app, participant, "/api/games");
+    expect((await listing.json()) as unknown[]).toHaveLength(1);
+  }
+  for (const excluded of [USERS[2]!, USERS[3]!]) {
+    const listing = await as(app, excluded, "/api/games");
+    expect(await listing.json()).toEqual([]);
+  }
+  expect(await (await app.request("/api/games")).json()).toEqual([]);
+});
+
+test("GET /api/games returns the GameSummary allowlist, never raw game rows", async () => {
   const { app } = await setup();
   await createGame(app, USERS[0]!);
   // A running game carries the live phase and roster, so every column is

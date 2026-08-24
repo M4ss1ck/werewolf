@@ -14,8 +14,8 @@ import type {
   EventId,
   GameEvent,
   GameId,
+  GameSummary,
   PhaseId,
-  PublicGameSummary,
   UserId,
   ViewerGameSnapshot,
 } from "@werewolf/protocol";
@@ -71,7 +71,7 @@ function renderWithI18n(ui: ReactElement) {
   return render(<I18nextProvider i18n={i18n}>{ui}</I18nextProvider>);
 }
 
-function makeSummary(overrides: Partial<PublicGameSummary> = {}): PublicGameSummary {
+function makeSummary(overrides: Partial<GameSummary> = {}): GameSummary {
   return {
     id: "g1" as GameId,
     name: "Game One",
@@ -275,6 +275,40 @@ test("browser: renders games, filters by status, shows the avatar stack overflow
   expect(screen.getByText("Lobby Game")).toBeInTheDocument();
   expect(screen.queryByText("Running Game")).not.toBeInTheDocument();
   expect(screen.queryByText("Finished Game")).not.toBeInTheDocument();
+});
+
+test("browser: private games render only under All, never Lobby or Running", async () => {
+  const games = [
+    makeSummary({ id: "g1" as GameId, name: "Public Lobby", visibility: "public" }),
+    makeSummary({ id: "g2" as GameId, name: "Private Lobby", visibility: "private" }),
+    makeSummary({
+      id: "g3" as GameId,
+      name: "Private Running",
+      visibility: "private",
+      status: "running",
+      day: 2,
+      phase: { type: "voting", endsAt: 9000 },
+    }),
+  ];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(new Response(JSON.stringify(games), { status: 200 })),
+  );
+
+  renderWithI18n(<GamesScreen username="Wren" />);
+
+  // The browser opens on Lobby: a private game must not appear there.
+  expect(await screen.findByText("Public Lobby")).toBeInTheDocument();
+  expect(screen.queryByText("Private Lobby")).not.toBeInTheDocument();
+
+  // Running hides private games too.
+  fireEvent.click(screen.getByRole("button", { name: "Running" }));
+  expect(screen.queryByText("Private Running")).not.toBeInTheDocument();
+
+  // All shows everything, including private games.
+  fireEvent.click(screen.getByRole("button", { name: "All" }));
+  expect(screen.getByText("Private Lobby")).toBeInTheDocument();
+  expect(screen.getByText("Private Running")).toBeInTheDocument();
 });
 
 test("create: sends the right createGame payload including scheduledAt for a preset", async () => {

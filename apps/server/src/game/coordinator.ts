@@ -14,9 +14,9 @@ import type {
   GamePhase,
   GameplayCommand,
   GameStatus,
+  GameSummary,
   GameVisibility,
   PlayerController,
-  PublicGameSummary,
   UserId,
 } from "@werewolf/protocol";
 import { pickBotName } from "../bots/names.ts";
@@ -281,8 +281,8 @@ export class GameCoordinator {
     if (!state) throw new CoordinatorError("GAME_NOT_FOUND");
     return projectSnapshot(state, userId, undefined, this.now());
   }
-  async listGameSummaries(): Promise<PublicGameSummary[]> {
-    const rows = await this.repository.listGameSummaries();
+  async listGameSummaries(viewerUserId?: UserId): Promise<GameSummary[]> {
+    const rows = await this.repository.listGameSummaries(viewerUserId);
     const serverNow = this.now();
     return rows.map((row) => ({
       id: row.id,

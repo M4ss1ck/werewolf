@@ -9,11 +9,11 @@ import {
   EVENT_KINDS,
   GameEventSchema,
   GameplayCommandSchema,
+  GameSummarySchema,
   MentionCandidateSchema,
   MeStatsSchema,
   MIN_PLAYERS,
   NightActionSetCommandSchema,
-  PublicGameSummarySchema,
   ROLE_IDS,
   RoleIdSchema,
   SubscribeFrameSchema,
@@ -415,7 +415,7 @@ test("ViewerIntentSchema rejects a player vote without a targetId", () => {
 });
 
 test("the game summary schema parses a running game with a phase", () => {
-  const result = PublicGameSummarySchema.safeParse({
+  const result = GameSummarySchema.safeParse({
     id: "game-1",
     name: "Game",
     ownerUserId: "user-1",
@@ -435,7 +435,7 @@ test("the game summary schema parses a running game with a phase", () => {
 });
 
 test("the game summary schema parses a scheduled game with a scheduledAt", () => {
-  const result = PublicGameSummarySchema.safeParse({
+  const result = GameSummarySchema.safeParse({
     id: "game-1",
     name: "Game",
     ownerUserId: "user-1",
@@ -455,7 +455,7 @@ test("the game summary schema parses a scheduled game with a scheduledAt", () =>
 });
 
 test("the game summary schema never carries secret or internal fields", () => {
-  const result = PublicGameSummarySchema.safeParse({
+  const result = GameSummarySchema.safeParse({
     id: "game-1",
     name: "Game",
     ownerUserId: "user-1",

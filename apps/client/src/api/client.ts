@@ -5,8 +5,8 @@ import type {
   GameEvent,
   GameId,
   GameplayCommand,
+  GameSummary,
   MeStats,
-  PublicGameSummary,
   UserId,
   ViewerGameSnapshot,
 } from "@werewolf/protocol";
@@ -67,9 +67,8 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 const json = (body: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(body) });
 
 export const api = {
-  listGames: () => request<PublicGameSummary[]>("/api/games"),
-  createGame: (input: CreateGameInput) =>
-    request<PublicGameSummary>("/api/games", { ...json(input) }),
+  listGames: () => request<GameSummary[]>("/api/games"),
+  createGame: (input: CreateGameInput) => request<GameSummary>("/api/games", { ...json(input) }),
   getSnapshot: (id: GameId | string) => request<ViewerGameSnapshot>(`/api/games/${id}`),
   join: (id: GameId | string) => request<ViewerGameSnapshot>(`/api/games/${id}/join`, json({})),
   spectate: (id: GameId | string) =>

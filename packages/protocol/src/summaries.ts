@@ -7,7 +7,7 @@ import { GamePhaseSchema, GameStatusSchema, GameVisibilitySchema } from "./enums
 import type { GameId, UserId } from "./ids.ts";
 import { GameIdSchema, UserIdSchema } from "./ids.ts";
 
-export interface PublicGameSummary {
+export interface GameSummary {
   id: GameId;
   name: string;
   ownerUserId: UserId;
@@ -24,8 +24,8 @@ export interface PublicGameSummary {
   serverNow: number;
 }
 
-/** Runtime validation for a public game summary. */
-export const PublicGameSummarySchema = z.object({
+/** Runtime validation for a game summary. */
+export const GameSummarySchema = z.object({
   id: GameIdSchema,
   name: z.string(),
   ownerUserId: UserIdSchema,

@@ -438,6 +438,54 @@ describe("GameRepository", () => {
     expect(summaries[1]!.players).toEqual([{ userId: USER_IDS[0]!, displayName: "P0" }]);
   });
 
+  test("listGameSummaries shows private games only to participating viewers", async () => {
+    const { repo } = await setup();
+    for (const [id, visibility, createdAt] of [
+      ["g-public", "public", 1_000],
+      ["g-private-player", "private", 2_000],
+      ["g-private-spectator", "private", 3_000],
+      ["g-private-other", "private", 4_000],
+    ] as const) {
+      await repo.createGame({
+        id: id as GameId,
+        ownerUserId: OWNER_ID,
+        name: id,
+        visibility,
+        status: "lobby",
+        settings: SETTINGS,
+        balanceVersion: 1,
+        createdAt,
+      });
+    }
+    await repo.addPlayer({
+      gameId: "g-private-player" as GameId,
+      userId: USER_IDS[0]!,
+      displayName: "Player",
+      status: "alive",
+      joinedAt: 2_000,
+    });
+    await repo.addPlayer({
+      gameId: "g-private-spectator" as GameId,
+      userId: USER_IDS[0]!,
+      displayName: "Spectator",
+      status: "spectator",
+      joinedAt: 3_000,
+    });
+    await repo.addPlayer({
+      gameId: "g-private-other" as GameId,
+      userId: USER_IDS[1]!,
+      displayName: "Other",
+      status: "alive",
+      joinedAt: 4_000,
+    });
+
+    expect((await repo.listGameSummaries()).map((game) => game.id as string)).toEqual(["g-public"]);
+    expect((await repo.listGameSummaries(USER_IDS[0]!)).map((game) => game.id as string)).toEqual([
+      "g-public",
+      "g-private-player",
+    ]);
+  });
+
   test("listGameSummaries carries phase and schedule columns when set", async () => {
     const { repo } = await setup();
     await repo.createGame({

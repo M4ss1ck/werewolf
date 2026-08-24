@@ -61,7 +61,13 @@ function failure(c: Context, error: unknown) {
 
 export function gamesRoutes(coordinator: GameCoordinator) {
   const app = new Hono();
-  app.get("/", async (c) => c.json(await coordinator.listGameSummaries()));
+  app.get("/", async (c) => {
+    // The listing is the one route open to signed-out visitors, so the viewer
+    // is optional: anonymous callers see public games only, an authenticated
+    // one also sees private games they participate in.
+    const viewer = (c as Context).get("viewer") as ViewerContext | undefined;
+    return c.json(await coordinator.listGameSummaries(viewer?.userId as UserId | undefined));
+  });
   app.post("/", async (c) => {
     const parsed = gameBody.safeParse(await c.req.json());
     if (!parsed.success) return c.json({ error: { code: "VALIDATION" } }, 400);

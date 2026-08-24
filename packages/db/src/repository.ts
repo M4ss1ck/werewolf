@@ -1,6 +1,6 @@
 import type { DomainTransition, PlayerPatch } from "@werewolf/game-engine";
 import type { EventId, GameId, PlayerController, UserId } from "@werewolf/protocol";
-import { and, asc, desc, eq, gt, inArray, isNotNull, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, exists, gt, inArray, isNotNull, ne, or, sql } from "drizzle-orm";
 import type { Db } from "./client.ts";
 import { mapEvent, mapGame } from "./mapper.ts";
 import { gameEvents, gamePlayers, games } from "./schema.ts";
@@ -33,8 +33,8 @@ export type CommitResult =
   | { ok: true; events: ReturnType<typeof mapEvent>[]; version: number }
   | { ok: false; stale: true };
 
-/** A public game row plus its roster, shaped for the coordinator to map into
- * `PublicGameSummary`. Never carries rngSeed, joinCode or the JSON blobs. */
+/** A game row plus its roster, shaped for the coordinator to map into
+ * `GameSummary`. Never carries rngSeed, joinCode or the JSON blobs. */
 export type GameSummaryRow = {
   id: GameId;
   ownerUserId: UserId;
@@ -68,7 +68,24 @@ export class GameRepository {
     });
     return this.getGame(input.id);
   }
-  async listGameSummaries(): Promise<GameSummaryRow[]> {
+  async listGameSummaries(viewerUserId?: UserId): Promise<GameSummaryRow[]> {
+    const visibility = viewerUserId
+      ? or(
+          eq(games.visibility, "public"),
+          exists(
+            this.db
+              .select({ gameId: gamePlayers.gameId })
+              .from(gamePlayers)
+              .where(
+                and(
+                  eq(gamePlayers.gameId, games.id),
+                  eq(gamePlayers.userId, viewerUserId),
+                  ne(gamePlayers.status, "spectator"),
+                ),
+              ),
+          ),
+        )
+      : eq(games.visibility, "public");
     const rows = await this.db
       .select({
         id: games.id,
@@ -82,7 +99,7 @@ export class GameRepository {
         scheduledAt: games.scheduledAt,
       })
       .from(games)
-      .where(and(eq(games.visibility, "public"), ne(games.status, "cancelled")))
+      .where(and(visibility, ne(games.status, "cancelled")))
       .orderBy(asc(games.createdAt));
     if (rows.length === 0) return [];
     const players = await this.db
