@@ -311,6 +311,43 @@ test("browser: private games render only under All, never Lobby or Running", asy
   expect(screen.getByText("Private Running")).toBeInTheDocument();
 });
 
+test("browser: private games carry a [Private] badge on active and finished cards", async () => {
+  const games = [
+    makeSummary({ id: "g1" as GameId, name: "Public Game", visibility: "public" }),
+    makeSummary({
+      id: "g2" as GameId,
+      name: "Private Active",
+      visibility: "private",
+      status: "running",
+      day: 2,
+      phase: { type: "voting", endsAt: 9000 },
+    }),
+    makeSummary({
+      id: "g3" as GameId,
+      name: "Private Finished",
+      visibility: "private",
+      status: "finished",
+      playerCount: 7,
+    }),
+  ];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(new Response(JSON.stringify(games), { status: 200 })),
+  );
+
+  renderWithI18n(<GamesScreen username="Wren" />);
+
+  // The browser opens on Lobby: only the public game is visible, no badges.
+  expect(await screen.findByText("Public Game")).toBeInTheDocument();
+  expect(screen.queryByText("[Private]")).not.toBeInTheDocument();
+
+  // All shows every game; exactly the two private ones carry the badge.
+  fireEvent.click(screen.getByRole("button", { name: "All" }));
+  expect(screen.getByText("Private Active")).toBeInTheDocument();
+  expect(screen.getByText("Private Finished")).toBeInTheDocument();
+  expect(screen.getAllByText("[Private]")).toHaveLength(2);
+});
+
 test("create: sends the right createGame payload including scheduledAt for a preset", async () => {
   const createGame = vi
     .spyOn(api, "createGame")

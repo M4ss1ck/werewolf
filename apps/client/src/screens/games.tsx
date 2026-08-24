@@ -43,9 +43,16 @@ function GameCard({ game }: { game: GameSummary }) {
         onClick={() => navigate(`/games/${game.id}/replay`)}
         type="button"
       >
-        <span className="truncate text-[19px] font-semibold tracking-[-0.02em] text-fog">
-          {game.name}
-        </span>
+        <div className="flex items-center justify-between gap-3">
+          <span className="min-w-0 truncate text-[19px] font-semibold tracking-[-0.02em] text-fog">
+            {game.name}
+          </span>
+          {game.visibility === "private" && (
+            <span className="shrink-0">
+              <Chip>[{t("ui.visibilityPrivate")}]</Chip>
+            </span>
+          )}
+        </div>
         <span className="font-mono text-xs text-fog-dim">
           {t("ui.browser.finished")} · {t("ui.players.count", { count: game.playerCount })}
         </span>
@@ -60,10 +67,13 @@ function GameCard({ game }: { game: GameSummary }) {
           <h3 className="truncate text-[21px] font-semibold tracking-[-0.02em]">{game.name}</h3>
           <p className="mt-1.5 font-mono text-xs text-fog">{secondaryLine(game, t)}</p>
         </div>
-        <Chip tone={lobby ? "lobby" : "running"}>
-          <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
-          {t(`gameStatuses.${game.status}`)}
-        </Chip>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {game.visibility === "private" && <Chip>[{t("ui.visibilityPrivate")}]</Chip>}
+          <Chip tone={lobby ? "lobby" : "running"}>
+            <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
+            {t(`gameStatuses.${game.status}`)}
+          </Chip>
+        </div>
       </div>
       <div className="flex items-center justify-between gap-3">
         <AvatarStack names={game.players.map((player) => player.displayName)} />
