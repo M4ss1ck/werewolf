@@ -68,7 +68,7 @@ function GameCard({ game }: { game: GameSummary }) {
           <p className="mt-1.5 font-mono text-xs text-fog">{secondaryLine(game, t)}</p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
-          {game.visibility === "private" && <Chip>[{t("ui.visibilityPrivate")}]</Chip>}
+          {game.visibility === "private" && <Chip>{t("ui.visibilityPrivate")}</Chip>}
           <Chip tone={lobby ? "lobby" : "running"}>
             <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
             {t(`gameStatuses.${game.status}`)}
