@@ -473,6 +473,7 @@ export const en = {
       serialKillerWinsTitle: "The last one standing",
       cultWinsTitle: "The cult takes the village",
       drawTitle: "A draw",
+      winner: "Winner",
       reasonWolvesEliminated: "All the wolves were eliminated.",
       reasonVillageEliminated: "The wolves killed everyone else.",
       reasonVeteranLynched: "The village lynched the veteran. Everyone else loses.",

@@ -474,6 +474,7 @@ export const es: TranslationResource = {
       serialKillerWinsTitle: "El último en pie",
       cultWinsTitle: "El culto se apodera de la aldea",
       drawTitle: "Empate",
+      winner: "Ganador",
       reasonWolvesEliminated: "Todos los lobos fueron eliminados.",
       reasonVillageEliminated: "Los lobos mataron a todos los demás.",
       reasonVeteranLynched: "La aldea ahorcó al veterano. Todos los demás pierden.",

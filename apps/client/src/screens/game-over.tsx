@@ -5,6 +5,7 @@ import {
   type ViewerGameSnapshot,
   WOLF_ROLE_IDS,
 } from "@werewolf/protocol";
+import { Skull } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -127,9 +128,32 @@ export function GameOverScreen({
           const wolf =
             player.revealedRole !== undefined &&
             (WOLF_ROLE_IDS as readonly string[]).includes(player.revealedRole);
+          const dead = player.status === "dead";
+          const winner = snapshot.game.winner?.winningPlayers.includes(player.userId) ?? false;
           return (
-            <div className={`row ${wolf ? "border-blood/35 bg-blood/10" : ""}`} key={player.userId}>
-              <Avatar name={player.displayName} />
+            <div
+              className={`row relative overflow-hidden ${wolf ? "border-blood/35 bg-blood/10" : ""}`}
+              key={player.userId}
+            >
+              {winner && (
+                <span
+                  aria-label={t("ui.over.winner")}
+                  className="absolute -left-8 top-4 z-10 flex h-5 w-24 -rotate-45 items-center justify-center border-y border-night/30 bg-bone text-xs font-bold text-slate-dark shadow-md"
+                  role="img"
+                >
+                  W
+                </span>
+              )}
+              <span className="relative">
+                <Avatar dead={dead} name={player.displayName} />
+                {dead && (
+                  <Skull
+                    aria-label={t("playerStatuses.dead")}
+                    className="absolute inset-0 z-20 m-auto h-4.5 w-4.5 text-bone"
+                    role="img"
+                  />
+                )}
+              </span>
               <span className="row__name text-[17px]">
                 {player.displayName}
                 {player.userId === snapshot.me?.userId && (

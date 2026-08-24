@@ -2532,6 +2532,59 @@ test("game over: the replay gutter stamps the day of each phase, not the final d
   expect(screen.queryByText("D3")).not.toBeInTheDocument();
 });
 
+test("game over: dead players carry a skull marker and winners a corner ribbon", () => {
+  renderWithI18n(
+    <GameOverScreen
+      events={[]}
+      snapshot={makeGameSnapshot({
+        game: {
+          status: "finished",
+          winner: {
+            winningFactions: ["village"],
+            winningPlayers: ["wren" as UserId, "odile" as UserId],
+            reason: "wolves_eliminated",
+          },
+        },
+        me: { userId: "spectator" as UserId, status: "spectator" },
+        players: [
+          { userId: "wren" as UserId, displayName: "Wren", status: "alive" },
+          {
+            userId: "odile" as UserId,
+            displayName: "Odile",
+            status: "dead",
+            revealedRole: "werewolf",
+          },
+          { userId: "mattias" as UserId, displayName: "Mattias", status: "alive" },
+          {
+            userId: "kestrel" as UserId,
+            displayName: "Kestrel",
+            status: "dead",
+            revealedRole: "villager",
+          },
+        ],
+      })}
+    />,
+  );
+
+  const row = (name: string) => within(screen.getByText(name).closest(".row") as HTMLElement);
+
+  // A living non-winner carries neither marker.
+  expect(row("Mattias").queryByLabelText("Dead")).not.toBeInTheDocument();
+  expect(row("Mattias").queryByLabelText("Winner")).not.toBeInTheDocument();
+
+  // A living winner carries only the ribbon.
+  expect(row("Wren").queryByLabelText("Dead")).not.toBeInTheDocument();
+  expect(row("Wren").getByLabelText("Winner")).toBeInTheDocument();
+
+  // A dead non-winner carries only the skull.
+  expect(row("Kestrel").getByLabelText("Dead")).toBeInTheDocument();
+  expect(row("Kestrel").queryByLabelText("Winner")).not.toBeInTheDocument();
+
+  // A dead winner carries both at once.
+  expect(row("Odile").getByLabelText("Dead")).toBeInTheDocument();
+  expect(row("Odile").getByLabelText("Winner")).toBeInTheDocument();
+});
+
 test("talk: the wolves channel lists the other wolves and never the viewer", () => {
   const snapshot = makeGameSnapshot({
     me: { userId: "wren" as UserId, status: "alive", role: "werewolf" },
