@@ -57,6 +57,53 @@ test("composer selects a local mention and sends canonical content", async () =>
   expect(onSend).toHaveBeenCalledWith(expect.objectContaining({ text: "@Ana" }));
 });
 
+test("caret restore after selecting a trailing mention must not reopen its own query", async () => {
+  const onSend = vi.fn<(content: ChatContent) => Promise<void>>().mockResolvedValue();
+  function Harness() {
+    const [current, setCurrent] = useState<ChatDraft>(draft);
+    return (
+      <ChatComposer
+        inputId="chat"
+        label="Message"
+        placeholder="Say"
+        sendLabel="Send"
+        draft={current}
+        source={source}
+        readOnly={false}
+        onDraftChange={setCurrent}
+        onSend={onSend}
+        onSent={vi.fn()}
+      />
+    );
+  }
+  render(wrap(<Harness />));
+  const input = screen.getByRole("combobox") as HTMLInputElement;
+  const send = screen.getByRole("button", { name: "Send" });
+
+  fireEvent.change(input, { target: { value: "@A" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  fireEvent.keyUp(input, { key: "Enter" });
+  expect(input).toHaveValue("@Ana ");
+
+  // choose() restores the caret with a programmatic setSelectionRange, which
+  // fires the input's native `select` event -- the same handler a real user
+  // click uses to reopen the mention search at the new caret position.
+  input.setSelectionRange(input.value.length, input.value.length);
+  fireEvent.select(input);
+  expect(screen.queryByRole("option")).not.toBeInTheDocument();
+
+  // Pressing Enter here must submit the message, not re-select the mention.
+  fireEvent.keyDown(input, { key: "Enter" });
+  fireEvent.keyUp(input, { key: "Enter" });
+  expect(send).not.toBeDisabled();
+
+  await act(async () => fireEvent.click(send));
+  expect(onSend).toHaveBeenCalledWith({
+    text: "@Ana",
+    mentions: [{ userId: "u2", start: 0, length: 4 }],
+  });
+});
+
 test("composer preserves controlled draft when send rejects", async () => {
   const selectedDraft: ChatDraft = {
     text: "@Alice hello",

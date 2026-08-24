@@ -41,9 +41,17 @@ export type ChatComposerProps = {
   onInvalidMention?(): void;
 };
 
-function queryFor(text: string, caret: number) {
+function queryFor(text: string, caret: number, mentions: readonly ChatMention[]) {
   const match = findMentionQuery(text, caret);
-  return match && match.query.length > 0 ? match : undefined;
+  if (!match || match.query.length === 0) return undefined;
+  // The caret can land right after an already-selected mention -- a real
+  // click, or the programmatic setSelectionRange choose() uses to restore
+  // it, both fire the input's `select` event. Without this guard that
+  // reopens a query on the mention's own text, and a stray Enter afterward
+  // re-selects it, inserting a second overlapping mention that permanently
+  // fails validation.
+  if (mentions.some((mention) => mention.start === match.start)) return undefined;
+  return match;
 }
 
 function candidateKey(candidate: MentionCandidate): string {
@@ -68,7 +76,7 @@ export function ChatComposer({
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const caretRef = useRef(draft.text.length);
-  const [query, setQuery] = useState(() => queryFor(draft.text, caretRef.current));
+  const [query, setQuery] = useState(() => queryFor(draft.text, caretRef.current, draft.mentions));
   const [options, setOptions] = useState<MentionCandidate[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -89,7 +97,7 @@ export function ChatComposer({
     const input = inputRef.current;
     const caret = input?.selectionStart ?? draft.text.length;
     caretRef.current = caret;
-    setQuery(queryFor(draft.text, caret));
+    setQuery(queryFor(draft.text, caret, draft.mentions));
   };
 
   useEffect(() => {
@@ -259,8 +267,9 @@ export function ChatComposer({
             selectionHandledRef.current = undefined;
             const input = event.currentTarget;
             caretRef.current = input.selectionStart ?? input.value.length;
-            onDraftChange(applyChatEdit(draft, input.value));
-            const nextQuery = queryFor(input.value, caretRef.current);
+            const edited = applyChatEdit(draft, input.value);
+            onDraftChange(edited);
+            const nextQuery = queryFor(input.value, caretRef.current, edited.mentions);
             setQuery(nextQuery);
             if (!nextQuery) {
               setOptions([]);
