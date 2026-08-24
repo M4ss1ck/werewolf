@@ -311,7 +311,7 @@ test("browser: private games render only under All, never Lobby or Running", asy
   expect(screen.getByText("Private Running")).toBeInTheDocument();
 });
 
-test("browser: private games carry a [Private] badge on active and finished cards", async () => {
+test("browser: private games carry a Private badge on active and finished cards", async () => {
   const games = [
     makeSummary({ id: "g1" as GameId, name: "Public Game", visibility: "public" }),
     makeSummary({
@@ -339,13 +339,13 @@ test("browser: private games carry a [Private] badge on active and finished card
 
   // The browser opens on Lobby: only the public game is visible, no badges.
   expect(await screen.findByText("Public Game")).toBeInTheDocument();
-  expect(screen.queryByText("[Private]")).not.toBeInTheDocument();
+  expect(screen.queryByText("Private")).not.toBeInTheDocument();
 
   // All shows every game; exactly the two private ones carry the badge.
   fireEvent.click(screen.getByRole("button", { name: "All" }));
   expect(screen.getByText("Private Active")).toBeInTheDocument();
   expect(screen.getByText("Private Finished")).toBeInTheDocument();
-  expect(screen.getAllByText("[Private]")).toHaveLength(2);
+  expect(screen.getAllByText("Private")).toHaveLength(2);
 });
 
 test("create: sends the right createGame payload including scheduledAt for a preset", async () => {
