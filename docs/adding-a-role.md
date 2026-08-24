@@ -123,6 +123,17 @@ declared. There are five in the whole tree.
 Only for a role in a faction chat or the wolf ballot. Both are by ROLE, never by
 faction — see the trap below.
 
+### Outcome hooks
+
+| Hook | Meaning |
+|---|---|
+| `contests` | `true` only while the living true role can keep an outcome unsettled; it is checked before a bloc is declared doomed. |
+| `onDaySelected` | Optional day-selection effect, such as the Princess's one-time save. |
+
+When checking a role's checklist, add `contests` only for a role whose living
+state can genuinely prevent a victory. Terminal doom writes finish every living
+loser after the winner is decided and do not invoke role effects or cascades.
+
 ## 3. Give it night behaviour, if it needs any
 
 Most roles need none: declaring an action is enough to have it offered, validated,

@@ -252,6 +252,7 @@ export const es: TranslationResource = {
       "phase.started": "Ha comenzado la fase de {{phase}}.",
       "vote.resolved": "La votación ha terminado. Abstenciones: {{abstain}}. Sin voto: {{noVote}}.",
       "player.eliminated": "{{player}} ya no está en la partida. Su rol era {{role}}.",
+      "players.finished_off": "Última resistencia eliminada por {{faction}}: {{players}}.",
       "princess.revealed": "{{player}} se ha revelado como la Princesa.",
       "mayor.revealed": "{{player}} se ha revelado como el Alcalde.",
       "night.resolved": {

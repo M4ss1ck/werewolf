@@ -255,6 +255,7 @@ export const en = {
       "phase.started": "The {{phase}} phase has begun.",
       "vote.resolved": "The vote is over. {{abstain}} abstained and {{noVote}} did not vote.",
       "player.eliminated": "{{player}} was eliminated. Their role was {{role}}.",
+      "players.finished_off": "Final resistance eliminated by {{faction}}: {{players}}.",
       "princess.revealed": "{{player}} revealed themselves as the Princess.",
       "mayor.revealed": "{{player}} revealed themselves as the Mayor.",
       "night.resolved": {

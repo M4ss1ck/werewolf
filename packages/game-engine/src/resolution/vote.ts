@@ -8,7 +8,7 @@ import type {
   VictoryResult,
 } from "../state.ts";
 import { loverPartner } from "./link.ts";
-import { applyLoverRider, checkVictory } from "./victory.ts";
+import { applyLoverRider, checkVictory, finishOffLosers } from "./victory.ts";
 
 export function resolveDayVote(state: GameState): DomainResult {
   if (!state.phase || state.phase.type !== "voting")
@@ -183,6 +183,9 @@ export function resolveDayVote(state: GameState): DomainResult {
   };
   const winner = checkVictory(projected);
   if (winner) {
+    const terminal = finishOffLosers(projected, winner);
+    playerPatches.push(...terminal.playerPatches);
+    if (terminal.event) events.push(terminal.event);
     events.push({ kind: "game.finished", scope: "public", payload: winner });
     return {
       ok: true,

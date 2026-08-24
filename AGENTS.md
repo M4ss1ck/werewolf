@@ -166,6 +166,13 @@ and wait — do not quietly implement something else.
 - **The scheduler is timers over authoritative DB columns.** `scheduled_at` and
   `phase_ends_at` are the truth; in-memory timers are an optimization, and
   startup must recover anything overdue.
+- **Surviving is not winning.** A bloc can win by doom while living opponents
+  remain; the terminal write marks those losers dead and emits one public
+  `players.finished_off` event immediately before `game.finished`. This write
+  does not invoke survival, lover, hunter, princess, guardian, or other role
+  effects.
+- **Accepted terminal information leak.** Failure to end at arithmetic parity
+  can reveal a living Hunter or an unused Mayor.
 
 ## Out of scope
 

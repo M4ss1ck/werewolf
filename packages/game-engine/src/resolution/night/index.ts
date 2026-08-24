@@ -1,7 +1,7 @@
 import type { UserId } from "@werewolf/protocol";
 import type { SeededRng } from "../../rng/rng.ts";
 import type { DomainResult, GameState } from "../../state.ts";
-import { checkVictory } from "../victory.ts";
+import { checkVictory, finishOffLosers } from "../victory.ts";
 import { resolveHouseAttacks } from "./attacks.ts";
 import {
   applyLoverLinkDeaths,
@@ -59,6 +59,9 @@ export function resolveNight(state: GameState, context: NightResolutionContext):
   const events = [...makeNightEvents(state, frozen, targetId, outcome, rolls), ...link.events];
   const winner = checkVictory(projected);
   if (winner) {
+    const terminal = finishOffLosers(projected, winner);
+    playerPatches.push(...terminal.playerPatches);
+    if (terminal.event) events.push(terminal.event);
     events.push({ kind: "game.finished", scope: "public", payload: winner });
     return {
       ok: true,

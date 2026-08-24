@@ -64,8 +64,15 @@ function resolve(state: GameState, seed = "seed") {
 }
 
 function deadPlayerIds(transition: ReturnType<typeof resolve>): string[] {
+  const eliminated = new Set(
+    transition.events.flatMap((event) =>
+      event.kind === "player.eliminated"
+        ? [String((event.payload as { playerId: PlayerState["id"] }).playerId)]
+        : [],
+    ),
+  );
   return transition.playerPatches
-    .filter((patch) => patch.changes.status === "dead")
+    .filter((patch) => patch.changes.status === "dead" && eliminated.has(String(patch.playerId)))
     .map((patch) => String(patch.playerId))
     .sort();
 }

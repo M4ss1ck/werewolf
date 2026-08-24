@@ -1,7 +1,7 @@
 import type { FactionId, UserId } from "@werewolf/protocol";
 import { STALEMATE_NIGHTS } from "../composer/balance-v1.ts";
 import { getRoleDefinition } from "../roles/registry.ts";
-import type { GameState, PlayerState, VictoryResult } from "../state.ts";
+import type { EventDraft, GameState, PlayerPatch, PlayerState, VictoryResult } from "../state.ts";
 import { getLinkPair } from "./link.ts";
 
 type Bloc = PlayerState[];
@@ -31,6 +31,28 @@ export function checkVictory(state: GameState): VictoryResult | null {
     return { winningFactions: [], winningPlayers: [], reason: "stalemate" };
   }
   return null;
+}
+
+export function finishOffLosers(
+  state: GameState,
+  winner: VictoryResult,
+): { playerPatches: PlayerPatch[]; event: EventDraft<"players.finished_off"> | null } {
+  const winningFaction = winner.winningFactions[0];
+  if (!winningFaction) return { playerPatches: [], event: null };
+  const winningPlayers = new Set(winner.winningPlayers);
+  const playerIds = Object.values(state.players)
+    .filter((player) => player.status === "alive" && !winningPlayers.has(player.id))
+    .map((player) => player.id)
+    .sort((a, b) => a.localeCompare(b));
+  if (playerIds.length === 0) return { playerPatches: [], event: null };
+  return {
+    playerPatches: playerIds.map((playerId) => ({ playerId, changes: { status: "dead" } })),
+    event: {
+      kind: "players.finished_off",
+      scope: "public",
+      payload: { playerIds, winningFaction },
+    },
+  };
 }
 
 function contests(player: PlayerState): boolean {

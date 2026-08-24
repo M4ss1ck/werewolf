@@ -2446,6 +2446,57 @@ test("game over: the victory timeline does not repeat the win verb", () => {
   expect(screen.queryByText(/wins won/i)).not.toBeInTheDocument();
 });
 
+test("game over: finished-off losers render their names and winning faction", () => {
+  renderWithI18n(
+    <GameOverScreen
+      events={[
+        {
+          id: 1 as EventId,
+          kind: "players.finished_off",
+          scope: "public",
+          createdAt: 1000,
+          payload: { playerIds: ["odile" as UserId, "anna" as UserId], winningFaction: "wolves" },
+        },
+      ]}
+      snapshot={makeGameSnapshot({
+        players: [
+          {
+            userId: "wren" as UserId,
+            displayName: "Wren",
+            status: "alive",
+            revealedRole: "werewolf",
+          },
+          {
+            userId: "odile" as UserId,
+            displayName: "Odile",
+            status: "dead",
+            revealedRole: "villager",
+          },
+          {
+            userId: "anna" as UserId,
+            displayName: "Anna",
+            status: "dead",
+            revealedRole: "villager",
+          },
+        ],
+        game: {
+          status: "finished",
+          winner: {
+            winningFactions: ["wolves"],
+            winningPlayers: ["wren" as UserId],
+            reason: "village_eliminated",
+          },
+        },
+      })}
+    />,
+  );
+
+  expect(
+    screen.getByText("Final resistance eliminated by Wolves: Odile, Anna."),
+  ).toBeInTheDocument();
+  expect(screen.getAllByRole("listitem")).toHaveLength(1);
+});
+
 test("game over: a replay with chat messages renders no empty timeline rows", () => {
   renderWithI18n(
     <GameOverScreen

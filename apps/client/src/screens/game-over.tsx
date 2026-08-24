@@ -15,6 +15,7 @@ import { navigate } from "../routes.tsx";
 
 const REPLAY_KINDS = [
   "player.eliminated",
+  "players.finished_off",
   "phase.started",
   "vote.resolved",
   "night.resolved",
@@ -88,6 +89,13 @@ export function GameOverScreen({
         return t("events.public.player.eliminated", {
           player: names.get(event.payload.playerId) ?? event.payload.playerId,
           role: t(`roles.${event.payload.role}.name`),
+        });
+      case "players.finished_off":
+        return t("events.public.players.finished_off", {
+          faction: t(`factions.${event.payload.winningFaction}`),
+          players: event.payload.playerIds
+            .map((playerId) => names.get(playerId) ?? playerId)
+            .join(", "),
         });
       case "phase.started":
         return t("events.public.phase.started", { phase: t(`phases.${event.payload.type}`) });

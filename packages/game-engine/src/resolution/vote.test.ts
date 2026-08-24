@@ -87,6 +87,26 @@ function vote(
 }
 
 describe("day vote resolution", () => {
+  test("a decided day vote finishes off every living loser", () => {
+    let game = state(["werewolf", "werewolf", "villager", "princess"]);
+    for (const voter of ["p0", "p1"]) game = vote(game, voter, "p2", voter);
+
+    const transition = expectTransition(resolveDayVote(game));
+
+    expect(transition.playerPatches.filter((patch) => patch.changes.status === "dead")).toEqual([
+      { playerId: "p2" as PlayerState["id"], changes: { status: "dead" } },
+      { playerId: "p3" as PlayerState["id"], changes: { status: "dead" } },
+    ]);
+    expect(transition.events).toContainEqual({
+      kind: "players.finished_off",
+      scope: "public",
+      payload: { playerIds: ["p3" as PlayerState["id"]], winningFaction: "wolves" },
+    });
+    expect(transition.events.at(-1)?.kind).toBe("game.finished");
+    expect(transition.events.filter((event) => event.kind === "player.eliminated")).toHaveLength(1);
+    expect(transition.events.some((event) => event.kind === "princess.revealed")).toBe(false);
+  });
+
   test.each([
     [["villager", "villager", "villager", "werewolf", "villager"], "p1"],
     [["villager", "villager", "werewolf", "villager", "villager"], "p2"],

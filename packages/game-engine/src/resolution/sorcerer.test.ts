@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { AvailableAction, GameEvent } from "@werewolf/protocol";
+import type { AvailableAction, EventPayloads, GameEvent } from "@werewolf/protocol";
 import { WOLF_ROLE_IDS } from "@werewolf/protocol";
 import { validateCommand } from "../commands/validate.ts";
 import { getAvailableActions } from "../projection/available-actions.ts";
@@ -67,8 +67,15 @@ function resolve(state: GameState, seed = "seed") {
 }
 
 function deadPlayerIds(transition: DomainTransition): string[] {
+  const eliminated = new Set(
+    transition.events.flatMap((event) =>
+      event.kind === "player.eliminated"
+        ? [String((event.payload as EventPayloads["player.eliminated"]).playerId)]
+        : [],
+    ),
+  );
   return transition.playerPatches
-    .filter((patch) => patch.changes.status === "dead")
+    .filter((patch) => patch.changes.status === "dead" && eliminated.has(String(patch.playerId)))
     .map((patch) => String(patch.playerId))
     .sort();
 }

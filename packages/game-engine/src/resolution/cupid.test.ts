@@ -82,8 +82,15 @@ function resolveNightOk(state: GameState, seed = "seed"): DomainTransition {
 }
 
 function deadPlayerIds(transition: DomainTransition): string[] {
+  const eliminated = new Set(
+    transition.events.flatMap((event) =>
+      event.kind === "player.eliminated"
+        ? [String((event.payload as EventPayloads["player.eliminated"]).playerId)]
+        : [],
+    ),
+  );
   return transition.playerPatches
-    .filter((patch) => patch.changes.status === "dead")
+    .filter((patch) => patch.changes.status === "dead" && eliminated.has(String(patch.playerId)))
     .map((patch) => String(patch.playerId))
     .sort();
 }
@@ -290,8 +297,9 @@ describe("cupid link kills", () => {
     const transition = resolveNightOk(state);
     expect(deadPlayerIds(transition)).toEqual(["p1", "p2"]);
     // Each player appears exactly once in the death patches.
+    const ordinaryDeaths = new Set(deadPlayerIds(transition));
     const deathPatches = transition.playerPatches.filter(
-      (patch) => patch.changes.status === "dead",
+      (patch) => patch.changes.status === "dead" && ordinaryDeaths.has(String(patch.playerId)),
     );
     expect(deathPatches).toHaveLength(2);
   });

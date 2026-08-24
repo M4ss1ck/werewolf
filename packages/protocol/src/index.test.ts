@@ -261,6 +261,7 @@ test("EVENT_KINDS covers the initial protocol vocabulary", () => {
     "phase.started",
     "vote.resolved",
     "player.eliminated",
+    "players.finished_off",
     "princess.revealed",
     "mayor.revealed",
     "night.resolved",
@@ -281,6 +282,18 @@ test("EVENT_KINDS covers the initial protocol vocabulary", () => {
     "audit.vote",
     "audit.night",
   ]);
+});
+
+test("a players.finished_off event validates its public payload", () => {
+  const result = GameEventSchema.safeParse({
+    id: 13,
+    kind: "players.finished_off",
+    scope: "public",
+    createdAt: 1_700_000_000,
+    payload: { playerIds: ["user-123"], winningFaction: "village" },
+  });
+
+  expect(result.success).toBe(true);
 });
 
 test("a player.eliminated event can be narrowed by kind", () => {

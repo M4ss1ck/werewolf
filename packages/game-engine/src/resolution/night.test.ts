@@ -64,8 +64,15 @@ export function action(target: string) {
 }
 
 export function deadPlayerIds(transition: DomainTransition): string[] {
+  const eliminated = new Set(
+    transition.events.flatMap((event) =>
+      event.kind === "player.eliminated"
+        ? [String((event.payload as EventPayloads["player.eliminated"]).playerId)]
+        : [],
+    ),
+  );
   return transition.playerPatches
-    .filter((patch) => patch.changes.status === "dead")
+    .filter((patch) => patch.changes.status === "dead" && eliminated.has(String(patch.playerId)))
     .map((patch) => String(patch.playerId))
     .sort();
 }
@@ -77,6 +84,29 @@ export function auditDeaths(transition: DomainTransition): EventPayloads["audit.
 }
 
 describe("night resolution", () => {
+  test("a decided night attack finishes off every living loser", () => {
+    const transition = resolve(
+      makeState(["werewolf", "werewolf", "villager", "villager"], {
+        p0: action("p2"),
+        p1: action("p2"),
+      }),
+    );
+
+    expect(
+      transition.playerPatches
+        .filter((patch) => patch.changes.status === "dead")
+        .map((patch) => String(patch.playerId))
+        .sort(),
+    ).toEqual(["p2", "p3"]);
+    expect(transition.events).toContainEqual({
+      kind: "players.finished_off",
+      scope: "public",
+      payload: { playerIds: [id("p3")], winningFaction: "wolves" },
+    });
+    expect(transition.events.at(-1)?.kind).toBe("game.finished");
+    expect(transition.events.filter((event) => event.kind === "player.eliminated")).toHaveLength(1);
+  });
+
   test.each([
     [
       "wolves attack a villager who dies",
