@@ -22,3 +22,12 @@ test("wolf chat is the pack, not the wolf faction", () => {
 test("cult chat is the leader and its converts", () => {
   expect([...CULT_CHAT_ROLES].sort()).toEqual(["cult_leader", "cultist"]);
 });
+
+test("the outcome-contesting roles declare the contests hook", () => {
+  expect(
+    Object.values(roleRegistry)
+      .filter((role) => role.contests !== undefined)
+      .map((role) => role.id)
+      .sort(),
+  ).toEqual(["cult_leader", "hunter", "mayor", "serial_killer", "werewolf"]);
+});

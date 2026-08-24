@@ -19,6 +19,7 @@ export const mayor: RoleDefinition<{
   startingFaction: "village",
   createState: () => ({ used: false, overrideDay: null, overrideTarget: null }),
   composition: { minimumPlayers: 8 },
+  contests: ({ roleState }) => isMayorState(roleState) && !roleState.used,
   actions: [
     {
       id: "mayor.reveal",

@@ -39,6 +39,7 @@ export interface RoleDefinition<State = unknown> {
    * chat, the nightly hunt. Membership is by ROLE, not faction — the sorcerer
    * is wolf-faction but never one of the pack. */
   packMember?: boolean;
+  contests?(ctx: { roleState: State }): boolean;
   onDaySelected?(ctx: DaySelectionContext<State>): RoleEffect[];
 }
 

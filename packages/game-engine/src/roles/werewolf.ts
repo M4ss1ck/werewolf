@@ -7,6 +7,7 @@ export const werewolf: RoleDefinition = {
   createState: () => ({}),
   channels: ["wolves"],
   packMember: true,
+  contests: () => true,
   actions: [
     {
       id: "wolf.attack",

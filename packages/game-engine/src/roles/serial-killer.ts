@@ -5,6 +5,7 @@ export const serialKiller: RoleDefinition = {
   startingFaction: "serial_killer",
   createState: () => ({}),
   composition: {},
+  contests: () => true,
   actions: [
     {
       id: "serial_killer.visit",

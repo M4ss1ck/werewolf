@@ -4,4 +4,5 @@ export const hunter: RoleDefinition = {
   startingFaction: "village",
   createState: () => ({}),
   composition: { minimumPlayers: 7 },
+  contests: () => true,
 };
