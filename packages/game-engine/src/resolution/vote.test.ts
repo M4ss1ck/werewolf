@@ -244,7 +244,15 @@ describe("day vote resolution", () => {
         (patch) => patch.playerId === "p0" && patch.changes.status === "dead",
       ),
     ).toBe(true);
-    expect(transition.gamePatch).toEqual({ nightsWithoutElimination: 0 });
+    expect(transition.gamePatch).toMatchObject({
+      status: "finished",
+      nightsWithoutElimination: 0,
+      winner: {
+        winningFactions: ["wolves"],
+        winningPlayers: ["p2", "p3"],
+        reason: "village_eliminated",
+      },
+    });
   });
 
   test("a day vote that eliminates nobody does not reset nightsWithoutElimination", () => {
@@ -258,7 +266,15 @@ describe("day vote resolution", () => {
     game = vote(game, "p0", "p1", "a");
     game = vote(game, "p1", "p0", "b");
     const transition = expectTransition(resolveDayVote(game));
-    expect(transition.gamePatch).toBeUndefined();
+    expect(transition.gamePatch).toMatchObject({
+      status: "finished",
+      nightsWithoutElimination: 3,
+      winner: {
+        winningFactions: ["wolves"],
+        winningPlayers: ["p2", "p3"],
+        reason: "village_eliminated",
+      },
+    });
   });
 });
 

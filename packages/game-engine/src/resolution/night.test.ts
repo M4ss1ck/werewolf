@@ -24,7 +24,7 @@ export function makeState(
           originalRole: role,
           role,
           faction:
-            role === "werewolf" || role === "alpha_wolf"
+            role === "werewolf" || role === "alpha_wolf" || role === "sorcerer"
               ? "wolves"
               : role === "serial_killer"
                 ? "serial_killer"
@@ -634,7 +634,7 @@ describe("night resolution", () => {
   test("a night that pushes the counter to STALEMATE_NIGHTS finishes the game with reason stalemate", () => {
     const transition = resolve(
       makeState(
-        ["werewolf", "werewolf", "villager", "villager"],
+        ["sorcerer", "sorcerer", "veteran", "veteran"],
         { p0: action("p2"), p1: action("p3") },
         1,
         STALEMATE_NIGHTS - 1,

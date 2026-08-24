@@ -97,13 +97,17 @@ describe("victory checks", () => {
     expect(checkVictory(state)).toBeNull();
   });
 
-  test("two wolves against one villager is not a win", () => {
+  test("two wolves against one villager is an immediate pack win", () => {
     const state = game([
       player("p0", "werewolf"),
       player("p1", "werewolf"),
       player("p2", "villager"),
     ]);
-    expect(checkVictory(state)).toBeNull();
+    expect(checkVictory(state)).toEqual({
+      winningFactions: ["wolves"],
+      winningPlayers: ["p0" as PlayerState["id"], "p1" as PlayerState["id"]],
+      reason: "village_eliminated",
+    });
   });
 
   test("wolves fewer than villagers means the game continues", () => {
@@ -193,7 +197,10 @@ describe("victory checks", () => {
       player("p2", "cultist"),
       player("p3", "cultist"),
     ]);
-    expect(checkVictory(state)).toBeNull();
+    expect(checkVictory(state)).toMatchObject({
+      winningFactions: ["cult"],
+      reason: "cult_survives",
+    });
   });
 
   // Branch 5: a cult and wolves both alive is not a win for anyone yet.
@@ -217,13 +224,138 @@ describe("victory checks", () => {
   });
 
   // Branch 5 regression: only a living veteran, no living villager.
-  test("the only living player being a veteran is not a village win", () => {
+  test("the only living player being a veteran is a stalemate", () => {
     const state = game([
       player("p0", "veteran"),
       player("p1", "villager", { status: "dead" }),
       player("p2", "werewolf", { status: "dead" }),
     ]);
-    expect(checkVictory(state)).toBeNull();
+    expect(checkVictory(state)).toEqual({
+      winningFactions: [],
+      winningPlayers: [],
+      reason: "stalemate",
+    });
+  });
+
+  test("one wolf and one villager is an immediate pack win", () => {
+    expect(checkVictory(game([player("p0", "werewolf"), player("p1", "villager")]))).toEqual({
+      winningFactions: ["wolves"],
+      winningPlayers: ["p0" as PlayerState["id"]],
+      reason: "village_eliminated",
+    });
+  });
+
+  test.each(["priest", "princess", "harlot", "guardian"] as const)(
+    "a lone wolf immediately beats a %s",
+    (role) => {
+      expect(checkVictory(game([player("p0", "werewolf"), player("p1", role)]))).toMatchObject({
+        winningFactions: ["wolves"],
+        reason: "village_eliminated",
+      });
+    },
+  );
+
+  test.each([
+    ["sorcerer", "stalemate"],
+    ["cultist", "stalemate"],
+  ] as const)("a lone %s is doomed", (role, reason) => {
+    expect(
+      checkVictory(
+        game([player("p0", role, { faction: role === "sorcerer" ? "wolves" : "cult" })]),
+      ),
+    ).toMatchObject({
+      winningFactions: [],
+      reason,
+    });
+  });
+
+  test.each(["hunter", "mayor"] as const)(
+    "a drunk perceiving %s does not contest",
+    (perceivedRole) => {
+      expect(
+        checkVictory(
+          game([
+            player("p0", "drunk", { roleState: { perceivedRole } }),
+            player("p1", "sorcerer", { faction: "wolves" }),
+          ]),
+        ),
+      ).toMatchObject({ reason: "stalemate" });
+    },
+  );
+
+  test.each([
+    ["hunter", "village", "wolves_eliminated"],
+    ["cult_leader", "cult", "cult_survives"],
+    ["serial_killer", "serial_killer", "serial_killer_survives"],
+  ] as const)("%s contests while living", (role, winningFaction, reason) => {
+    expect(checkVictory(game([player("p0", role), player("p1", "veteran")]))).toMatchObject({
+      winningFactions: [winningFaction],
+      reason,
+    });
+  });
+
+  test("a mayor contests before its override and not after", () => {
+    expect(
+      checkVictory(
+        game([
+          player("p0", "mayor", { roleState: { used: false } }),
+          player("p1", "sorcerer", { faction: "wolves" }),
+        ]),
+      ),
+    ).toMatchObject({ winningFactions: ["village"], reason: "wolves_eliminated" });
+    expect(
+      checkVictory(
+        game([
+          player("p0", "mayor", { roleState: { used: true } }),
+          player("p1", "sorcerer", { faction: "wolves" }),
+        ]),
+      ),
+    ).toMatchObject({ reason: "stalemate" });
+  });
+
+  test("one wolf, one serial killer, and one villager continues", () => {
+    expect(
+      checkVictory(
+        game([player("p0", "werewolf"), player("p1", "serial_killer"), player("p2", "villager")]),
+      ),
+    ).toBeNull();
+  });
+
+  test("a veteran among a healthy village and a wolf does not end the game", () => {
+    expect(
+      checkVictory(
+        game([
+          player("p0", "villager"),
+          player("p1", "villager"),
+          player("p2", "werewolf"),
+          player("p3", "veteran"),
+        ]),
+      ),
+    ).toBeNull();
+  });
+
+  test("a converted hunter remains a contesting cult member", () => {
+    expect(
+      checkVictory(game([player("p0", "hunter", { faction: "cult" }), player("p1", "villager")])),
+    ).toMatchObject({ winningFactions: ["cult"], reason: "cult_survives" });
+  });
+
+  test("cross-faction lover blocs resolve identically regardless of insertion order", () => {
+    const cupid = player("cup", "cupid", {
+      status: "dead",
+      roleState: { linked: ["vLover", "wLover"] },
+    });
+    const villageOther = player("vOther", "villager");
+    const wolfOther = player("wOther", "cursed");
+    const villageLover = player("vLover", "hunter");
+    const wolfLover = player("wLover", "werewolf");
+    const first = checkVictory(game([cupid, villageOther, wolfOther, villageLover, wolfLover]));
+    const second = checkVictory(game([cupid, wolfOther, villageOther, wolfLover, villageLover]));
+    expect(second).toEqual(first);
+    expect(first).toMatchObject({
+      winningFactions: ["wolves"],
+      reason: "village_eliminated",
+    });
   });
 
   // Branch 6: stalemate.
@@ -231,8 +363,8 @@ describe("victory checks", () => {
     const state = game(
       [
         player("p0", "veteran"),
-        player("p1", "villager", { status: "dead" }),
-        player("p2", "werewolf", { status: "dead" }),
+        player("p1", "sorcerer", { faction: "wolves" }),
+        player("p2", "cultist", { faction: "cult" }),
       ],
       STALEMATE_NIGHTS,
     );
@@ -247,8 +379,8 @@ describe("victory checks", () => {
     const state = game(
       [
         player("p0", "veteran"),
-        player("p1", "villager", { status: "dead" }),
-        player("p2", "werewolf", { status: "dead" }),
+        player("p1", "sorcerer", { faction: "wolves" }),
+        player("p2", "cultist", { faction: "cult" }),
       ],
       STALEMATE_NIGHTS - 1,
     );

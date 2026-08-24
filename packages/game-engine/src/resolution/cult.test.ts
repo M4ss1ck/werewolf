@@ -107,16 +107,16 @@ describe("cult conversion", () => {
     const transition = resolve(state);
     expect(transition.playerPatches).not.toContainEqual(convertedPatch("p2"));
 
-    // A dead leader does not dissolve the cult: a living cultist still wins.
-    // winningPlayers includes the dead leader, as with any faction win.
+    // Without a living leader, the converted cultist has no contesting role and
+    // cannot win by itself.
     const victory = victoryGame([
-      { id: "p0", faction: "cult", status: "dead" },
-      { id: "p1", faction: "cult", status: "alive" },
+      { id: "p0", role: "cult_leader", faction: "cult", status: "dead" },
+      { id: "p1", role: "cultist", faction: "cult", status: "alive" },
     ]);
     expect(checkVictory(victory)).toEqual({
-      winningFactions: ["cult"],
-      winningPlayers: [id("p0"), id("p1")],
-      reason: "cult_survives",
+      winningFactions: [],
+      winningPlayers: [],
+      reason: "stalemate",
     });
   });
 
@@ -212,8 +212,8 @@ describe("cult chat visibility", () => {
 describe("cult victory", () => {
   test("all living players cult is a cult win", () => {
     const state = victoryGame([
-      { id: "p0", faction: "cult", status: "alive" },
-      { id: "p1", faction: "cult", status: "alive" },
+      { id: "p0", role: "cult_leader", faction: "cult", status: "alive" },
+      { id: "p1", role: "cultist", faction: "cult", status: "alive" },
     ]);
     expect(checkVictory(state)).toEqual({
       winningFactions: ["cult"],
@@ -224,18 +224,21 @@ describe("cult victory", () => {
 
   test("one living villager plus living cultists is NOT a village win", () => {
     const state = victoryGame([
-      { id: "p0", faction: "village", status: "alive" },
-      { id: "p1", faction: "cult", status: "alive" },
-      { id: "p2", faction: "cult", status: "alive" },
-      { id: "p3", faction: "cult", status: "alive" },
+      { id: "p0", role: "villager", faction: "village", status: "alive" },
+      { id: "p1", role: "cultist", faction: "cult", status: "alive" },
+      { id: "p2", role: "cultist", faction: "cult", status: "alive" },
+      { id: "p3", role: "cultist", faction: "cult", status: "alive" },
     ]);
-    expect(checkVictory(state)).toBeNull();
+    expect(checkVictory(state)).toMatchObject({
+      winningFactions: ["cult"],
+      reason: "cult_survives",
+    });
   });
 
   test("a cult and wolves both alive is not a win for anyone yet", () => {
     const state = victoryGame([
-      { id: "p0", faction: "cult", status: "alive" },
-      { id: "p1", faction: "wolves", status: "alive" },
+      { id: "p0", role: "cult_leader", faction: "cult", status: "alive" },
+      { id: "p1", role: "werewolf", faction: "wolves", status: "alive" },
     ]);
     expect(checkVictory(state)).toBeNull();
   });
@@ -276,7 +279,9 @@ describe("cult victory", () => {
   });
 });
 
-function victoryGame(players: { id: string; faction: string; status: string }[]): GameState {
+function victoryGame(
+  players: { id: string; role?: PlayerState["role"]; faction: string; status: string }[],
+): GameState {
   return {
     id: id("g") as unknown as GameState["id"],
     ownerUserId: id("p0"),
@@ -289,8 +294,8 @@ function victoryGame(players: { id: string; faction: string; status: string }[])
         {
           id: id(p.id),
           status: p.status,
-          originalRole: null,
-          role: null,
+          originalRole: p.role ?? null,
+          role: p.role ?? null,
           faction: p.faction,
           roleState: {},
           phaseState: { phaseId: 1 as never },
