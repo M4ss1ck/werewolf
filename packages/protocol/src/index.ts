@@ -13,6 +13,7 @@ export * from "./commands.ts";
 export * from "./enums.ts";
 export * from "./errors.ts";
 export * from "./events.ts";
+export * from "./game-entry.ts";
 export * from "./ids.ts";
 export * from "./snapshots.ts";
 export * from "./stats.ts";
