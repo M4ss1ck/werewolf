@@ -33,6 +33,22 @@ export type AddPlayerInput = {
   controller?: PlayerController;
   membershipAccess?: "active" | "replay" | "denied";
 };
+export type MembershipMutation =
+  | { kind: "insert"; player: AddPlayerInput }
+  | {
+      kind: "update";
+      userId: UserId;
+      changes: {
+        membershipAccess?: "active" | "replay" | "denied";
+        status?: string;
+        role?: string | null;
+        faction?: string | null;
+      };
+    }
+  | { kind: "delete"; userId: UserId };
+export type MembershipCommitResult =
+  | { ok: true; version: number; activeChanged: boolean }
+  | { ok: false; stale: true };
 export type CommitResult =
   | { ok: true; events: ReturnType<typeof mapEvent>[]; version: number }
   | { ok: false; stale: true };
@@ -50,6 +66,7 @@ export type GameSummaryRow = {
   phaseEndsAt: number | null;
   scheduledAt: number | null;
   players: { userId: UserId; displayName: string }[];
+  membership?: "player" | "spectator" | "replay";
 };
 
 export type UserStats = { games: number; survived: number; asWolf: number };
@@ -116,27 +133,30 @@ export class GameRepository {
     }
     return this.getGame(input.id);
   }
-  async listGameSummaries(viewerUserId?: UserId): Promise<GameSummaryRow[]> {
-    const visibility = viewerUserId
-      ? or(
-          eq(games.visibility, "public"),
-          exists(
-            this.db
-              .select({ gameId: gamePlayers.gameId })
-              .from(gamePlayers)
-              .where(
-                and(
-                  eq(gamePlayers.gameId, games.id),
-                  eq(gamePlayers.userId, viewerUserId),
-                  or(
-                    eq(gamePlayers.membershipAccess, "active"),
-                    eq(gamePlayers.membershipAccess, "replay"),
+  async listGameSummaries(
+    viewerUserId?: UserId,
+    scope: "browse" | "mine" = viewerUserId ? "mine" : "browse",
+  ): Promise<GameSummaryRow[]> {
+    const visibility =
+      scope === "mine"
+        ? viewerUserId
+          ? exists(
+              this.db
+                .select({ gameId: gamePlayers.gameId })
+                .from(gamePlayers)
+                .where(
+                  and(
+                    eq(gamePlayers.gameId, games.id),
+                    eq(gamePlayers.userId, viewerUserId),
+                    or(
+                      eq(gamePlayers.membershipAccess, "active"),
+                      eq(gamePlayers.membershipAccess, "replay"),
+                    ),
                   ),
                 ),
-              ),
-          ),
-        )
-      : eq(games.visibility, "public");
+            )
+          : sql`0`
+        : eq(games.visibility, "public");
     const rows = await this.db
       .select({
         id: games.id,
@@ -153,6 +173,38 @@ export class GameRepository {
       .where(and(visibility, ne(games.status, "cancelled")))
       .orderBy(asc(games.createdAt));
     if (rows.length === 0) return [];
+    const memberships = viewerUserId
+      ? await this.db
+          .select({
+            gameId: gamePlayers.gameId,
+            status: gamePlayers.status,
+            access: gamePlayers.membershipAccess,
+          })
+          .from(gamePlayers)
+          .where(
+            and(
+              inArray(
+                gamePlayers.gameId,
+                rows.map((row) => row.id),
+              ),
+              eq(gamePlayers.userId, viewerUserId),
+              or(
+                eq(gamePlayers.membershipAccess, "active"),
+                eq(gamePlayers.membershipAccess, "replay"),
+              ),
+            ),
+          )
+      : [];
+    const membershipByGame = new Map(
+      memberships.map((membership) => [
+        membership.gameId,
+        membership.access === "replay"
+          ? ("replay" as const)
+          : membership.status === "spectator"
+            ? ("spectator" as const)
+            : ("player" as const),
+      ]),
+    );
     const players = await this.db
       .select({
         gameId: gamePlayers.gameId,
@@ -187,6 +239,7 @@ export class GameRepository {
       phaseEndsAt: row.phaseEndsAt,
       scheduledAt: row.scheduledAt,
       players: byGame.get(row.id) ?? [],
+      ...(membershipByGame.has(row.id) ? { membership: membershipByGame.get(row.id)! } : {}),
     }));
   }
   /** Lifetime stats over finished games the viewer actually played (spectated
@@ -282,6 +335,76 @@ export class GameRepository {
     await this.db
       .delete(gamePlayers)
       .where(and(eq(gamePlayers.gameId, gameId), eq(gamePlayers.userId, userId)));
+  }
+  /**
+   * Atomically fence a membership mutation with the game's version. Admission,
+   * leave and kick all use this seam; callers must hold the game's in-process
+   * lock and treat a stale result as a conflict rather than retrying.
+   */
+  async commitMembership(
+    gameId: GameId,
+    expectedVersion: number,
+    mutation: MembershipMutation,
+  ): Promise<MembershipCommitResult> {
+    return this.db.transaction(async (tx) => {
+      const [current] = await tx
+        .select({ membershipAccess: gamePlayers.membershipAccess })
+        .from(gamePlayers)
+        .where(
+          and(
+            eq(gamePlayers.gameId, gameId),
+            eq(
+              gamePlayers.userId,
+              mutation.kind === "insert" ? mutation.player.userId : mutation.userId,
+            ),
+          ),
+        )
+        .limit(1);
+      const updated = await tx
+        .update(games)
+        .set({ version: expectedVersion + 1 })
+        .where(and(eq(games.id, gameId), eq(games.version, expectedVersion)))
+        .returning({ version: games.version });
+      if (updated.length === 0) return { ok: false, stale: true };
+
+      if (mutation.kind === "insert") {
+        const player = mutation.player;
+        await tx.insert(gamePlayers).values({
+          gameId: player.gameId,
+          userId: player.userId,
+          displayName: player.displayName,
+          status: player.status ?? "lobby",
+          joinedAt: player.joinedAt,
+          originalRole: player.originalRole,
+          role: player.role,
+          faction: player.faction,
+          controllerJson: player.controller ? JSON.stringify(player.controller) : null,
+          membershipAccess: player.membershipAccess,
+        });
+      } else if (mutation.kind === "update") {
+        await tx
+          .update(gamePlayers)
+          .set(mutation.changes)
+          .where(and(eq(gamePlayers.gameId, gameId), eq(gamePlayers.userId, mutation.userId)));
+      } else {
+        await tx
+          .delete(gamePlayers)
+          .where(and(eq(gamePlayers.gameId, gameId), eq(gamePlayers.userId, mutation.userId)));
+      }
+
+      const beforeActive = current?.membershipAccess === "active";
+      const afterActive =
+        mutation.kind === "insert"
+          ? (mutation.player.membershipAccess ?? "active") === "active"
+          : mutation.kind === "update"
+            ? (mutation.changes.membershipAccess ?? current?.membershipAccess) === "active"
+            : false;
+      return {
+        ok: true,
+        version: updated[0]!.version,
+        activeChanged: beforeActive !== afterActive,
+      };
+    });
   }
   async updateGame(
     gameId: GameId,

@@ -440,11 +440,22 @@ test("GET /api/games shows a private game only to its participating players", as
   );
   expect(created.status).toBe(200);
   const game = (await created.json()) as GameState;
-  await as(app, USERS[1]!, `/api/games/${game.id}/join`, jsonRequest("POST", {}, USERS[1]!));
-  await as(app, USERS[2]!, `/api/games/${game.id}/spectate`, jsonRequest("POST", {}, USERS[2]!));
+  const invitation = await as(app, USERS[0]!, `/api/games/${game.id}/invitation`);
+  expect(invitation.status).toBe(200);
+  const code = ((await invitation.json()) as { code: string }).code;
+  await as(app, USERS[1]!, "/api/game-entry", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ reference: { kind: "invitation", code }, mode: "player" }),
+  });
+  await as(app, USERS[2]!, "/api/game-entry", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ reference: { kind: "invitation", code }, mode: "spectator" }),
+  });
 
   for (const participant of [USERS[0]!, USERS[1]!, USERS[2]!]) {
-    const listing = await as(app, participant, "/api/games");
+    const listing = await as(app, participant, "/api/games?scope=mine");
     expect((await listing.json()) as unknown[]).toHaveLength(1);
   }
   for (const excluded of [USERS[3]!]) {
@@ -557,13 +568,7 @@ test("lobby mutations answer with the caller's viewer projection", async () => {
 
   // Leaving answers with the leaver's projection; the leaver is gone.
   const left = await as(app, USERS[1]!, `/api/games/${game.id}/membership`, { method: "DELETE" });
-  expect(left.status).toBeLessThan(300);
-  const leaveBody = (await left.json()) as ViewerGameSnapshot;
-  expect(leaveBody.game.id).toBe(game.id);
-  expect(Array.isArray(leaveBody.players)).toBe(true);
-  expect(leaveBody.players.some((player) => player.userId === USERS[1]!)).toBe(false);
-  expect(leaveBody).not.toHaveProperty("balanceVersion");
-  expect(leaveBody).not.toHaveProperty("version");
+  expect(left.status).toBe(204);
 
   // Cancelling answers with the owner's projection of the cancelled game.
   const cancelled = await as(

@@ -20,6 +20,7 @@ import type {
   UserId,
 } from "@werewolf/protocol";
 import { pickBotName } from "../bots/names.ts";
+import { GameAccess, type GameAccessViewer } from "./game-access.ts";
 import { type GameLock, gameLocks } from "./locks.ts";
 
 export class CoordinatorError extends Error {
@@ -31,11 +32,14 @@ export type CoordinatorEventHook = (gameId: GameId, events: unknown[]) => void |
 
 export class GameCoordinator {
   private hooks = new Set<CoordinatorEventHook>();
+  private readonly access: GameAccess;
   constructor(
     private readonly repository: GameRepository,
     private readonly lock: GameLock = gameLocks,
     private readonly now: () => number = Date.now,
-  ) {}
+  ) {
+    this.access = new GameAccess(repository, lock, now, (gameId) => this.notify(gameId));
+  }
 
   onCommitted(hook: CoordinatorEventHook) {
     this.hooks.add(hook);
@@ -107,38 +111,20 @@ export class GameCoordinator {
     return this.repository.loadGameState(id);
   }
   async joinGame(gameId: GameId, userId: UserId, displayName: string) {
-    return this.lock.run(gameId, async () => {
-      const game = await this.repository.getGame(gameId);
-      if (!game) throw new CoordinatorError("GAME_NOT_FOUND");
-      if (game.status !== "lobby" && game.status !== "scheduled")
-        throw new CoordinatorError("GAME_ALREADY_STARTED");
-      const membership = await this.repository.getMembership(gameId, userId);
-      if (!membership)
-        await this.repository.addPlayer({ gameId, userId, displayName, joinedAt: this.now() });
-      await this.notify(gameId);
-      return this.snapshot(gameId, userId);
-    });
+    await this.access.admit(
+      { kind: "public-game", gameId },
+      { userId, username: displayName },
+      "player",
+    );
+    return this.snapshot(gameId, userId);
   }
   async spectateGame(gameId: GameId, userId: UserId, displayName: string) {
-    return this.lock.run(gameId, async () => {
-      const game = await this.repository.getGame(gameId);
-      if (!game) throw new CoordinatorError("GAME_NOT_FOUND");
-      if (game.status === "cancelled") throw new CoordinatorError("GAME_CANCELLED");
-      if (game.status === "finished") throw new CoordinatorError("GAME_ALREADY_STARTED");
-      const settings = JSON.parse(game.settingsJson) as { spectatingEnabled?: boolean };
-      if (settings.spectatingEnabled === false) throw new CoordinatorError("ACTION_NOT_AVAILABLE");
-      const membership = await this.repository.getMembership(gameId, userId);
-      if (!membership)
-        await this.repository.addPlayer({
-          gameId,
-          userId,
-          displayName,
-          status: "spectator",
-          joinedAt: this.now(),
-        });
-      await this.notify(gameId);
-      return this.snapshot(gameId, userId);
-    });
+    await this.access.admit(
+      { kind: "public-game", gameId },
+      { userId, username: displayName },
+      "spectator",
+    );
+    return this.snapshot(gameId, userId);
   }
   /** Which roster entries already hold a seat in this game. The lobby uses it
    * to grey out a bot that is already at the table. */
@@ -171,39 +157,27 @@ export class GameCoordinator {
       if (seated.has(input.config.botId)) throw new CoordinatorError("ACTION_NOT_AVAILABLE");
       const players = await this.repository.getStatePlayers(gameId);
       const taken = new Set(players.map((player) => player.displayName));
-      await this.repository.addPlayer({
-        gameId,
-        userId: `bot:${crypto.randomUUID()}` as UserId,
-        displayName: taken.has(input.displayName) ? pickBotName(taken) : input.displayName,
-        joinedAt: this.now(),
-        controller: { type: "bot", config: input.config },
+      const commit = await this.repository.commitMembership(gameId, game.version, {
+        kind: "insert",
+        player: {
+          gameId,
+          userId: `bot:${crypto.randomUUID()}` as UserId,
+          displayName: taken.has(input.displayName) ? pickBotName(taken) : input.displayName,
+          joinedAt: this.now(),
+          controller: { type: "bot", config: input.config },
+        },
       });
+      if (!commit.ok) throw new CoordinatorError("CONFLICT");
       await this.notify(gameId);
       return this.snapshot(gameId, owner);
     });
   }
   async leaveLobby(gameId: GameId, userId: UserId) {
-    return this.lock.run(gameId, async () => {
-      const game = await this.repository.getGame(gameId);
-      if (!game) throw new CoordinatorError("GAME_NOT_FOUND");
-      if (game.status !== "lobby" && game.status !== "scheduled")
-        throw new CoordinatorError("GAME_ALREADY_STARTED");
-      await this.repository.removePlayer(gameId, userId);
-      await this.notify(gameId);
-      return this.snapshot(gameId, userId);
-    });
+    await this.access.leave(gameId, { userId });
   }
   async kickLobbyPlayer(gameId: GameId, owner: UserId, userId: UserId) {
-    return this.lock.run(gameId, async () => {
-      const game = await this.repository.getGame(gameId);
-      if (!game) throw new CoordinatorError("GAME_NOT_FOUND");
-      if (game.ownerUserId !== owner) throw new CoordinatorError("NOT_GAME_OWNER");
-      if (game.status !== "lobby" && game.status !== "scheduled")
-        throw new CoordinatorError("GAME_ALREADY_STARTED");
-      await this.repository.removePlayer(gameId, userId);
-      await this.notify(gameId);
-      return this.snapshot(gameId, owner);
-    });
+    await this.access.kick(gameId, owner, userId);
+    return this.snapshot(gameId, owner);
   }
   async updateGame(
     gameId: GameId,
@@ -276,8 +250,11 @@ export class GameCoordinator {
     if (!state) throw new CoordinatorError("GAME_NOT_FOUND");
     return projectSnapshot(state, userId, undefined, this.now());
   }
-  async listGameSummaries(viewerUserId?: UserId): Promise<GameSummary[]> {
-    const rows = await this.repository.listGameSummaries(viewerUserId);
+  async listGameSummaries(
+    viewerUserId?: UserId,
+    scope: "browse" | "mine" = "browse",
+  ): Promise<GameSummary[]> {
+    const rows = await this.repository.listGameSummaries(viewerUserId, scope);
     const serverNow = this.now();
     return rows.map((row) => ({
       id: row.id,
@@ -292,11 +269,28 @@ export class GameCoordinator {
       ...(row.status === "running" && row.phase !== null && row.phaseEndsAt !== null
         ? { phase: { type: row.phase as GamePhase, endsAt: row.phaseEndsAt } }
         : {}),
+      ...(row.membership ? { membership: row.membership } : {}),
       serverNow,
     }));
   }
   async getGame(gameId: GameId) {
     return this.repository.getGame(gameId);
+  }
+  async previewGameEntry(
+    reference: Parameters<GameAccess["preview"]>[0],
+    viewer: GameAccessViewer,
+  ) {
+    return this.access.preview(reference, viewer);
+  }
+  async admitGameEntry(
+    reference: Parameters<GameAccess["admit"]>[0],
+    viewer: GameAccessViewer,
+    mode: Parameters<GameAccess["admit"]>[2],
+  ) {
+    return this.access.admit(reference, viewer, mode);
+  }
+  async ownerInvitation(gameId: GameId, viewer: GameAccessViewer) {
+    return this.access.ownerInvitation(gameId, viewer);
   }
   async loadGameState(gameId: GameId) {
     return this.repository.loadGameState(gameId);

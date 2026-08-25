@@ -22,6 +22,8 @@ export interface GameSummary {
   /** Present only while running. */
   phase?: { type: GamePhase; endsAt: number };
   serverNow: number;
+  /** Present in the personalized My Games scope; never carries a code. */
+  membership?: "player" | "spectator" | "replay";
 }
 
 /** Runtime validation for a game summary. */
@@ -37,4 +39,5 @@ export const GameSummarySchema = z.object({
   scheduledAt: z.number().optional(),
   phase: z.object({ type: GamePhaseSchema, endsAt: z.number() }).optional(),
   serverNow: z.number(),
+  membership: z.enum(["player", "spectator", "replay"]).optional(),
 });

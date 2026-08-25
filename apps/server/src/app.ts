@@ -19,6 +19,7 @@ import { botRoutes } from "./routes/bots.ts";
 import { chatRoutes } from "./routes/chat.ts";
 import { commandRoutes } from "./routes/commands.ts";
 import { eventRoutes } from "./routes/events.ts";
+import { gameEntryRoutes } from "./routes/game-entry.ts";
 import { gamesRoutes } from "./routes/games.ts";
 import { meRoutes } from "./routes/me.ts";
 import { preferenceRoutes } from "./routes/preferences.ts";
@@ -107,6 +108,7 @@ export function createApp(options: AppOptions = {}) {
       c.req.method === "GET" && c.req.path === "/api/games" ? next() : requireViewer(c, next),
     );
     app.route("/api/games", gamesRoutes(coordinator));
+    app.route("/api", gameEntryRoutes(coordinator));
     app.route("/api", commandRoutes(coordinator));
     app.route("/api", eventRoutes(coordinator));
     app.route("/api", replayRoutes(coordinator));

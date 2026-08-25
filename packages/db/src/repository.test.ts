@@ -504,7 +504,6 @@ describe("GameRepository", () => {
 
     expect((await repo.listGameSummaries()).map((game) => game.id as string)).toEqual(["g-public"]);
     expect((await repo.listGameSummaries(USER_IDS[0]!)).map((game) => game.id as string)).toEqual([
-      "g-public",
       "g-private-player",
       "g-private-spectator",
     ]);

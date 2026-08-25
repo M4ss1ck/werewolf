@@ -39,7 +39,14 @@ function player(c: Context) {
   return { userId: context.userId as UserId, username: context.username };
 }
 function failure(c: Context, error: unknown) {
-  const code = error instanceof CoordinatorError ? error.code : "VALIDATION";
+  const code =
+    error instanceof CoordinatorError ||
+    (typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      typeof error.code === "string")
+      ? error.code
+      : "VALIDATION";
   const status =
     code === "GAME_NOT_FOUND"
       ? 404
@@ -66,7 +73,11 @@ export function gamesRoutes(coordinator: GameCoordinator) {
     // is optional: anonymous callers see public games only, an authenticated
     // one also sees private games they participate in.
     const viewer = (c as Context).get("viewer") as ViewerContext | undefined;
-    return c.json(await coordinator.listGameSummaries(viewer?.userId as UserId | undefined));
+    const scope = c.req.query("scope") ?? "browse";
+    if (scope !== "browse" && scope !== "mine")
+      return c.json({ error: { code: "VALIDATION" } }, 400);
+    if (scope === "mine" && !viewer) return c.json({ error: { code: "UNAUTHENTICATED" } }, 401);
+    return c.json(await coordinator.listGameSummaries(viewer?.userId as UserId | undefined, scope));
   });
   app.post("/", async (c) => {
     const parsed = gameBody.safeParse(await c.req.json());
@@ -124,11 +135,23 @@ export function gamesRoutes(coordinator: GameCoordinator) {
       return failure(c, error);
     }
   });
+  app.get("/:id/invitation", async (c) => {
+    try {
+      const context = (c as Context).get("viewer") as ViewerContext;
+      return c.json(
+        await coordinator.ownerInvitation(c.req.param("id") as GameId, {
+          userId: context.userId as UserId,
+          username: context.username,
+        }),
+      );
+    } catch (error) {
+      return failure(c, error);
+    }
+  });
   app.delete("/:id/membership", async (c) => {
     try {
-      return c.json(
-        await coordinator.leaveLobby(c.req.param("id") as GameId, viewer(c).userId as UserId),
-      );
+      await coordinator.leaveLobby(c.req.param("id") as GameId, viewer(c).userId as UserId);
+      return c.body(null, 204);
     } catch (error) {
       return failure(c, error);
     }
