@@ -32,7 +32,10 @@ export function mapPlayer(row: PlayerRow): PlayerState {
   return result;
 }
 
-export function mapGame(rows: { game: GameRow; players: PlayerRow[] }): GameState {
+export function mapGame(rows: {
+  game: Omit<GameRow, "joinCode">;
+  players: PlayerRow[];
+}): GameState {
   const { game } = rows;
   const phase =
     game.phase === null
@@ -52,7 +55,10 @@ export function mapGame(rows: { game: GameRow; players: PlayerRow[] }): GameStat
     day: game.day,
     phase,
     players: Object.fromEntries(rows.players.map((player) => [player.userId, mapPlayer(player)])),
-    settings: json(game.settingsJson),
+    settings: {
+      ...json<GameState["settings"]>(game.settingsJson),
+      visibility: game.visibility as "public" | "private",
+    },
     balanceVersion: game.balanceVersion,
     nightsWithoutElimination: game.nightsWithoutElimination,
     winner: game.winnerJson === null ? null : json(game.winnerJson),

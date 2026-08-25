@@ -63,6 +63,7 @@ async function createGame(repo: GameRepository, id: GameId = GAME_ID, createdAt 
     id,
     ownerUserId: OWNER_ID,
     name: "Test lobby",
+    ownerDisplayName: "Owner",
     visibility: "private",
     status: "lobby",
     settings: SETTINGS,
@@ -123,8 +124,21 @@ describe("GameRepository", () => {
       scheduledAt: null,
       day: 0,
       phase: null,
-      players: Object.fromEntries(
-        USER_IDS.map((userId, i): [UserId, PlayerState] => [
+      players: Object.fromEntries([
+        [
+          OWNER_ID,
+          {
+            id: OWNER_ID,
+            displayName: "Owner",
+            status: "lobby",
+            originalRole: null,
+            role: null,
+            faction: null,
+            roleState: {},
+            phaseState: {} as StoredPhaseState,
+          } satisfies PlayerState,
+        ] as [UserId, PlayerState],
+        ...USER_IDS.map((userId, i): [UserId, PlayerState] => [
           userId,
           {
             id: userId,
@@ -137,7 +151,7 @@ describe("GameRepository", () => {
             phaseState: {} as StoredPhaseState,
           },
         ]),
-      ) as GameState["players"],
+      ]) as GameState["players"],
       settings: SETTINGS,
       balanceVersion: 1,
       nightsWithoutElimination: 0,
@@ -222,7 +236,7 @@ describe("GameRepository", () => {
     expect(game?.phaseEndsAt).toBe(3_000);
     expect(game?.version).toBe(1);
 
-    const players = await repo.getPlayers(GAME_ID);
+    const players = await repo.getStatePlayers(GAME_ID);
     const player = players.find((row) => row.userId === USER_IDS[0]);
     expect(player?.status).toBe("alive");
     expect(player?.role).toBe("werewolf");
@@ -283,7 +297,7 @@ describe("GameRepository", () => {
     expect(game?.version).toBe(1);
     expect(game?.status).toBe("lobby");
 
-    const players = await repo.getPlayers(GAME_ID);
+    const players = await repo.getStatePlayers(GAME_ID);
     expect(players.find((row) => row.userId === USER_IDS[0])?.role).toBe("seer");
 
     const eventRows = await db.select().from(gameEvents).where(eq(gameEvents.gameId, GAME_ID));
@@ -369,6 +383,7 @@ describe("GameRepository", () => {
     await repo.createGame({
       id: "g-public-1" as GameId,
       ownerUserId: OWNER_ID,
+      ownerDisplayName: "Owner",
       name: "Public 1",
       visibility: "public",
       status: "lobby",
@@ -379,6 +394,7 @@ describe("GameRepository", () => {
     await repo.createGame({
       id: "g-public-2" as GameId,
       ownerUserId: OWNER_ID,
+      ownerDisplayName: "Owner",
       name: "Public 2",
       visibility: "public",
       status: "lobby",
@@ -389,6 +405,7 @@ describe("GameRepository", () => {
     await repo.createGame({
       id: "g-private" as GameId,
       ownerUserId: OWNER_ID,
+      ownerDisplayName: "Owner",
       name: "Private",
       visibility: "private",
       status: "lobby",
@@ -399,6 +416,7 @@ describe("GameRepository", () => {
     await repo.createGame({
       id: "g-cancelled" as GameId,
       ownerUserId: OWNER_ID,
+      ownerDisplayName: "Owner",
       name: "Cancelled",
       visibility: "public",
       status: "cancelled",
@@ -432,10 +450,14 @@ describe("GameRepository", () => {
     expect(first.ownerUserId).toBe(OWNER_ID);
     expect(first.status).toBe("lobby");
     expect(first.players).toEqual([
+      { userId: OWNER_ID, displayName: "Owner" },
       { userId: USER_IDS[0]!, displayName: "P0" },
       { userId: USER_IDS[1]!, displayName: "P1" },
     ]);
-    expect(summaries[1]!.players).toEqual([{ userId: USER_IDS[0]!, displayName: "P0" }]);
+    expect(summaries[1]!.players).toEqual([
+      { userId: OWNER_ID, displayName: "Owner" },
+      { userId: USER_IDS[0]!, displayName: "P0" },
+    ]);
   });
 
   test("listGameSummaries shows private games only to participating viewers", async () => {
@@ -449,6 +471,7 @@ describe("GameRepository", () => {
       await repo.createGame({
         id: id as GameId,
         ownerUserId: OWNER_ID,
+        ownerDisplayName: "Owner",
         name: id,
         visibility,
         status: "lobby",
@@ -483,6 +506,7 @@ describe("GameRepository", () => {
     expect((await repo.listGameSummaries(USER_IDS[0]!)).map((game) => game.id as string)).toEqual([
       "g-public",
       "g-private-player",
+      "g-private-spectator",
     ]);
   });
 
@@ -491,6 +515,7 @@ describe("GameRepository", () => {
     await repo.createGame({
       id: "g-running" as GameId,
       ownerUserId: OWNER_ID,
+      ownerDisplayName: "Owner",
       name: "Running",
       visibility: "public",
       status: "running",
@@ -501,6 +526,7 @@ describe("GameRepository", () => {
     await repo.createGame({
       id: "g-scheduled" as GameId,
       ownerUserId: OWNER_ID,
+      ownerDisplayName: "Owner",
       name: "Scheduled",
       visibility: "public",
       status: "scheduled",
@@ -561,6 +587,7 @@ describe("GameRepository", () => {
     await repo.createGame({
       id: "g-wolf" as GameId,
       ownerUserId: OWNER_ID,
+      ownerDisplayName: "Owner",
       name: "Wolf game",
       visibility: "private",
       status: "finished",
@@ -588,6 +615,7 @@ describe("GameRepository", () => {
     await repo.createGame({
       id: "g-village" as GameId,
       ownerUserId: OWNER_ID,
+      ownerDisplayName: "Owner",
       name: "Village game",
       visibility: "private",
       status: "finished",
@@ -613,6 +641,7 @@ describe("GameRepository", () => {
     await repo.createGame({
       id: "g-spectated" as GameId,
       ownerUserId: OWNER_ID,
+      ownerDisplayName: "Owner",
       name: "Spectated",
       visibility: "private",
       status: "finished",
@@ -631,6 +660,7 @@ describe("GameRepository", () => {
     await repo.createGame({
       id: "g-running" as GameId,
       ownerUserId: OWNER_ID,
+      ownerDisplayName: "Owner",
       name: "Running",
       visibility: "private",
       status: "running",

@@ -1,7 +1,8 @@
 import type { DomainTransition, PlayerPatch } from "@werewolf/game-engine";
-import type { EventId, GameId, PlayerController, UserId } from "@werewolf/protocol";
+import type { EventId, GameCode, GameId, PlayerController, UserId } from "@werewolf/protocol";
 import { and, asc, desc, eq, exists, gt, inArray, isNotNull, ne, or, sql } from "drizzle-orm";
 import type { Db } from "./client.ts";
+import { generateGameCode } from "./game-code.ts";
 import { mapEvent, mapGame } from "./mapper.ts";
 import { gameEvents, gamePlayers, games } from "./schema.ts";
 
@@ -9,7 +10,6 @@ export type CreateGameInput = {
   id: GameId;
   ownerUserId: UserId;
   name: string;
-  joinCode?: string;
   visibility: string;
   status: string;
   settings: unknown;
@@ -17,6 +17,9 @@ export type CreateGameInput = {
   rngSeed?: string;
   scheduledAt?: number;
   createdAt: number;
+  /** The owner row is committed with the game in the same transaction. */
+  ownerDisplayName: string;
+  ownerController?: PlayerController;
 };
 export type AddPlayerInput = {
   gameId: GameId;
@@ -28,6 +31,7 @@ export type AddPlayerInput = {
   role?: string | null;
   faction?: string | null;
   controller?: PlayerController;
+  membershipAccess?: "active" | "replay" | "denied";
 };
 export type CommitResult =
   | { ok: true; events: ReturnType<typeof mapEvent>[]; version: number }
@@ -50,22 +54,66 @@ export type GameSummaryRow = {
 
 export type UserStats = { games: number; survived: number; asWolf: number };
 
+const gameColumns = {
+  id: games.id,
+  ownerUserId: games.ownerUserId,
+  name: games.name,
+  visibility: games.visibility,
+  status: games.status,
+  scheduledAt: games.scheduledAt,
+  startedAt: games.startedAt,
+  endedAt: games.endedAt,
+  day: games.day,
+  phase: games.phase,
+  phaseId: games.phaseId,
+  phaseStartedAt: games.phaseStartedAt,
+  phaseEndsAt: games.phaseEndsAt,
+  settingsJson: games.settingsJson,
+  balanceVersion: games.balanceVersion,
+  nightsWithoutElimination: games.nightsWithoutElimination,
+  rngSeed: games.rngSeed,
+  winnerJson: games.winnerJson,
+  version: games.version,
+  createdAt: games.createdAt,
+};
+
 export class GameRepository {
-  constructor(private readonly db: Db) {}
+  constructor(
+    private readonly db: Db,
+    private readonly makeGameCode: () => string = generateGameCode,
+  ) {}
   async createGame(input: CreateGameInput) {
-    await this.db.insert(games).values({
-      id: input.id,
-      ownerUserId: input.ownerUserId,
-      name: input.name,
-      joinCode: input.joinCode,
-      visibility: input.visibility,
-      status: input.status,
-      scheduledAt: input.scheduledAt,
-      settingsJson: JSON.stringify(input.settings),
-      balanceVersion: input.balanceVersion,
-      rngSeed: input.rngSeed,
-      createdAt: input.createdAt,
-    });
+    for (;;) {
+      try {
+        await this.db.transaction(async (tx) => {
+          await tx.insert(games).values({
+            id: input.id,
+            ownerUserId: input.ownerUserId,
+            name: input.name,
+            joinCode: this.makeGameCode(),
+            visibility: input.visibility,
+            status: input.status,
+            scheduledAt: input.scheduledAt,
+            settingsJson: JSON.stringify(input.settings),
+            balanceVersion: input.balanceVersion,
+            rngSeed: input.rngSeed,
+            createdAt: input.createdAt,
+          });
+          await tx.insert(gamePlayers).values({
+            gameId: input.id,
+            userId: input.ownerUserId,
+            displayName: input.ownerDisplayName,
+            status: "lobby",
+            joinedAt: input.createdAt,
+            controllerJson:
+              input.ownerController === undefined ? null : JSON.stringify(input.ownerController),
+          });
+        });
+        break;
+      } catch (error) {
+        if (!isJoinCodeCollision(error)) throw error;
+      }
+    }
     return this.getGame(input.id);
   }
   async listGameSummaries(viewerUserId?: UserId): Promise<GameSummaryRow[]> {
@@ -80,7 +128,10 @@ export class GameRepository {
                 and(
                   eq(gamePlayers.gameId, games.id),
                   eq(gamePlayers.userId, viewerUserId),
-                  ne(gamePlayers.status, "spectator"),
+                  or(
+                    eq(gamePlayers.membershipAccess, "active"),
+                    eq(gamePlayers.membershipAccess, "replay"),
+                  ),
                 ),
               ),
           ),
@@ -110,9 +161,13 @@ export class GameRepository {
       })
       .from(gamePlayers)
       .where(
-        inArray(
-          gamePlayers.gameId,
-          rows.map((row) => row.id),
+        and(
+          inArray(
+            gamePlayers.gameId,
+            rows.map((row) => row.id),
+          ),
+          eq(gamePlayers.membershipAccess, "active"),
+          ne(gamePlayers.status, "spectator"),
         ),
       );
     const byGame = new Map<string, { userId: UserId; displayName: string }[]>();
@@ -156,23 +211,58 @@ export class GameRepository {
     return { games: row.games, survived: row.survived, asWolf: row.asWolf };
   }
   async listScheduledGames() {
-    return this.db.select().from(games).where(eq(games.status, "scheduled"));
+    return this.db.select(gameColumns).from(games).where(eq(games.status, "scheduled"));
   }
   async listRunningGames() {
     return this.db
-      .select()
+      .select(gameColumns)
       .from(games)
       .where(and(eq(games.status, "running"), isNotNull(games.phaseEndsAt)));
   }
   async getGame(gameId: GameId) {
-    return (await this.db.select().from(games).where(eq(games.id, gameId)).limit(1))[0] ?? null;
+    return (
+      (await this.db.select(gameColumns).from(games).where(eq(games.id, gameId)).limit(1))[0] ??
+      null
+    );
   }
-  async getPlayers(gameId: GameId) {
-    return this.db.select().from(gamePlayers).where(eq(gamePlayers.gameId, gameId));
+  async getGameIdByJoinCode(code: GameCode): Promise<GameId | null> {
+    return (
+      ((
+        await this.db.select({ id: games.id }).from(games).where(eq(games.joinCode, code)).limit(1)
+      )[0]?.id as GameId | undefined) ?? null
+    );
+  }
+  async getJoinCode(gameId: GameId): Promise<GameCode | null> {
+    return (
+      ((
+        await this.db
+          .select({ joinCode: games.joinCode })
+          .from(games)
+          .where(eq(games.id, gameId))
+          .limit(1)
+      )[0]?.joinCode as GameCode | undefined) ?? null
+    );
+  }
+  async getStatePlayers(gameId: GameId) {
+    return this.db
+      .select()
+      .from(gamePlayers)
+      .where(and(eq(gamePlayers.gameId, gameId), eq(gamePlayers.membershipAccess, "active")));
+  }
+  async getMembership(gameId: GameId, userId: UserId) {
+    return (
+      (
+        await this.db
+          .select()
+          .from(gamePlayers)
+          .where(and(eq(gamePlayers.gameId, gameId), eq(gamePlayers.userId, userId)))
+          .limit(1)
+      )[0] ?? null
+    );
   }
   async loadGameState(gameId: GameId) {
     const game = await this.getGame(gameId);
-    return game ? mapGame({ game, players: await this.getPlayers(gameId) }) : null;
+    return game ? mapGame({ game, players: await this.getStatePlayers(gameId) }) : null;
   }
   async addPlayer(input: AddPlayerInput) {
     await this.db.insert(gamePlayers).values({
@@ -185,6 +275,7 @@ export class GameRepository {
       role: input.role,
       faction: input.faction,
       controllerJson: input.controller ? JSON.stringify(input.controller) : null,
+      membershipAccess: input.membershipAccess,
     });
   }
   async removePlayer(gameId: GameId, userId: UserId) {
@@ -343,4 +434,16 @@ async function applyPlayerPatch(
         changes.phaseState === undefined ? undefined : JSON.stringify(changes.phaseState),
     })
     .where(and(eq(gamePlayers.gameId, gameId), eq(gamePlayers.userId, patch.playerId)));
+}
+
+function isJoinCodeCollision(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const candidate = error as { code?: unknown; message?: unknown; cause?: unknown };
+  if (
+    candidate.code === "SQLITE_CONSTRAINT_UNIQUE" &&
+    typeof candidate.message === "string" &&
+    candidate.message.includes("UNIQUE constraint failed: games.join_code")
+  )
+    return true;
+  return candidate.cause !== undefined && isJoinCodeCollision(candidate.cause);
 }

@@ -21,7 +21,8 @@ async function seedGame(
   const id = crypto.randomUUID() as GameId;
   await repo.createGame({
     id,
-    ownerUserId: players[0]!.userId as UserId,
+    ownerUserId: "owner" as UserId,
+    ownerDisplayName: "Owner",
     name: "Seeded",
     visibility: "public",
     status,

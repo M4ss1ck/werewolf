@@ -50,6 +50,13 @@
       "when": 1787363215244,
       "tag": "0006_real_arachne",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1787694121157,
+      "tag": "0007_noisy_dark_beast",
+      "breakpoints": true
     }
   ]
 }

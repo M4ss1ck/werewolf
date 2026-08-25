@@ -14,7 +14,7 @@ export const games = sqliteTable(
     id: text("id").primaryKey(),
     ownerUserId: text("owner_user_id").notNull(),
     name: text("name").notNull(),
-    joinCode: text("join_code"),
+    joinCode: text("join_code").notNull(),
     visibility: text("visibility").notNull(),
     status: text("status").notNull(),
     scheduledAt: integer("scheduled_at"),
@@ -57,6 +57,7 @@ export const gamePlayers = sqliteTable(
     // Null on a human seat. A bot seat stores its serialized PlayerController;
     // provider credentials live in the environment and never land here.
     controllerJson: text("controller_json"),
+    membershipAccess: text("membership_access").notNull().default("active"),
   },
   (table) => [
     primaryKey({ columns: [table.gameId, table.userId] }),

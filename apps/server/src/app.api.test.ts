@@ -443,11 +443,11 @@ test("GET /api/games shows a private game only to its participating players", as
   await as(app, USERS[1]!, `/api/games/${game.id}/join`, jsonRequest("POST", {}, USERS[1]!));
   await as(app, USERS[2]!, `/api/games/${game.id}/spectate`, jsonRequest("POST", {}, USERS[2]!));
 
-  for (const participant of [USERS[0]!, USERS[1]!]) {
+  for (const participant of [USERS[0]!, USERS[1]!, USERS[2]!]) {
     const listing = await as(app, participant, "/api/games");
     expect((await listing.json()) as unknown[]).toHaveLength(1);
   }
-  for (const excluded of [USERS[2]!, USERS[3]!]) {
+  for (const excluded of [USERS[3]!]) {
     const listing = await as(app, excluded, "/api/games");
     expect(await listing.json()).toEqual([]);
   }

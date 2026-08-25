@@ -41,6 +41,7 @@ async function makeScheduledGame(
   const game = await repo.createGame({
     id,
     ownerUserId: players[0]! as UserId,
+    ownerDisplayName: players[0]!,
     name: "scheduled",
     visibility: "public",
     status: "lobby",
@@ -50,7 +51,7 @@ async function makeScheduledGame(
     createdAt: now,
   });
   if (!game) throw new Error("createGame returned no row");
-  for (const player of players) {
+  for (const player of players.slice(1)) {
     await repo.addPlayer({
       gameId: id,
       userId: player as UserId,

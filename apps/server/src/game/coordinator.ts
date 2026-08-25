@@ -98,13 +98,8 @@ export class GameCoordinator {
       balanceVersion: 1,
       rngSeed: crypto.randomUUID(),
       createdAt: this.now(),
-    });
-    await this.repository.addPlayer({
-      gameId: id,
-      userId: input.ownerUserId,
-      displayName: input.displayName,
-      joinedAt: this.now(),
-      ...(input.ownerController ? { controller: input.ownerController } : {}),
+      ownerDisplayName: input.displayName,
+      ...(input.ownerController ? { ownerController: input.ownerController } : {}),
     });
     // Creation is a state change like any other: tell the hooks so the scheduler
     // can arm this game's timer. No events yet, and no subscribers either.
@@ -117,8 +112,8 @@ export class GameCoordinator {
       if (!game) throw new CoordinatorError("GAME_NOT_FOUND");
       if (game.status !== "lobby" && game.status !== "scheduled")
         throw new CoordinatorError("GAME_ALREADY_STARTED");
-      const players = await this.repository.getPlayers(gameId);
-      if (!players.some((p) => p.userId === userId))
+      const membership = await this.repository.getMembership(gameId, userId);
+      if (!membership)
         await this.repository.addPlayer({ gameId, userId, displayName, joinedAt: this.now() });
       await this.notify(gameId);
       return this.snapshot(gameId, userId);
@@ -132,8 +127,8 @@ export class GameCoordinator {
       if (game.status === "finished") throw new CoordinatorError("GAME_ALREADY_STARTED");
       const settings = JSON.parse(game.settingsJson) as { spectatingEnabled?: boolean };
       if (settings.spectatingEnabled === false) throw new CoordinatorError("ACTION_NOT_AVAILABLE");
-      const players = await this.repository.getPlayers(gameId);
-      if (!players.some((player) => player.userId === userId))
+      const membership = await this.repository.getMembership(gameId, userId);
+      if (!membership)
         await this.repository.addPlayer({
           gameId,
           userId,
@@ -148,7 +143,7 @@ export class GameCoordinator {
   /** Which roster entries already hold a seat in this game. The lobby uses it
    * to grey out a bot that is already at the table. */
   async seatedBotIds(gameId: GameId): Promise<Set<string>> {
-    const players = await this.repository.getPlayers(gameId);
+    const players = await this.repository.getStatePlayers(gameId);
     const seated = new Set<string>();
     for (const player of players) {
       if (player.controllerJson === null) continue;
@@ -174,7 +169,7 @@ export class GameCoordinator {
       // bot twice.
       const seated = await this.seatedBotIds(gameId);
       if (seated.has(input.config.botId)) throw new CoordinatorError("ACTION_NOT_AVAILABLE");
-      const players = await this.repository.getPlayers(gameId);
+      const players = await this.repository.getStatePlayers(gameId);
       const taken = new Set(players.map((player) => player.displayName));
       await this.repository.addPlayer({
         gameId,
