@@ -20,6 +20,7 @@ export function botRoutes(coordinator: GameCoordinator, options: BotRoutesOption
   const viewerOf = (c: Context) => c.get("viewer") as ViewerContext;
 
   async function requireOwner(gameId: GameId, userId: UserId) {
+    await coordinator.authorizeGameAccess(gameId, userId, "mutation");
     const game = await coordinator.getGame(gameId);
     if (!game) throw new CoordinatorError("GAME_NOT_FOUND");
     if (game.ownerUserId !== userId) throw new CoordinatorError("NOT_GAME_OWNER");

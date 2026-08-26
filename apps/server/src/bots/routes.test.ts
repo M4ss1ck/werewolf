@@ -5,8 +5,9 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { applyMigrations, createDb, GameRepository } from "@werewolf/db";
+import { applyMigrations, createDb, GameRepository, games } from "@werewolf/db";
 import type { BotRosterEntry, GameId, ViewerGameSnapshot } from "@werewolf/protocol";
+import { eq } from "drizzle-orm";
 import { createApp } from "../app.ts";
 import { GameCoordinator } from "../game/coordinator.ts";
 import { GameLock } from "../game/locks.ts";
@@ -56,6 +57,7 @@ async function setup(options: { apiKey?: string } = {}) {
   const created = game as { gameId: GameId };
   return {
     as,
+    db,
     gameId: created.gameId,
     close: () => {
       client.close();
@@ -187,6 +189,28 @@ describe("bot lobby routes", () => {
         })
       ).status,
     ).toBe(403);
+    harness.close();
+  });
+
+  test("a private non-member cannot read or mutate the bot roster", async () => {
+    const harness = await setup({ apiKey: "secret" });
+    await harness.db
+      .update(games)
+      .set({ visibility: "private" })
+      .where(eq(games.id, harness.gameId));
+
+    for (const gameId of [harness.gameId, "missing"]) {
+      const listed = await harness.as("guest", `/api/games/${gameId}/bots`);
+      expect(listed.status).toBe(404);
+      expect(await listed.json()).toEqual({ error: { code: "GAME_NOT_FOUND" } });
+
+      const seated = await harness.as("guest", `/api/games/${gameId}/bots`, {
+        method: "POST",
+        body: JSON.stringify({ botId: "mira" }),
+      });
+      expect(seated.status).toBe(404);
+      expect(await seated.json()).toEqual({ error: { code: "GAME_NOT_FOUND" } });
+    }
     harness.close();
   });
 

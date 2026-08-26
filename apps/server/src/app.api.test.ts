@@ -5,9 +5,10 @@
 // phases the way the scheduler will. The harness lives in ./test/harness.ts.
 
 import { expect, test } from "bun:test";
-import { type Db, GameRepository } from "@werewolf/db";
+import { type Db, GameRepository, games } from "@werewolf/db";
 import type { DomainTransition } from "@werewolf/game-engine";
 import type { GameEvent, GameId, UserId, ViewerGameSnapshot } from "@werewolf/protocol";
+import { eq } from "drizzle-orm";
 import {
   as,
   chatCommand,
@@ -645,4 +646,157 @@ test("creating or joining without a username is refused", async () => {
   const joined = await entry(app, USERS[1]!, game.id, "player", "");
   expect(joined.status).toBe(403);
   expect(await joined.json()).toEqual({ error: { code: "USERNAME_REQUIRED" } });
+});
+
+test("known UUIDs cannot bypass admission on private game surfaces", async () => {
+  const { app, repo } = await setup();
+  const created = await as(app, USERS[0]!, "/api/games", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "Private", visibility: "private" }),
+  });
+  const gameId = ((await created.json()) as { gameId: GameId }).gameId;
+  const code = (await repo.getJoinCode(gameId))!;
+  for (const userId of [USERS[1]!, USERS[2]!, USERS[3]!, USERS[4]!]) {
+    const admitted = await as(app, userId, "/api/game-entry", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ reference: { kind: "invitation", code }, mode: "player" }),
+    });
+    expect(admitted.status).toBe(200);
+  }
+  const start = await as(app, USERS[0]!, `/api/games/${gameId}/start`, jsonRequest("POST", {}));
+  expect(start.status).toBe(200);
+  const outsider = USERS[6]!;
+  const phaseId = (await snapshot(app, USERS[0]!, gameId)).game.phase!.id as number;
+  const routes: [string, RequestInit][] = [
+    [`/api/games/${gameId}`, {}],
+    [`/api/games/${gameId}/events`, {}],
+    [`/api/games/${gameId}/replay`, {}],
+    [
+      `/api/games/${gameId}/commands`,
+      jsonRequest("POST", chatCommand("unauthorized", phaseId), outsider),
+    ],
+    [`/api/games/${gameId}`, jsonRequest("PATCH", { name: "stolen" }, outsider)],
+    [`/api/games/${gameId}/start`, jsonRequest("POST", {}, outsider)],
+    [`/api/games/${gameId}/cancel`, jsonRequest("POST", {}, outsider)],
+    [`/api/games/${gameId}/invitation`, {}],
+    [`/api/games/${gameId}/membership`, { method: "DELETE" }],
+    [`/api/games/${gameId}/players/${USERS[1]}`, { method: "DELETE" }],
+  ];
+  for (const [path, init] of routes) {
+    const response = await as(app, outsider, path, init);
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: { code: "GAME_NOT_FOUND" } });
+  }
+  for (const [path, init] of routes) {
+    const missingPath = path.replace(gameId, "missing");
+    const response = await as(app, outsider, missingPath, init);
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: { code: "GAME_NOT_FOUND" } });
+  }
+});
+
+test("public games still require explicit admission for UUID reads", async () => {
+  const { app } = await setup();
+  const game = await createGame(app, USERS[0]!);
+  const stranger = USERS[1]!;
+  for (const path of [
+    `/api/games/${game.id}`,
+    `/api/games/${game.id}/events`,
+    `/api/games/${game.id}/replay`,
+  ]) {
+    const response = await as(app, stranger, path);
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: { code: "GAME_NOT_FOUND" } });
+  }
+  const preview = await as(app, stranger, `/api/game-entry?gameId=${game.id}`);
+  expect(preview.status).toBe(200);
+  const browse = await app.request("/api/games");
+  expect(browse.status).toBe(200);
+  expect((await browse.json()) as unknown[]).toHaveLength(1);
+});
+
+test("replay members can replay but cannot use live or gameplay surfaces", async () => {
+  const { app, repo, db } = await setup();
+  const game = await createGame(app, USERS[0]!);
+  for (const userId of [USERS[1]!, USERS[2]!, USERS[3]!, USERS[4]!]) {
+    expect((await entry(app, userId, game.id)).status).toBe(200);
+  }
+  expect(
+    (await as(app, USERS[0]!, `/api/games/${game.id}/start`, jsonRequest("POST", {}))).status,
+  ).toBe(200);
+  await db
+    .update(games)
+    .set({ status: "finished", visibility: "private" })
+    .where(eq(games.id, game.id));
+  const code = (await repo.getJoinCode(game.id))!;
+  const replayViewer = USERS[6]!;
+  const admitted = await as(app, replayViewer, "/api/game-entry", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ reference: { kind: "invitation", code }, mode: "replay" }),
+  });
+  expect(admitted.status).toBe(200);
+  const replay = await as(app, replayViewer, `/api/games/${game.id}/replay`);
+  expect(replay.status).toBe(200);
+  expect(JSON.stringify(await replay.json())).toContain("revealedRole");
+  const unauthorizedReplay = await as(app, USERS[5]!, `/api/games/${game.id}/replay`);
+  expect(unauthorizedReplay.status).toBe(404);
+  expect(await unauthorizedReplay.json()).toEqual({ error: { code: "GAME_NOT_FOUND" } });
+  const unauthorizedSnapshot = await as(app, USERS[5]!, `/api/games/${game.id}`);
+  expect(unauthorizedSnapshot.status).toBe(404);
+  expect(await unauthorizedSnapshot.json()).toEqual({ error: { code: "GAME_NOT_FOUND" } });
+  const unauthorizedEvents = await as(app, USERS[5]!, `/api/games/${game.id}/events`);
+  expect(unauthorizedEvents.status).toBe(404);
+  expect(await unauthorizedEvents.json()).toEqual({ error: { code: "GAME_NOT_FOUND" } });
+  const phaseId = (await snapshot(app, USERS[0]!, game.id)).game.phase!.id as number;
+  const live = await as(app, replayViewer, `/api/games/${game.id}`);
+  expect(live.status).toBe(404);
+  const events = await as(app, replayViewer, `/api/games/${game.id}/events`);
+  expect(events.status).toBe(404);
+  const command = await as(
+    app,
+    replayViewer,
+    `/api/games/${game.id}/commands`,
+    jsonRequest("POST", chatCommand("replay-command", phaseId), replayViewer),
+  );
+  expect(command.status).toBe(404);
+});
+
+test("a departed or kicked member loses UUID access while public entry remains available", async () => {
+  const { app, repo } = await setup();
+  const game = await createGame(app, USERS[0]!);
+  const code = (await repo.getJoinCode(game.id))!;
+  expect(
+    (
+      await as(app, USERS[1]!, "/api/game-entry", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ reference: { kind: "invitation", code }, mode: "player" }),
+      })
+    ).status,
+  ).toBe(200);
+  expect(
+    (await as(app, USERS[1]!, `/api/games/${game.id}/membership`, { method: "DELETE" })).status,
+  ).toBe(204);
+  const departed = await as(app, USERS[1]!, `/api/games/${game.id}`);
+  expect(departed.status).toBe(404);
+  expect(await departed.json()).toEqual({ error: { code: "GAME_NOT_FOUND" } });
+  const reentered = await as(app, USERS[1]!, "/api/game-entry", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ reference: { kind: "invitation", code }, mode: "player" }),
+  });
+  expect(reentered.status).toBe(200);
+  expect(
+    (await as(app, USERS[0]!, `/api/games/${game.id}/players/${USERS[1]}`, { method: "DELETE" }))
+      .status,
+  ).toBe(200);
+  const kicked = await as(app, USERS[1]!, `/api/games/${game.id}`);
+  expect(kicked.status).toBe(404);
+  const deniedEntry = await as(app, USERS[1]!, `/api/game-entry?code=${code}`);
+  expect(deniedEntry.status).toBe(403);
+  const publicBrowse = await app.request("/api/games");
+  expect(publicBrowse.status).toBe(200);
 });

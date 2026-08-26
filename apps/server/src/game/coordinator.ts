@@ -20,7 +20,12 @@ import type {
   UserId,
 } from "@werewolf/protocol";
 import { pickBotName } from "../bots/names.ts";
-import { GameAccess, type GameAccessViewer } from "./game-access.ts";
+import {
+  GameAccess,
+  GameAccessError,
+  type GameAccessSurface,
+  type GameAccessViewer,
+} from "./game-access.ts";
 import { type GameLock, gameLocks } from "./locks.ts";
 
 export class CoordinatorError extends Error {
@@ -144,6 +149,7 @@ export class GameCoordinator {
    * elimination all work on it unchanged; only who decides for it differs. Bot
    * user ids are namespaced so they can never collide with an auth user id. */
   async addBot(gameId: GameId, owner: UserId, input: { displayName: string; config: BotConfig }) {
+    await this.authorizeGameAccess(gameId, owner, "mutation");
     return this.lock.run(gameId, async () => {
       const game = await this.repository.getGame(gameId);
       if (!game) throw new CoordinatorError("GAME_NOT_FOUND");
@@ -176,6 +182,7 @@ export class GameCoordinator {
     await this.access.leave(gameId, { userId });
   }
   async kickLobbyPlayer(gameId: GameId, owner: UserId, userId: UserId) {
+    await this.authorizeGameAccess(gameId, owner, "mutation");
     await this.access.kick(gameId, owner, userId);
     return this.snapshot(gameId, owner);
   }
@@ -184,6 +191,7 @@ export class GameCoordinator {
     userId: UserId,
     patch: { name?: string | undefined; visibility?: string | undefined },
   ) {
+    await this.authorizeGameAccess(gameId, userId, "mutation");
     return this.lock.run(gameId, async () => {
       const game = await this.repository.getGame(gameId);
       if (!game) throw new CoordinatorError("GAME_NOT_FOUND");
@@ -196,6 +204,7 @@ export class GameCoordinator {
     });
   }
   async startGame(gameId: GameId, userId: UserId) {
+    await this.authorizeGameAccess(gameId, userId, "mutation");
     return this.lock.run(gameId, async () => {
       const row = await this.repository.getGame(gameId);
       if (!row) throw new CoordinatorError("GAME_NOT_FOUND");
@@ -209,20 +218,24 @@ export class GameCoordinator {
     });
   }
   async cancelGame(gameId: GameId, userId: UserId) {
+    await this.authorizeGameAccess(gameId, userId, "mutation");
     return this.lock.run(gameId, async () => {
       const game = await this.repository.getGame(gameId);
       if (!game) throw new CoordinatorError("GAME_NOT_FOUND");
       if (game.ownerUserId !== userId) throw new CoordinatorError("NOT_GAME_OWNER");
-      await this.repository.commitTransition(
+      const commit = await this.repository.commitTransition(
         gameId,
         game.version,
         { gamePatch: { status: "cancelled" }, playerPatches: [], events: [], ephemeral: [] },
         this.now(),
       );
+      if (!commit.ok) throw new CoordinatorError("CONFLICT");
+      await Promise.all([...this.hooks].map((hook) => hook(gameId, commit.events)));
       return this.snapshot(gameId, userId);
     });
   }
   async executeCommand(gameId: GameId, userId: UserId, command: GameplayCommand) {
+    await this.authorizeGameAccess(gameId, userId, "mutation");
     await this.transition(gameId, (state) => {
       const result = applyCommand(state, userId, command, { now: this.now() });
       // Commands are idempotent via command_id: stamp every event the engine
@@ -246,6 +259,7 @@ export class GameCoordinator {
     );
   }
   async snapshot(gameId: GameId, userId: UserId) {
+    await this.authorizeGameAccess(gameId, userId, "game");
     const state = await this.repository.loadGameState(gameId);
     if (!state) throw new CoordinatorError("GAME_NOT_FOUND");
     return projectSnapshot(state, userId, undefined, this.now());
@@ -275,6 +289,41 @@ export class GameCoordinator {
   }
   async getGame(gameId: GameId) {
     return this.repository.getGame(gameId);
+  }
+  async authorizeGameAccess(gameId: GameId, userId: UserId, surface: GameAccessSurface) {
+    try {
+      return await this.access.authorize(gameId, { userId }, surface);
+    } catch (error) {
+      if (error instanceof GameAccessError) throw new CoordinatorError(error.code);
+      throw error;
+    }
+  }
+  /** Keep a live handshake and the membership mutations that can revoke it in
+   * the same per-game critical section. The hub uses this only around its
+   * final authorization check and socket send. */
+  async withGameLock<T>(gameId: GameId, fn: () => Promise<T>) {
+    return this.lock.run(gameId, fn);
+  }
+  async loadGameStateForViewer(gameId: GameId, userId: UserId, surface: GameAccessSurface) {
+    await this.authorizeGameAccess(gameId, userId, surface);
+    return this.repository.loadGameState(gameId);
+  }
+  /** Trusted hub seam for a post-commit broadcast. The hub has already
+   * filtered subscribers against this one authoritative state in memory. */
+  async loadGameStateForHub(gameId: GameId) {
+    return this.repository.loadGameState(gameId);
+  }
+  async getVisibleEventsForHub(gameId: GameId, afterId = 0) {
+    return this.repository.getVisibleEvents(gameId, afterId);
+  }
+  async getVisibleEventsForViewer(
+    gameId: GameId,
+    userId: UserId,
+    surface: GameAccessSurface,
+    afterId = 0,
+  ) {
+    await this.authorizeGameAccess(gameId, userId, surface);
+    return this.repository.getVisibleEvents(gameId, afterId);
   }
   async previewGameEntry(
     reference: Parameters<GameAccess["preview"]>[0],

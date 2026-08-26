@@ -8,7 +8,7 @@ import {
   sessionMiddleware,
   type ViewerContext,
 } from "./auth/auth.ts";
-import { GameCoordinator } from "./game/coordinator.ts";
+import { CoordinatorError, GameCoordinator } from "./game/coordinator.ts";
 import type { GameHub } from "./live/game-hub.ts";
 import type { GlobalChatHub } from "./live/global-chat-hub.ts";
 import { authClaimRoutes, createHandoffClaims } from "./routes/auth-claim.ts";
@@ -120,10 +120,25 @@ export function createApp(options: AppOptions = {}) {
       const repository = options.repository ?? new GameRepository(options.db);
       app.route("/api", meRoutes(options.db, repository));
     }
-    if (options.gameHub)
+    if (options.gameHub) {
+      const authorizeLive: MiddlewareHandler = async (c, next) => {
+        try {
+          const viewer = c.get("viewer") as ViewerContext;
+          await coordinator.authorizeGameAccess(
+            c.req.param("id") as import("@werewolf/protocol").GameId,
+            viewer.userId as import("@werewolf/protocol").UserId,
+            "live",
+          );
+          await next();
+        } catch (error) {
+          const code = error instanceof CoordinatorError ? error.code : "GAME_NOT_FOUND";
+          return c.json({ error: { code } }, code === "GAME_NOT_FOUND" ? 404 : 409);
+        }
+      };
       app.get(
         "/api/games/:id/live",
         requireTrustedOrigin,
+        authorizeLive,
         upgradeWebSocket((c) => {
           const viewer = c.get("viewer") as ViewerContext;
           let connection: ReturnType<GameHub["connect"]> | undefined;
@@ -144,6 +159,7 @@ export function createApp(options: AppOptions = {}) {
           };
         }),
       );
+    }
     if (options.globalChat) {
       const { repository, hub, now } = options.globalChat;
       if (!globalChatDb) throw new Error("globalChat requires db");

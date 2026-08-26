@@ -105,11 +105,13 @@ export class GameAccess {
     return this.lock.run(gameId, async () => {
       const game = await this.repository.getGame(gameId);
       if (!game) throw new GameAccessError("GAME_NOT_FOUND");
+      const membership = await this.repository.getMembership(gameId, viewer.userId);
+      if (membership?.membershipAccess !== "active") {
+        throw new GameAccessError("GAME_NOT_FOUND");
+      }
       if (game.status !== "lobby" && game.status !== "scheduled") {
         throw new GameAccessError("GAME_ALREADY_STARTED");
       }
-      const membership = await this.repository.getMembership(gameId, viewer.userId);
-      if (!membership || membership.membershipAccess !== "active") return;
       const commit = await this.repository.commitMembership(gameId, game.version, {
         kind: "delete",
         userId: viewer.userId,
@@ -129,7 +131,7 @@ export class GameAccess {
         throw new GameAccessError("GAME_ALREADY_STARTED");
       }
       const membership = await this.repository.getMembership(gameId, target);
-      if (!membership || membership.membershipAccess !== "active") return;
+      if (membership?.membershipAccess !== "active") return;
       const isBot = membership.controllerJson !== null;
       const mutation: MembershipMutation = isBot
         ? { kind: "delete", userId: target }

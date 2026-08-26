@@ -9,10 +9,15 @@ import {
 } from "@werewolf/protocol";
 import type { GameCoordinator } from "../game/coordinator.ts";
 
-type Socket = { send(data: string): void };
+type Socket = {
+  send(data: string): void;
+  close?: (code?: number, reason?: string) => void;
+};
 type Subscriber = {
   socket: Socket;
   userId: UserId;
+  active: boolean;
+  subscribing: boolean;
   subscribed: boolean;
   cursor: number;
   availableChannels: Set<ChatChannel>;
@@ -28,6 +33,8 @@ export class GameHub {
 
   stop() {
     this.unsubscribe();
+    for (const subscribers of this.subscribers.values())
+      for (const subscriber of subscribers) subscriber.active = false;
     this.subscribers.clear();
   }
 
@@ -40,6 +47,8 @@ export class GameHub {
     const subscriber: Subscriber = {
       socket,
       userId,
+      active: true,
+      subscribing: false,
       subscribed: false,
       cursor: 0,
       availableChannels: new Set(),
@@ -59,9 +68,17 @@ export class GameHub {
   }
 
   private disconnect(gameId: GameId, subscriber: Subscriber) {
+    subscriber.active = false;
     const set = this.subscribers.get(gameId);
     set?.delete(subscriber);
     if (set?.size === 0) this.subscribers.delete(gameId);
+  }
+
+  private revoke(gameId: GameId, subscriber: Subscriber, code = "GAME_NOT_FOUND") {
+    if (!subscriber.active) return;
+    subscriber.active = false;
+    subscriber.socket.close?.(1008, JSON.stringify({ error: { code } }));
+    this.disconnect(gameId, subscriber);
   }
 
   private async subscribe(gameId: GameId, subscriber: Subscriber, raw: string) {
@@ -73,31 +90,72 @@ export class GameHub {
     }
     const parsed = SubscribeFrameSchema.safeParse(frame);
     if (!parsed.success) return;
-    const state = await this.coordinator.loadGameState(gameId);
-    if (!state) return;
-    const allEvents = (await this.coordinator.getVisibleEvents(gameId, 0)) as GameEvent[];
-    const latest = (allEvents.at(-1)?.id ?? 0) as GameEvent["id"];
-    if (parsed.data.cursor > latest) return this.send(subscriber, { type: "resync_required" });
-    const events = allEvents.filter(
-      (event) => event.id > parsed.data.cursor && canViewEvent(event, subscriber.userId, state),
-    );
-    const snapshot = projectSnapshot(state, subscriber.userId, latest, Date.now());
-    subscriber.subscribed = true;
-    subscriber.cursor = latest;
-    subscriber.availableChannels = new Set(snapshot.availableChannels);
-    this.send(subscriber, {
-      type: "sync",
-      snapshot,
-      events,
-      cursor: latest,
-    });
+    if (!subscriber.active || subscriber.subscribed || subscriber.subscribing) return;
+    subscriber.subscribing = true;
+    try {
+      await this.coordinator.withGameLock(gameId, async () => {
+        if (!subscriber.active) return;
+        try {
+          await this.coordinator.authorizeGameAccess(gameId, subscriber.userId, "live");
+        } catch {
+          this.revoke(gameId, subscriber);
+          return;
+        }
+        const state = await this.coordinator.loadGameStateForViewer(
+          gameId,
+          subscriber.userId,
+          "live",
+        );
+        if (!subscriber.active || !state || state.players[subscriber.userId] === undefined) {
+          this.revoke(gameId, subscriber);
+          return;
+        }
+        const allEvents = (await this.coordinator.getVisibleEventsForViewer(
+          gameId,
+          subscriber.userId,
+          "live",
+          0,
+        )) as GameEvent[];
+        if (!subscriber.active) return;
+        try {
+          await this.coordinator.authorizeGameAccess(gameId, subscriber.userId, "live");
+        } catch {
+          this.revoke(gameId, subscriber);
+          return;
+        }
+        if (!subscriber.active || state.players[subscriber.userId] === undefined) {
+          this.revoke(gameId, subscriber);
+          return;
+        }
+        const latest = (allEvents.at(-1)?.id ?? 0) as GameEvent["id"];
+        if (parsed.data.cursor > latest) return this.send(subscriber, { type: "resync_required" });
+        const events = allEvents.filter(
+          (event) => event.id > parsed.data.cursor && canViewEvent(event, subscriber.userId, state),
+        );
+        const snapshot = projectSnapshot(state, subscriber.userId, latest, Date.now());
+        subscriber.subscribed = true;
+        subscriber.cursor = latest;
+        subscriber.availableChannels = new Set(snapshot.availableChannels);
+        this.send(subscriber, {
+          type: "sync",
+          snapshot,
+          events,
+          cursor: latest,
+        });
+      });
+    } finally {
+      subscriber.subscribing = false;
+    }
   }
 
   private async broadcast(gameId: GameId, events: unknown[]) {
     const subscribers = this.subscribers.get(gameId);
     if (!subscribers?.size) return;
-    const state = await this.coordinator.loadGameState(gameId);
-    if (!state) return;
+    const state = await this.coordinator.loadGameStateForHub(gameId);
+    if (!state) {
+      for (const subscriber of subscribers) this.revoke(gameId, subscriber);
+      return;
+    }
     const committed = events as GameEvent[];
     const prepared: {
       subscriber: Subscriber;
@@ -108,7 +166,11 @@ export class GameHub {
     }[] = [];
     let needsFullLog = false;
     for (const subscriber of subscribers) {
-      if (!subscriber.subscribed) continue;
+      if (!subscriber.active || !subscriber.subscribed) continue;
+      if (state.players[subscriber.userId] === undefined) {
+        this.revoke(gameId, subscriber);
+        continue;
+      }
       const cursor = committed.length
         ? Math.max(subscriber.cursor, ...committed.map((event) => event.id))
         : subscriber.cursor;
@@ -127,10 +189,11 @@ export class GameHub {
       });
     }
     const fullLog = needsFullLog
-      ? ((await this.coordinator.getVisibleEvents(gameId, 0)) as GameEvent[])
+      ? ((await this.coordinator.getVisibleEventsForHub(gameId, 0)) as GameEvent[])
       : undefined;
     for (const frame of prepared) {
       const { subscriber } = frame;
+      if (!subscriber.active) continue;
       frame.visible = (frame.gainsChannel ? fullLog! : committed).filter(
         (event) =>
           (frame.gainsChannel || event.id > subscriber.cursor) &&
@@ -151,6 +214,7 @@ export class GameHub {
   }
 
   private send(subscriber: Subscriber, frame: ServerFrame) {
+    if (!subscriber.active) return;
     try {
       subscriber.socket.send(JSON.stringify(frame));
     } catch {

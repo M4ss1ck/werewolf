@@ -22,12 +22,24 @@ import { GameHub } from "./game-hub.ts";
 
 function fakeSocket() {
   const frames: ServerFrame[] = [];
+  const closes: { code?: number; reason?: string }[] = [];
   return {
     frames,
+    closes,
     send(data: string) {
       frames.push(JSON.parse(data) as ServerFrame);
     },
+    close(code?: number, reason?: string) {
+      closes.push({
+        ...(code === undefined ? {} : { code }),
+        ...(reason === undefined ? {} : { reason }),
+      });
+    },
   };
+}
+
+async function withGameLockForTest<T>(_id: GameId, fn: () => Promise<T>) {
+  return fn();
 }
 
 async function subscribe(conn: { message(raw: string): Promise<void> }, cursor: number) {
@@ -75,6 +87,20 @@ function fakeCoordinator(
         committed = undefined;
         return true;
       };
+    },
+    authorizeGameAccess: async () => ({ gameId, membership: "active", surface: "live" }),
+    withGameLock: withGameLockForTest,
+    loadGameStateForViewer: async () => state,
+    getVisibleEventsForViewer: async (
+      _id: GameId,
+      _userId: UserId,
+      _surface: "live",
+      afterId = 0,
+    ) => events.filter((event) => event.id > afterId),
+    loadGameStateForHub: async () => state,
+    getVisibleEventsForHub: async (_id: GameId, afterId = 0) => {
+      if (afterId === 0) tracker.fullLogCalls += 1;
+      return events.filter((event) => event.id > afterId);
     },
     loadGameState: async () => state,
     getVisibleEvents: async (_id: GameId, afterId = 0) => {
@@ -553,5 +579,224 @@ test("disconnecting removes the subscription and no further sends are attempted"
   });
   expect(socket.frames.length).toBe(framesAfterClose);
   expect(JSON.stringify(socket.frames)).not.toContain("after close");
+  hub.stop();
+});
+
+test("a non-member cannot subscribe to a public game by UUID", async () => {
+  const { app, coordinator } = await setup();
+  const game = await createGame(app, USERS[0]!);
+  const hub = new GameHub(coordinator);
+  const socket = fakeSocket();
+  await subscribe(hub.connect(game.id, USERS[1]! as UserId, socket), 0);
+
+  expect(socket.frames.some((frame) => frame.type === "sync")).toBe(false);
+  expect(socket.closes).toEqual([
+    { code: 1008, reason: JSON.stringify({ error: { code: "GAME_NOT_FOUND" } }) },
+  ]);
+  expect(hub.subscriberCount(game.id)).toBe(0);
+  hub.stop();
+});
+
+test("a departed live subscriber is closed before another sync frame", async () => {
+  const { app, coordinator } = await setup();
+  const game = await createGame(app, USERS[0]!);
+  expect((await entry(app, USERS[1]!, game.id)).status).toBe(200);
+  const hub = new GameHub(coordinator);
+  const socket = fakeSocket();
+  const connection = hub.connect(game.id, USERS[1]! as UserId, socket);
+  await subscribe(connection, 0);
+  expect(socket.frames).toHaveLength(1);
+
+  await coordinator.leaveLobby(game.id, USERS[1]! as UserId);
+  expect(socket.closes).toEqual([
+    { code: 1008, reason: JSON.stringify({ error: { code: "GAME_NOT_FOUND" } }) },
+  ]);
+  expect(socket.frames).toHaveLength(1);
+  expect(hub.subscriberCount(game.id)).toBe(0);
+  hub.stop();
+});
+
+test("the handshake lock prevents revocation from racing its final sync send", async () => {
+  const { app, coordinator, repo } = await setup();
+  const game = await createGame(app, USERS[0]!);
+  expect((await entry(app, USERS[1]!, game.id)).status).toBe(200);
+  const enteredEvents = Promise.withResolvers<void>();
+  const releaseEvents = Promise.withResolvers<void>();
+  const originalEvents = repo.getVisibleEvents.bind(repo);
+  let paused = false;
+  repo.getVisibleEvents = async (gameId, afterId = 0) => {
+    if (!paused && afterId === 0) {
+      paused = true;
+      enteredEvents.resolve();
+      await releaseEvents.promise;
+    }
+    return originalEvents(gameId, afterId);
+  };
+
+  const hub = new GameHub(coordinator);
+  const socket = fakeSocket();
+  const subscribing = subscribe(hub.connect(game.id, USERS[1]! as UserId, socket), 0);
+  await enteredEvents.promise;
+  let left = false;
+  const leaving = coordinator.leaveLobby(game.id, USERS[1]! as UserId).then(() => {
+    left = true;
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(left).toBe(false);
+
+  releaseEvents.resolve();
+  await subscribing;
+  await leaving;
+  expect(socket.frames).toHaveLength(1);
+  expect(socket.frames[0]?.type).toBe("sync");
+  expect(socket.closes).toHaveLength(1);
+  hub.stop();
+});
+
+test("duplicate subscribe frames produce one sync", async () => {
+  const { app, repo, coordinator } = await setup();
+  const game = await createGame(app, USERS[0]!);
+  expect((await entry(app, USERS[1]!, game.id)).status).toBe(200);
+  const enteredEvents = Promise.withResolvers<void>();
+  const releaseEvents = Promise.withResolvers<void>();
+  const originalEvents = repo.getVisibleEvents.bind(repo);
+  let paused = false;
+  repo.getVisibleEvents = async (gameId, afterId = 0) => {
+    if (!paused && afterId === 0) {
+      paused = true;
+      enteredEvents.resolve();
+      await releaseEvents.promise;
+    }
+    return originalEvents(gameId, afterId);
+  };
+
+  const hub = new GameHub(coordinator);
+  const socket = fakeSocket();
+  const connection = hub.connect(game.id, USERS[1]! as UserId, socket);
+  const first = connection.message(JSON.stringify({ type: "subscribe", cursor: 0 }));
+  await enteredEvents.promise;
+  const duplicate = connection.message(JSON.stringify({ type: "subscribe", cursor: 0 }));
+  releaseEvents.resolve();
+  await Promise.all([first, duplicate]);
+  await connection.message(JSON.stringify({ type: "subscribe", cursor: 0 }));
+  expect(socket.frames).toHaveLength(1);
+  hub.stop();
+});
+
+test("disconnect during an in-flight handshake prevents its sync", async () => {
+  const { app, repo, coordinator } = await setup();
+  const game = await createGame(app, USERS[0]!);
+  expect((await entry(app, USERS[1]!, game.id)).status).toBe(200);
+  const enteredEvents = Promise.withResolvers<void>();
+  const releaseEvents = Promise.withResolvers<void>();
+  const originalEvents = repo.getVisibleEvents.bind(repo);
+  repo.getVisibleEvents = async (gameId, afterId = 0) => {
+    if (afterId === 0) {
+      enteredEvents.resolve();
+      await releaseEvents.promise;
+    }
+    return originalEvents(gameId, afterId);
+  };
+
+  const hub = new GameHub(coordinator);
+  const socket = fakeSocket();
+  const connection = hub.connect(game.id, USERS[1]! as UserId, socket);
+  const subscribing = connection.message(JSON.stringify({ type: "subscribe", cursor: 0 }));
+  await enteredEvents.promise;
+  connection.close();
+  releaseEvents.resolve();
+  await subscribing;
+  expect(socket.frames).toHaveLength(0);
+  expect(hub.subscriberCount(game.id)).toBe(0);
+  hub.stop();
+});
+
+test("disconnect during broadcast full-log loading prevents its sync", async () => {
+  const { app, db, repo } = await setup();
+  const gameId = await startGameWithSeed(
+    app,
+    db,
+    USERS[0]!,
+    [USERS[1]!, USERS[2]!, USERS[3]!, USERS[4]!],
+    "find-1",
+  );
+  const state = (await repo.loadGameState(gameId))!;
+  const events = [publicEvent(1), chatEvent(5, "grave", USERS[1]! as UserId, "old grave")];
+  const fake = fakeCoordinator(gameId, state, events);
+  const enteredFullLog = Promise.withResolvers<void>();
+  const releaseFullLog = Promise.withResolvers<void>();
+  fake.coordinator.getVisibleEventsForHub = async () => {
+    enteredFullLog.resolve();
+    await releaseFullLog.promise;
+    return events;
+  };
+
+  const hub = new GameHub(fake.coordinator);
+  const socket = fakeSocket();
+  const connection = hub.connect(gameId, USERS[0]! as UserId, socket);
+  await subscribe(connection, 0);
+  state.players[USERS[0]! as UserId]!.status = "dead";
+  const broadcast = fake.commit([publicEvent(6)]);
+  await enteredFullLog.promise;
+  connection.close();
+  releaseFullLog.resolve();
+  await broadcast;
+  expect(socket.frames).toHaveLength(1);
+  hub.stop();
+});
+
+test("an owner kick closes the target before another sync frame", async () => {
+  const { app, coordinator } = await setup();
+  const game = await createGame(app, USERS[0]!);
+  expect((await entry(app, USERS[1]!, game.id)).status).toBe(200);
+  const hub = new GameHub(coordinator);
+  const socket = fakeSocket();
+  await subscribe(hub.connect(game.id, USERS[1]! as UserId, socket), 0);
+  expect(socket.frames).toHaveLength(1);
+
+  await coordinator.kickLobbyPlayer(game.id, USERS[0]! as UserId, USERS[1]! as UserId);
+  expect(socket.frames).toHaveLength(1);
+  expect(socket.closes).toEqual([
+    { code: 1008, reason: JSON.stringify({ error: { code: "GAME_NOT_FOUND" } }) },
+  ]);
+  expect(hub.subscriberCount(game.id)).toBe(0);
+  hub.stop();
+});
+
+test("cancelling a game broadcasts the committed cancelled snapshot", async () => {
+  const { app, coordinator } = await setup();
+  const game = await createGame(app, USERS[0]!);
+  const hub = new GameHub(coordinator);
+  const socket = fakeSocket();
+  await subscribe(hub.connect(game.id, USERS[0]! as UserId, socket), 0);
+  await coordinator.cancelGame(game.id, USERS[0]! as UserId);
+
+  const sync = socket.frames.at(-1);
+  expect(sync?.type).toBe("sync");
+  if (sync?.type !== "sync") return;
+  expect(sync.snapshot.game.status).toBe("cancelled");
+  expect(socket.closes).toHaveLength(0);
+  hub.stop();
+});
+
+test("a stale cancel fences with CONFLICT and emits no hook or frame", async () => {
+  const { app, coordinator, repo } = await setup();
+  const game = await createGame(app, USERS[0]!);
+  const hub = new GameHub(coordinator);
+  const socket = fakeSocket();
+  await subscribe(hub.connect(game.id, USERS[0]! as UserId, socket), 0);
+  const before = socket.frames.length;
+  repo.commitTransition = (async (..._args: Parameters<typeof repo.commitTransition>) => ({
+    ok: false as const,
+    stale: true as const,
+  })) as typeof repo.commitTransition;
+
+  await expect(coordinator.cancelGame(game.id, USERS[0]! as UserId)).rejects.toMatchObject({
+    code: "CONFLICT",
+  });
+  expect(socket.frames).toHaveLength(before);
+  expect(socket.closes).toHaveLength(0);
+  expect((await repo.getGame(game.id))?.status).toBe("lobby");
   hub.stop();
 });
