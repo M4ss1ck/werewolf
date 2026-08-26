@@ -5,6 +5,53 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.9] - 2026-08-25
+
+### Added
+- Add shareable invitation experience with persistent invitations and membership access
+- Add game entry and invitation routes with protocol contracts
+- Add localized private game labels on active and finished game cards
+- Show participant private games under All while keeping anonymous browsing public
+- Show the pack's night ballot to living pack members for coordinated wolf attacks
+- Name who else is in the secret channel above the wolves and cult chat lists
+- Seat a bot in the lobby immediately before the server responds, with optimistic UI updates
+- Sign in as a seeded dev user on localhost instances for browser verification
+- Load the Telegram SDK only inside a Mini App to avoid console noise and third-party requests
+- Toast transient chat failures at the bottom of the screen instead of pinning them by the input
+
+### Changed
+- Pace bot chat by room size with a slot queue per game and channel, replacing uniform random delays
+- Build bot prompts after winning a slot so they answer what was said during the wait
+- Let bots hold conversations in secret channels at night, including mentions arriving mid-decision
+- Finish off losers and end decided games with role-based outcome declarations
+- Mark dead players and winners in revealed roles with skull and W ribbon overlays
+- Remove brackets from private game labels and align private badge assertions with copy
+- Derive replay timeline day from phase id instead of the final game day
+- Filter replay timeline to public chat messages only, dropping undescribable rows
+- Accept stale phase ids for chat sends while still rejecting phase-scoped intents
+- Stop the web build from using a bearer WebSocket subprotocol, gating it to Tauri and Telegram runtimes
+- Re-read the route when the popstate listener attaches and bail out when the URL has not moved
+- Update dependencies: better-auth 1.7 with account issuer migration, drizzle-orm 0.45, TypeScript 7, vite 8, vitest 4, i18next 26, and minor patch sweeps
+- Pin Bun to 1.4.x in Docker and CI for consistent runtime behavior
+- Install dev dependencies at boot from named volumes with the lockfile as the only authority
+- Keep each workspace's node_modules in the dev stack with proper volume mounts
+- Install only runtime dependencies in the final Docker image
+- Catch Telegram polling failures instead of crashing the server
+- Accept the error code hosted Turso reports for a duplicate column
+- Avoid duplicated victory verb in i18n strings
+
+### Fixed
+- Enforce game membership authorization on the server
+- Stop caret restore from re-selecting a trailing mention in the client
+- Remove brackets from private game label in the client
+- Load the Telegram SDK only inside a Mini App, avoiding console noise and third-party requests
+- Stop rejecting chat on a stale phase id, preventing silent message loss
+- Stop the web build from using a bearer WebSocket subprotocol, fixing dead sockets in production
+- Keep the route object when the URL has not moved, preventing duplicate game loads
+- Re-read the route when the popstate listener attaches, fixing navigation state desync
+- Drop undescribable rows from the replay timeline and fix the day gutter stamping
+- Fix the web build from using a bearer subprotocol, restoring game and chat sockets in production
+
 ## [0.1.8] - 2026-08-22
 
 ### Added
