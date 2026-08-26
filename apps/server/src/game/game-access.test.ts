@@ -482,15 +482,15 @@ test("a private public-ID preview does not reveal the game's existence", async (
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ name: "Private", visibility: "private" }),
   });
-  const game = (await response.json()) as { id: string };
-  expect((await as(app, USERS[0]!, `/api/games/${game.id}/invitation`)).status).toBe(200);
-  const privateNonOwner = await as(app, USERS[1]!, `/api/games/${game.id}/invitation`);
+  const game = (await response.json()) as { gameId: string };
+  expect((await as(app, USERS[0]!, `/api/games/${game.gameId}/invitation`)).status).toBe(200);
+  const privateNonOwner = await as(app, USERS[1]!, `/api/games/${game.gameId}/invitation`);
   expect(privateNonOwner.status).toBe(404);
   expect(await privateNonOwner.json()).toEqual({ error: { code: "GAME_NOT_FOUND" } });
   const missing = await as(app, USERS[1]!, "/api/games/missing/invitation");
   expect(missing.status).toBe(404);
   expect(await missing.json()).toEqual({ error: { code: "GAME_NOT_FOUND" } });
-  const preview = await as(app, USERS[1]!, `/api/game-entry?gameId=${game.id}`);
+  const preview = await as(app, USERS[1]!, `/api/game-entry?gameId=${game.gameId}`);
   expect(preview.status).toBe(404);
   expect(await preview.json()).toEqual({ error: { code: "GAME_NOT_FOUND" } });
 });
@@ -505,9 +505,9 @@ test("browse and mine scopes are explicit and carry only minimal membership mode
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ name: "Private", visibility: "private" }),
     });
-    return (await response.json()) as { id: string };
+    return (await response.json()) as { gameId: string };
   })();
-  const privateCode = (await repo.getJoinCode(privateGame.id as GameId))!;
+  const privateCode = (await repo.getJoinCode(privateGame.gameId as GameId))!;
   await as(app, viewer, "/api/game-entry", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -540,6 +540,9 @@ test("browse and mine scopes are explicit and carry only minimal membership mode
     }),
   });
   await as(app, USERS[3]!, `/api/games/${deniedGame.id}/players/${viewer}`, { method: "DELETE" });
+  expect(
+    (await repo.getMembership(deniedGame.id as GameId, viewer as UserId))?.membershipAccess,
+  ).toBe("denied");
 
   const cancelledGame = await createGame(app, USERS[4]!);
   const cancelledCode = (await repo.getJoinCode(cancelledGame.id))!;
@@ -552,19 +555,23 @@ test("browse and mine scopes are explicit and carry only minimal membership mode
     }),
   });
   await db.update(games).set({ status: "cancelled" }).where(eq(games.id, cancelledGame.id));
+  expect((await repo.getMembership(cancelledGame.id, viewer as UserId))?.membershipAccess).toBe(
+    "active",
+  );
+  expect((await repo.getGame(cancelledGame.id))?.status).toBe("cancelled");
 
   const browse = await as(app, viewer, "/api/games?scope=browse");
   expect(browse.status).toBe(200);
   const browseBody = (await browse.json()) as { id: string }[];
   expect(browseBody.map((game) => game.id)).toContain(publicGame.id);
-  expect(browseBody.map((game) => game.id)).not.toContain(privateGame.id);
+  expect(browseBody.map((game) => game.id)).not.toContain(privateGame.gameId);
   expect(browseBody.map((game) => game.id)).not.toContain(cancelledGame.id);
   expect(JSON.stringify(browseBody)).not.toContain("joinCode");
 
   const mine = await as(app, viewer, "/api/games?scope=mine");
   expect(mine.status).toBe(200);
   const mineBody = (await mine.json()) as { id: string; membership?: string }[];
-  expect(mineBody.find((game) => game.id === privateGame.id)?.membership).toBe("spectator");
+  expect(mineBody.find((game) => game.id === privateGame.gameId)?.membership).toBe("spectator");
   expect(mineBody.find((game) => game.id === replayGame.id)?.membership).toBe("replay");
   expect(mineBody.map((game) => game.id)).not.toContain(deniedGame.id);
   expect(mineBody.map((game) => game.id)).not.toContain(cancelledGame.id);

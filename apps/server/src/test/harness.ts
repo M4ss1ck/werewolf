@@ -40,6 +40,7 @@ export type Harness = {
 };
 
 const cleanups: (() => void)[] = [];
+const repositories = new WeakMap<object, GameRepository>();
 afterEach(() => {
   while (cleanups.length > 0) cleanups.pop()!();
 });
@@ -74,6 +75,7 @@ export async function setup(
       return { userId, username: header === null ? userId : header || null };
     },
   });
+  repositories.set(app, repo);
   return { app, coordinator, repo, chatRepo, chatHub, db, clock, close: () => client.close() };
 }
 
@@ -91,7 +93,23 @@ export function jsonRequest(method: string, body: unknown, userId = USERS[0]!) {
   } as const;
 }
 
-/** Create a game as the owner. Returns the full GameState (has `id`). */
+export async function entry(
+  app: App,
+  userId: string,
+  gameId: GameId,
+  mode: "player" | "spectator" | "replay" = "player",
+  username = userId,
+) {
+  const response = await as(app, userId, "/api/game-entry", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-username": username },
+    body: JSON.stringify({ reference: { kind: "public-game", gameId }, mode }),
+  });
+  return response;
+}
+
+/** Create a game as the owner. The create endpoint returns only its id; the
+ * owner then reads the admitted snapshot for test setup. */
 export async function createGame(
   app: App,
   owner = USERS[0]!,
@@ -108,7 +126,12 @@ export async function createGame(
     ),
   );
   expect(response.status).toBe(200);
-  return (await response.json()) as GameState;
+  const created = (await response.json()) as { gameId: GameId };
+  const repository = repositories.get(app);
+  if (!repository) throw new Error("Missing test repository");
+  const state = await repository.loadGameState(created.gameId);
+  if (!state) throw new Error("Created game was not persisted");
+  return state;
 }
 
 /** Join `players` (the owner is already a member) and start the game. */
@@ -119,7 +142,7 @@ export async function startGameWithPlayers(
 ): Promise<GameId> {
   const game = await createGame(app, owner);
   for (const player of players) {
-    const response = await as(app, player, `/api/games/${game.id}/join`, jsonRequest("POST", {}));
+    const response = await entry(app, player, game.id);
     expect(response.status).toBe(200);
   }
   const start = await as(app, owner, `/api/games/${game.id}/start`, jsonRequest("POST", {}));
@@ -139,7 +162,7 @@ export async function startGameWithSeed(
 ): Promise<GameId> {
   const game = await createGame(app, owner);
   for (const player of players) {
-    const response = await as(app, player, `/api/games/${game.id}/join`, jsonRequest("POST", {}));
+    const response = await entry(app, player, game.id);
     expect(response.status).toBe(200);
   }
   // The seed is read at start time (coordinator.ts `row.rngSeed ?? gameId`), so

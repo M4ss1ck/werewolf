@@ -10,6 +10,7 @@ import type { GameId, UserId } from "@werewolf/protocol";
 import {
   as,
   createGame,
+  entry,
   jsonRequest,
   setup,
   startGameWithPlayers,
@@ -126,7 +127,7 @@ test("resolving a phase registers the next deadline and the cycle advances", asy
     spectatingEnabled: true,
   });
   for (const userId of [USERS[1]!, USERS[2]!, USERS[3]!, USERS[4]!]) {
-    const response = await as(app, userId, `/api/games/${game.id}/join`, jsonRequest("POST", {}));
+    const response = await entry(app, userId, game.id);
     expect(response.status).toBe(200);
   }
   const start = await as(app, USERS[0]!, `/api/games/${game.id}/start`, jsonRequest("POST", {}));
@@ -223,11 +224,12 @@ test("a game created with a future start time is scheduled and auto-starts", asy
     }),
   );
   expect(create.status).toBe(200);
-  const game = (await create.json()) as GameState;
+  const created = (await create.json()) as { gameId: GameId };
+  const game = (await repo.loadGameState(created.gameId))!;
   expect(game.status).toBe("scheduled");
 
   for (const userId of [USERS[1]!, USERS[2]!, USERS[3]!, USERS[4]!]) {
-    const response = await as(app, userId, `/api/games/${game.id}/join`, jsonRequest("POST", {}));
+    const response = await entry(app, userId, game.id);
     expect(response.status).toBe(200);
   }
 
@@ -261,7 +263,8 @@ test("a game created with a past start time stays in the lobby", async () => {
     }),
   );
   expect(create.status).toBe(200);
-  const game = (await create.json()) as GameState;
+  const created = (await create.json()) as { gameId: GameId };
+  const game = (await repo.loadGameState(created.gameId))!;
   expect(game.status).toBe("lobby");
   expect(game.scheduledAt).toBeNull();
   scheduler.stop();
@@ -280,7 +283,7 @@ test("a game started manually arms its phase timer", async () => {
     spectatingEnabled: true,
   });
   for (const userId of [USERS[1]!, USERS[2]!, USERS[3]!, USERS[4]!]) {
-    const response = await as(app, userId, `/api/games/${game.id}/join`, jsonRequest("POST", {}));
+    const response = await entry(app, userId, game.id);
     expect(response.status).toBe(200);
   }
   const start = await as(app, USERS[0]!, `/api/games/${game.id}/start`, jsonRequest("POST", {}));

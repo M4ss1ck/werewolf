@@ -84,13 +84,13 @@ export function gamesRoutes(coordinator: GameCoordinator) {
     if (!parsed.success) return c.json({ error: { code: "VALIDATION" } }, 400);
     try {
       const { userId, username } = player(c);
-      return c.json(
-        await coordinator.createGame({
-          ownerUserId: userId,
-          displayName: username,
-          ...parsed.data,
-        }),
-      );
+      const game = await coordinator.createGame({
+        ownerUserId: userId,
+        displayName: username,
+        ...parsed.data,
+      });
+      if (!game) return c.json({ error: { code: "GAME_NOT_FOUND" } }, 404);
+      return c.json({ gameId: game.id });
     } catch (error) {
       return failure(c, error);
     }
@@ -115,22 +115,6 @@ export function gamesRoutes(coordinator: GameCoordinator) {
           parsed.data,
         ),
       );
-    } catch (error) {
-      return failure(c, error);
-    }
-  });
-  app.post("/:id/join", async (c) => {
-    try {
-      const { userId, username } = player(c);
-      return c.json(await coordinator.joinGame(c.req.param("id") as GameId, userId, username));
-    } catch (error) {
-      return failure(c, error);
-    }
-  });
-  app.post("/:id/spectate", async (c) => {
-    try {
-      const { userId, username } = player(c);
-      return c.json(await coordinator.spectateGame(c.req.param("id") as GameId, userId, username));
     } catch (error) {
       return failure(c, error);
     }

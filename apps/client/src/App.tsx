@@ -39,6 +39,7 @@ import { currentRoute, navigate, type Route, sameRoute } from "./routes.tsx";
 import {
   CancelledScreen,
   CreateGameScreen,
+  GameEntryScreen,
   GameOverScreen,
   GameScreen,
   GamesScreen,
@@ -436,6 +437,7 @@ function SignedInShell({
   if (
     route.type === "games" ||
     route.type === "create" ||
+    route.type === "entry" ||
     route.type === "chat" ||
     route.type === "profile"
   ) {
@@ -444,6 +446,8 @@ function SignedInShell({
         <GamesScreen username={username ?? session.user.name ?? session.user.email ?? userId} />
       ) : route.type === "create" ? (
         <CreateGameScreen />
+      ) : route.type === "entry" ? (
+        <GameEntryScreen reference={route.reference} />
       ) : route.type === "chat" ? (
         <GlobalChatScreen
           candidates={mentionCandidates}

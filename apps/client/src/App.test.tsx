@@ -9,6 +9,7 @@ import type {
 } from "@werewolf/protocol";
 import { forwardRef, type ReactElement, useEffect, useImperativeHandle, useRef } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { api } from "./api/client.ts";
 import { ToastProvider } from "./toast.tsx";
 
 const virtuosoControl = vi.hoisted(() => ({
@@ -245,6 +246,64 @@ test("does not open the chat socket for a signed-out visitor", async () => {
 
   await screen.findByRole("button", { name: /Sign in · Google/ });
   expect(StubWebSocket.instances).toHaveLength(0);
+});
+
+test("creating a game continues into its lobby and loads the owner's share panel", async () => {
+  const snapshot: ViewerGameSnapshot = {
+    game: {
+      id: "created-1" as GameId,
+      name: "Moonrise",
+      ownerUserId: "me" as UserId,
+      status: "lobby",
+      day: 1,
+      phase: null,
+      settings: {
+        visibility: "private",
+        spectatingEnabled: true,
+        durations: { discussion: 120, voting: 60, night: 60 },
+      },
+    },
+    players: [{ userId: "me" as UserId, displayName: "Wren", status: "lobby" }],
+    me: { userId: "me" as UserId, status: "lobby" },
+    availableActions: [],
+    availableChannels: ["public"],
+    cursor: 0 as EventId,
+    serverNow: 5000,
+  };
+  const createGame = vi
+    .spyOn(api, "createGame")
+    .mockResolvedValue({ gameId: "created-1" as GameId });
+  const getSnapshot = vi.spyOn(api, "getSnapshot").mockResolvedValue(snapshot);
+  const getInvitation = vi
+    .spyOn(api, "getInvitation")
+    .mockResolvedValue({ code: "K7M3P9T2WQ" as never });
+  vi.spyOn(api, "listBots").mockResolvedValue([]);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn<(input: RequestInfo | URL) => Promise<Response>>((input) =>
+      Promise.resolve(
+        new Response(
+          String(input) === "/api/auth/get-session"
+            ? JSON.stringify({ user: { id: "me", username: "wren" } })
+            : JSON.stringify([]),
+          { status: 200 },
+        ),
+      ),
+    ),
+  );
+
+  render(<App />);
+  await screen.findByRole("heading", { name: "Open games" });
+  fireEvent.click(screen.getByRole("button", { name: "Create" }));
+  fireEvent.change(screen.getByLabelText("Game name"), { target: { value: "Moonrise" } });
+  fireEvent.click(screen.getByRole("button", { name: "Create game" }));
+
+  await waitFor(() => expect(createGame).toHaveBeenCalledTimes(1));
+  await screen.findByRole("heading", { name: "Moonrise" });
+  await waitFor(() => expect(getSnapshot).toHaveBeenCalledWith("created-1"));
+  await waitFor(() => expect(getInvitation).toHaveBeenCalledWith("created-1"));
+  expect(await screen.findByText("K7M3-P9T2-WQ")).toBeInTheDocument();
+  expect(window.location.pathname).toBe("/games/created-1");
 });
 
 test("does not open the chat socket for a signed-in visitor without a username", async () => {

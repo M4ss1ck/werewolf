@@ -232,6 +232,7 @@ export const es: TranslationResource = {
     GAME_CANCELLED: "Esa partida fue cancelada.",
     INVITATION_NOT_FOUND: "No se encontró esa invitación a la partida.",
     INVITATION_ACCESS_DENIED: "No tienes acceso a esa invitación a la partida.",
+    INVITATION_COPY_FAILED: "No se pudo copiar el enlace. Cópialo manualmente.",
     SPECTATING_DISABLED: "El modo espectador está desactivado para esta partida.",
     NOT_A_MEMBER: "No eres miembro de esta partida.",
     NOT_GAME_OWNER: "Solo el creador de la partida puede hacer eso.",
@@ -367,6 +368,8 @@ export const es: TranslationResource = {
       "No hay suficientes jugadores para comenzar. Se necesitan al menos {{count}}.",
     homeTagline: "Reúne a la aldea, escóndete entre la manada y sobrevive hasta el amanecer.",
     openGames: "Partidas abiertas",
+    myGames: "Mis partidas",
+    noMyGames: "Todavía no tienes partidas que retomar.",
     noOpenGames:
       "Aún no hay partidas abiertas: la aldea está en calma. Crea una y sé el primero en aullar.",
     gameName: "Nombre de la partida",
@@ -435,6 +438,8 @@ export const es: TranslationResource = {
       me: "Yo",
     },
     browser: {
+      browse: "Explorar",
+      myGames: "Mis partidas",
       filterAll: "Todas",
       filterLobby: "Sala",
       filterRunning: "En curso",
@@ -464,6 +469,31 @@ export const es: TranslationResource = {
     cancelled: {
       title: "Partida cancelada",
       body: "El anfitrión canceló esta partida.",
+    },
+    entry: {
+      label: "Entrada a la partida",
+      hostedBy: "Creada por {{owner}}",
+      facts: "Detalles de la partida",
+      seats: "Asientos de juego",
+      scheduled: "Inicio",
+      manualStart: "Cuando el anfitrión empiece",
+      actions: "Elige cómo entrar",
+      loading: "Leyendo la invitación…",
+      tryAgain: "Intentarlo de nuevo",
+      join: "Unirse como jugador",
+      spectate: "Ver en directo",
+      replay: "Ver repetición",
+      unavailable: {
+        cancelled: "Esta partida fue cancelada y ya no acepta visitas.",
+        started: "Esta partida ya ha comenzado.",
+        spectating_disabled: "Esta partida no acepta espectadores.",
+        access_denied: "Ya no tienes acceso a esta invitación.",
+      },
+    },
+    share: {
+      title: "Invitar a la manada",
+      copy: "Copiar enlace",
+      copied: "Copiado",
     },
     over: {
       villageWins: "la aldea gana",

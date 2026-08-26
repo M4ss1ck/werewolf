@@ -34,6 +34,24 @@ test("Google sign-in follows the OAuth URL returned by Better Auth", async () =>
   expect(location.href).toBe(oauthUrl);
 });
 
+test("Google sign-in preserves the complete shared URL as callbackURL", async () => {
+  mocks.isTauri.mockReturnValue(false);
+  const sharedUrl = "http://localhost:1420/join?code=K7M3-P9T2-WQ";
+  const location = { href: sharedUrl };
+  vi.stubGlobal("location", location);
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response(JSON.stringify({ url: "https://accounts.google.com/oauth", redirect: true }), {
+      headers: { "content-type": "application/json" },
+      status: 200,
+    }),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+
+  await signInWithGoogle();
+
+  expect(JSON.parse(fetchMock.mock.calls[0]![1].body).callbackURL).toBe(sharedUrl);
+});
+
 test("on the web it assigns location.href, does not call openUrl, and uses location.href as callbackURL", async () => {
   mocks.isTauri.mockReturnValue(false);
   const oauthUrl = "https://accounts.google.com/o/oauth2/v2/auth?state=web";

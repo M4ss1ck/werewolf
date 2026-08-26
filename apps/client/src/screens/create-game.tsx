@@ -44,13 +44,13 @@ export function CreateGameScreen() {
     const startsAt = scheduledAtFor(schedule, customAt);
     if (schedule === "custom" && (startsAt === undefined || startsAt <= Date.now())) return;
     try {
-      const game = await api.createGame({
+      const { gameId } = await api.createGame({
         name,
         visibility,
         ...(startsAt ? { scheduledAt: startsAt } : {}),
         settings: { ...durations, spectatingEnabled },
       });
-      navigate(`/games/${game.id}`);
+      navigate(`/games/${gameId}`);
     } catch (caught) {
       setError(caught);
     }

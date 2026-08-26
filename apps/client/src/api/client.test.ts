@@ -1,4 +1,12 @@
-import type { ChatContent, GameplayCommand, PhaseId, UserId } from "@werewolf/protocol";
+import type {
+  ChatContent,
+  GameCode,
+  GameEntryPreview,
+  GameId,
+  GameplayCommand,
+  PhaseId,
+  UserId,
+} from "@werewolf/protocol";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { ApiError, api } from "./client.ts";
@@ -13,6 +21,72 @@ afterEach(() => {
 });
 
 describe("api client", () => {
+  test("previews and admits a game entry through the protocol DTOs", async () => {
+    const preview: GameEntryPreview = {
+      name: "Night Watch",
+      ownerDisplayName: "Wren",
+      status: "lobby",
+      playerCount: 1,
+      canJoin: true,
+      canSpectate: true,
+      canReplay: false,
+      membership: null,
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(preview), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ gameId: "game-1", destination: "game" }), { status: 200 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      api.previewGameEntry({ kind: "invitation", code: "K7M3P9T2WQ" as GameCode }),
+    ).resolves.toEqual(preview);
+    await expect(
+      api.admitGameEntry({ kind: "invitation", code: "K7M3P9T2WQ" as GameCode }, "player"),
+    ).resolves.toEqual({ gameId: "game-1", destination: "game" });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/game-entry?code=K7M3P9T2WQ",
+      expect.objectContaining({ credentials: "include" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/game-entry",
+      expect.objectContaining({ method: "POST" }),
+    );
+    const admissionCall = fetchMock.mock.calls[1];
+    if (!admissionCall) throw new Error("missing admission request");
+    expect(JSON.parse((admissionCall[1] as RequestInit).body as string)).toEqual({
+      reference: { kind: "invitation", code: "K7M3P9T2WQ" },
+      mode: "player",
+    });
+  });
+
+  test("createGame consumes the compact create response", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ gameId: "game-1" }), { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(api.createGame({ name: "Night Watch" })).resolves.toEqual({ gameId: "game-1" });
+  });
+
+  test.each([
+    ["empty", ""],
+    ["malformed", 42],
+  ])("createGame rejects %s gameId responses", async (_label, gameId) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ gameId }), { status: 201 })),
+    );
+
+    await expect(api.createGame({ name: "Night Watch" })).rejects.toMatchObject({
+      code: "VALIDATION",
+    });
+  });
+
   test("throws a typed error carrying the code from the error body, never the raw HTTP status", async () => {
     const fetchMock = vi
       .fn()
@@ -23,9 +97,13 @@ describe("api client", () => {
       );
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(api.join("game-1")).rejects.toMatchObject({ code: "PHASE_CLOSED" });
+    await expect(
+      api.admitGameEntry({ kind: "public-game", gameId: "game-1" as GameId }, "player"),
+    ).rejects.toMatchObject({ code: "PHASE_CLOSED" });
 
-    const error = await api.join("game-1").catch((caught: unknown) => caught);
+    const error = await api
+      .admitGameEntry({ kind: "public-game", gameId: "game-1" as GameId }, "player")
+      .catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(ApiError);
     expect((error as ApiError).code).toBe("PHASE_CLOSED");
     expect((error as ApiError).message).toBe("PHASE_CLOSED");

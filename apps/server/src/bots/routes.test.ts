@@ -53,9 +53,10 @@ async function setup(options: { apiKey?: string } = {}) {
       body: JSON.stringify({ name: "Lobby", settings: {} }),
     })
   ).json();
+  const created = game as { gameId: GameId };
   return {
     as,
-    gameId: (game as { id: GameId }).id,
+    gameId: created.gameId,
     close: () => {
       client.close();
       rmSync(dir, { recursive: true, force: true });
@@ -170,7 +171,13 @@ describe("bot lobby routes", () => {
 
   test("only the host may list or seat bots", async () => {
     const harness = await setup({ apiKey: "secret" });
-    await harness.as("guest", `/api/games/${harness.gameId}/join`, { method: "POST", body: "{}" });
+    await harness.as("guest", "/api/game-entry", {
+      method: "POST",
+      body: JSON.stringify({
+        reference: { kind: "public-game", gameId: harness.gameId },
+        mode: "player",
+      }),
+    });
     expect((await harness.as("guest", `/api/games/${harness.gameId}/bots`)).status).toBe(403);
     expect(
       (

@@ -6,12 +6,13 @@
 
 import { expect, test } from "bun:test";
 import { type Db, GameRepository } from "@werewolf/db";
-import type { DomainTransition, GameState } from "@werewolf/game-engine";
+import type { DomainTransition } from "@werewolf/game-engine";
 import type { GameEvent, GameId, UserId, ViewerGameSnapshot } from "@werewolf/protocol";
 import {
   as,
   chatCommand,
   createGame,
+  entry,
   jsonRequest,
   setup,
   snapshot,
@@ -42,7 +43,7 @@ test("starting with four players is refused with MIN_PLAYERS_NOT_REACHED", async
   const { app } = await setup();
   const game = await createGame(app, USERS[0]!);
   for (const userId of [USERS[1]!, USERS[2]!, USERS[3]!]) {
-    const response = await as(app, userId, `/api/games/${game.id}/join`, jsonRequest("POST", {}));
+    const response = await entry(app, userId, game.id);
     expect(response.status).toBe(200);
   }
   const start = await as(app, USERS[0]!, `/api/games/${game.id}/start`, jsonRequest("POST", {}));
@@ -53,7 +54,7 @@ test("starting with four players is refused with MIN_PLAYERS_NOT_REACHED", async
 test("a non-owner starting or cancelling gets NOT_GAME_OWNER", async () => {
   const { app } = await setup();
   const game = await createGame(app, USERS[0]!);
-  const joined = await as(app, USERS[1]!, `/api/games/${game.id}/join`, jsonRequest("POST", {}));
+  const joined = await entry(app, USERS[1]!, game.id);
   expect(joined.status).toBe(200);
 
   const start = await as(app, USERS[1]!, `/api/games/${game.id}/start`, jsonRequest("POST", {}));
@@ -207,29 +208,19 @@ test("spectating works in the lobby and while running, and never deals a role", 
   const { app, repo } = await setup();
   const game = await createGame(app, USERS[0]!);
   for (const userId of [USERS[1]!, USERS[2]!, USERS[3]!, USERS[4]!]) {
-    const response = await as(app, userId, `/api/games/${game.id}/join`, jsonRequest("POST", {}));
+    const response = await entry(app, userId, game.id);
     expect(response.status).toBe(200);
   }
   // A spectator joins before the start and one after it is running.
   const lobbySpectator = USERS[5]!;
-  const inLobby = await as(
-    app,
-    lobbySpectator,
-    `/api/games/${game.id}/spectate`,
-    jsonRequest("POST", {}),
-  );
+  const inLobby = await entry(app, lobbySpectator, game.id, "spectator");
   expect(inLobby.status).toBe(200);
 
   const start = await as(app, USERS[0]!, `/api/games/${game.id}/start`, jsonRequest("POST", {}));
   expect(start.status).toBe(200);
 
   const runningSpectator = USERS[6]!;
-  const whileRunning = await as(
-    app,
-    runningSpectator,
-    `/api/games/${game.id}/spectate`,
-    jsonRequest("POST", {}),
-  );
+  const whileRunning = await entry(app, runningSpectator, game.id, "spectator");
   expect(whileRunning.status).toBe(200);
 
   // Both spectators are recorded as spectators, dealt no role, and the five
@@ -359,8 +350,8 @@ test("the per-game lock serialises commands for one game while two games proceed
 test("only the owner may kick a player from the lobby", async () => {
   const { app } = await setup();
   const game = await createGame(app, USERS[0]!);
-  await as(app, USERS[1]!, `/api/games/${game.id}/join`, jsonRequest("POST", {}, USERS[1]!));
-  await as(app, USERS[2]!, `/api/games/${game.id}/join`, jsonRequest("POST", {}, USERS[2]!));
+  await entry(app, USERS[1]!, game.id);
+  await entry(app, USERS[2]!, game.id);
 
   const byStranger = await as(
     app,
@@ -387,7 +378,7 @@ test("only the owner may kick a player from the lobby", async () => {
 test("only the owner may edit the game", async () => {
   const { app } = await setup();
   const game = await createGame(app, USERS[0]!);
-  await as(app, USERS[1]!, `/api/games/${game.id}/join`, jsonRequest("POST", {}, USERS[1]!));
+  await entry(app, USERS[1]!, game.id);
 
   const byStranger = await as(
     app,
@@ -439,8 +430,8 @@ test("GET /api/games shows a private game only to its participating players", as
     jsonRequest("POST", { name: "Private", visibility: "private" }, USERS[0]!),
   );
   expect(created.status).toBe(200);
-  const game = (await created.json()) as GameState;
-  const invitation = await as(app, USERS[0]!, `/api/games/${game.id}/invitation`);
+  const gameId = ((await created.json()) as { gameId: GameId }).gameId;
+  const invitation = await as(app, USERS[0]!, `/api/games/${gameId}/invitation`);
   expect(invitation.status).toBe(200);
   const code = ((await invitation.json()) as { code: string }).code;
   await as(app, USERS[1]!, "/api/game-entry", {
@@ -515,13 +506,9 @@ test("the roster shows usernames, not user ids", async () => {
     body: JSON.stringify({ name: "Lobby", settings: { spectatingEnabled: true } }),
   });
   expect(created.status).toBe(200);
-  const gameId = ((await created.json()) as GameState).id;
+  const gameId = ((await created.json()) as { gameId: GameId }).gameId;
 
-  const joined = await as(app, USERS[1]!, `/api/games/${gameId}/join`, {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-username": "Nightwarden" },
-    body: "{}",
-  });
+  const joined = await entry(app, USERS[1]!, gameId, "player", "Nightwarden");
   expect(joined.status).toBe(200);
 
   const view = await snapshot(app, USERS[0]!, gameId);
@@ -536,18 +523,21 @@ test("lobby mutations answer with the caller's viewer projection", async () => {
   const { app } = await setup();
   const game = await createGame(app, USERS[0]!);
 
-  // Joining answers with the joiner's projection, not the raw GameState.
-  const joined = await as(app, USERS[1]!, `/api/games/${game.id}/join`, jsonRequest("POST", {}));
+  // Entry admission returns only a destination; the admitted viewer then reads
+  // its projection through the normal snapshot route.
+  const joined = await entry(app, USERS[1]!, game.id);
   expect(joined.status).toBe(200);
-  const joinBody = (await joined.json()) as ViewerGameSnapshot;
+  expect(await joined.json()).toEqual({ gameId: game.id, destination: "game" });
+  const joinBody = await snapshot(app, USERS[1]!, game.id);
   expect(joinBody.game.id).toBe(game.id);
   expect(Array.isArray(joinBody.players)).toBe(true);
   expect(joinBody).not.toHaveProperty("balanceVersion");
   expect(joinBody).not.toHaveProperty("version");
 
-  const joined2 = await as(app, USERS[2]!, `/api/games/${game.id}/join`, jsonRequest("POST", {}));
+  const joined2 = await entry(app, USERS[2]!, game.id);
   expect(joined2.status).toBe(200);
-  const joinBody2 = (await joined2.json()) as ViewerGameSnapshot;
+  expect(await joined2.json()).toEqual({ gameId: game.id, destination: "game" });
+  const joinBody2 = await snapshot(app, USERS[2]!, game.id);
   expect(joinBody2.game.id).toBe(game.id);
   expect(joinBody2.players.some((player) => player.userId === USERS[2]!)).toBe(true);
 
@@ -590,7 +580,7 @@ test("starting answers with the starter's projection and hides other roles", asy
   const { app } = await setup();
   const game = await createGame(app, USERS[0]!);
   for (const userId of [USERS[1]!, USERS[2]!, USERS[3]!, USERS[4]!]) {
-    const response = await as(app, userId, `/api/games/${game.id}/join`, jsonRequest("POST", {}));
+    const response = await entry(app, userId, game.id);
     expect(response.status).toBe(200);
   }
 
@@ -652,11 +642,7 @@ test("creating or joining without a username is refused", async () => {
   expect(created.status).toBe(403);
   expect(await created.json()).toEqual({ error: { code: "USERNAME_REQUIRED" } });
 
-  const joined = await as(app, USERS[1]!, `/api/games/${game.id}/join`, {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-username": "" },
-    body: "{}",
-  });
+  const joined = await entry(app, USERS[1]!, game.id, "player", "");
   expect(joined.status).toBe(403);
   expect(await joined.json()).toEqual({ error: { code: "USERNAME_REQUIRED" } });
 });

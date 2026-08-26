@@ -12,6 +12,8 @@ import type {
   ActionId,
   ChatChannel,
   EventId,
+  GameCode,
+  GameEntryPreview,
   GameEvent,
   GameId,
   GameSummary,
@@ -33,6 +35,7 @@ import { ToastProvider } from "../toast.tsx";
 import { Act } from "./act.tsx";
 import { CreateGameScreen } from "./create-game.tsx";
 import { GameScreen } from "./game.tsx";
+import { GameEntryScreen } from "./game-entry.tsx";
 import { GameOverScreen } from "./game-over.tsx";
 import { GamesScreen } from "./games.tsx";
 import { LobbyScreen } from "./lobby.tsx";
@@ -84,6 +87,14 @@ function makeSummary(overrides: Partial<GameSummary> = {}): GameSummary {
     serverNow: 1000,
     ...overrides,
   };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve;
+  });
+  return { promise, resolve };
 }
 
 const SESSION_USER = { id: "me", username: "wren", email: "wren@example.com" };
@@ -277,57 +288,82 @@ test("browser: renders games, filters by status, shows the avatar stack overflow
   expect(screen.queryByText("Finished Game")).not.toBeInTheDocument();
 });
 
-test("browser: private games render only under All, never Lobby or Running", async () => {
-  const games = [
-    makeSummary({ id: "g1" as GameId, name: "Public Lobby", visibility: "public" }),
+test("browser: private games come from My games, never Browse", async () => {
+  const publicGames = [makeSummary({ id: "g1" as GameId, name: "Public Lobby" })];
+  const privateGames = [
     makeSummary({ id: "g2" as GameId, name: "Private Lobby", visibility: "private" }),
-    makeSummary({
-      id: "g3" as GameId,
-      name: "Private Running",
-      visibility: "private",
-      status: "running",
-      day: 2,
-      phase: { type: "voting", endsAt: 9000 },
-    }),
   ];
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockResolvedValue(new Response(JSON.stringify(games), { status: 200 })),
-  );
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify(publicGames), { status: 200 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify(privateGames), { status: 200 }));
 
+  vi.stubGlobal("fetch", fetchMock);
   renderWithI18n(<GamesScreen username="Wren" />);
 
-  // The browser opens on Lobby: a private game must not appear there.
   expect(await screen.findByText("Public Lobby")).toBeInTheDocument();
   expect(screen.queryByText("Private Lobby")).not.toBeInTheDocument();
-
-  // Running hides private games too.
-  fireEvent.click(screen.getByRole("button", { name: "Running" }));
-  expect(screen.queryByText("Private Running")).not.toBeInTheDocument();
-
-  // All shows everything, including private games.
-  fireEvent.click(screen.getByRole("button", { name: "All" }));
-  expect(screen.getByText("Private Lobby")).toBeInTheDocument();
-  expect(screen.getByText("Private Running")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("tab", { name: "My games" }));
+  expect(await screen.findByText("Private Lobby")).toBeInTheDocument();
 });
 
-test("browser: private games carry a Private badge on active and finished cards", async () => {
+test("browser: ignores an out-of-order response after switching scopes", async () => {
+  const browse = deferred<GameSummary[]>();
+  const mine = deferred<GameSummary[]>();
+  const listGames = vi
+    .spyOn(api, "listGames")
+    .mockImplementationOnce(() => browse.promise)
+    .mockImplementationOnce(() => mine.promise);
+
+  renderWithI18n(<GamesScreen username="Wren" />);
+  fireEvent.click(screen.getByRole("tab", { name: "My games" }));
+
+  await reactAct(async () => {
+    browse.resolve([makeSummary({ name: "Browse result" })]);
+  });
+  expect(screen.queryByText("Browse result")).not.toBeInTheDocument();
+
+  await reactAct(async () => {
+    mine.resolve([makeSummary({ name: "Mine result" })]);
+  });
+  expect(await screen.findByText("Mine result")).toBeInTheDocument();
+  expect(listGames).toHaveBeenCalledTimes(2);
+});
+
+test("browser: ignores a late My games response after switching back to Browse", async () => {
+  const initialBrowse = [makeSummary({ name: "Initial browse" })];
+  const mine = deferred<GameSummary[]>();
+  const browse = deferred<GameSummary[]>();
+  const listGames = vi
+    .spyOn(api, "listGames")
+    .mockResolvedValueOnce(initialBrowse)
+    .mockImplementationOnce(() => mine.promise)
+    .mockImplementationOnce(() => browse.promise);
+
+  renderWithI18n(<GamesScreen username="Wren" />);
+  expect(await screen.findByText("Initial browse")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("tab", { name: "My games" }));
+  fireEvent.click(screen.getByRole("tab", { name: "Browse" }));
+
+  await reactAct(async () => {
+    mine.resolve([makeSummary({ name: "Late mine result" })]);
+  });
+  expect(screen.queryByText("Late mine result")).not.toBeInTheDocument();
+
+  await reactAct(async () => {
+    browse.resolve([makeSummary({ name: "Current browse result" })]);
+  });
+  expect(await screen.findByText("Current browse result")).toBeInTheDocument();
+  expect(listGames).toHaveBeenCalledTimes(3);
+});
+
+test("browser: a member in Browse still opens the entry dossier", async () => {
   const games = [
-    makeSummary({ id: "g1" as GameId, name: "Public Game", visibility: "public" }),
     makeSummary({
-      id: "g2" as GameId,
-      name: "Private Active",
-      visibility: "private",
+      id: "g-member" as GameId,
+      name: "Already Watching",
       status: "running",
-      day: 2,
-      phase: { type: "voting", endsAt: 9000 },
-    }),
-    makeSummary({
-      id: "g3" as GameId,
-      name: "Private Finished",
-      visibility: "private",
-      status: "finished",
-      playerCount: 7,
+      membership: "spectator",
     }),
   ];
   vi.stubGlobal(
@@ -336,22 +372,558 @@ test("browser: private games carry a Private badge on active and finished cards"
   );
 
   renderWithI18n(<GamesScreen username="Wren" />);
+  fireEvent.click(await screen.findByRole("button", { name: "Running" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Spectate" }));
 
-  // The browser opens on Lobby: only the public game is visible, no badges.
-  expect(await screen.findByText("Public Game")).toBeInTheDocument();
-  expect(screen.queryByText("Private")).not.toBeInTheDocument();
+  expect(window.location.pathname).toBe("/games/g-member/entry");
+});
 
-  // All shows every game; exactly the two private ones carry the badge.
-  fireEvent.click(screen.getByRole("button", { name: "All" }));
-  expect(screen.getByText("Private Active")).toBeInTheDocument();
-  expect(screen.getByText("Private Finished")).toBeInTheDocument();
-  expect(screen.getAllByText("Private")).toHaveLength(2);
+test("browser: cards keep the private badge in My games", async () => {
+  const games = [
+    makeSummary({
+      id: "g1" as GameId,
+      name: "Private Active",
+      visibility: "private",
+      membership: "spectator",
+      status: "running",
+    }),
+  ];
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(games), { status: 200 })),
+  );
+
+  renderWithI18n(<GamesScreen username="Wren" />);
+  fireEvent.click(await screen.findByRole("tab", { name: "My games" }));
+  expect(await screen.findByText("Private Active")).toBeInTheDocument();
+  expect(screen.getByText("Private")).toBeInTheDocument();
+});
+
+test("browser: My games uses its own server scope and opens replay memberships", async () => {
+  const games = [
+    makeSummary({
+      id: "g-replay" as GameId,
+      name: "Private Replay",
+      status: "finished",
+      visibility: "private",
+      membership: "replay",
+    }),
+  ];
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValue(new Response(JSON.stringify([]), { status: 200 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify(games), { status: 200 }));
+  vi.stubGlobal("fetch", fetchMock);
+
+  renderWithI18n(<GamesScreen username="Wren" />);
+  fireEvent.click(await screen.findByRole("tab", { name: "My games" }));
+
+  expect(await screen.findByText("Private Replay")).toBeInTheDocument();
+  expect(fetchMock).toHaveBeenCalledWith(
+    "/api/games?scope=mine",
+    expect.objectContaining({ credentials: "include" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: /Private Replay/ }));
+  expect(window.location.pathname).toBe("/games/g-replay/replay");
+  expect(screen.queryByText("Denied game")).not.toBeInTheDocument();
+  expect(screen.queryByText("Cancelled game")).not.toBeInTheDocument();
+});
+
+test("browser: My games renders the server-filtered membership payload", async () => {
+  const sourceRows = [
+    {
+      summary: makeSummary({ id: "g-safe" as GameId, name: "My private game" }),
+      membershipAccess: "active",
+    },
+    {
+      summary: makeSummary({ id: "g-denied" as GameId, name: "Denied game" }),
+      membershipAccess: "denied",
+    },
+    {
+      summary: makeSummary({
+        id: "g-cancelled" as GameId,
+        name: "Cancelled game",
+        status: "cancelled",
+      }),
+      membershipAccess: "active",
+    },
+  ] as const;
+  const safeMinePayload = sourceRows
+    .filter((row) => row.membershipAccess !== "denied" && row.summary.status !== "cancelled")
+    .map((row) => row.summary);
+  expect(sourceRows).toHaveLength(3);
+  expect(safeMinePayload).toHaveLength(1);
+
+  const fetchMock = vi.fn((input: RequestInfo | URL) => {
+    const url = String(input);
+    const body = url === "/api/games?scope=mine" ? safeMinePayload : [];
+    return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
+  });
+  vi.stubGlobal("fetch", fetchMock);
+
+  renderWithI18n(<GamesScreen username="Wren" />);
+  fireEvent.click(await screen.findByRole("tab", { name: "My games" }));
+
+  expect(await screen.findByText("My private game")).toBeInTheDocument();
+  expect(screen.queryByText("Denied game")).not.toBeInTheDocument();
+  expect(screen.queryByText("Cancelled game")).not.toBeInTheDocument();
+  expect(fetchMock).toHaveBeenCalledWith(
+    "/api/games?scope=mine",
+    expect.objectContaining({ credentials: "include" }),
+  );
+});
+
+test("entry: previews without mutating, then admits only the offered mode", async () => {
+  const preview = {
+    name: "Night Watch",
+    ownerDisplayName: "Wren",
+    status: "lobby" as const,
+    playerCount: 2,
+    canJoin: true,
+    canSpectate: true,
+    canReplay: false,
+    membership: null,
+  };
+  const previewGameEntry = vi.spyOn(api, "previewGameEntry").mockResolvedValue(preview);
+  const admitGameEntry = vi
+    .spyOn(api, "admitGameEntry")
+    .mockResolvedValue({ gameId: "g1" as GameId, destination: "game" });
+
+  renderWithI18n(
+    <GameEntryScreen reference={{ kind: "invitation", code: "K7M3P9T2WQ" as never }} />,
+  );
+
+  expect(await screen.findByRole("heading", { name: "Night Watch" })).toBeInTheDocument();
+  expect(previewGameEntry).toHaveBeenCalledTimes(1);
+  expect(admitGameEntry).not.toHaveBeenCalled();
+
+  fireEvent.click(screen.getByRole("button", { name: "Join as player" }));
+  await waitFor(() =>
+    expect(admitGameEntry).toHaveBeenCalledWith(
+      { kind: "invitation", code: "K7M3P9T2WQ" },
+      "player",
+    ),
+  );
+  expect(window.location.pathname).toBe("/games/g1");
+});
+
+test("entry: ignores a stale preview after the reference changes", async () => {
+  const first = deferred<GameEntryPreview>();
+  const second = deferred<GameEntryPreview>();
+  vi.spyOn(api, "previewGameEntry")
+    .mockImplementationOnce(() => first.promise)
+    .mockImplementationOnce(() => second.promise);
+  const view = renderWithI18n(
+    <GameEntryScreen reference={{ kind: "public-game", gameId: "first" as GameId }} />,
+  );
+  view.rerender(
+    <I18nextProvider i18n={i18n}>
+      <GameEntryScreen reference={{ kind: "public-game", gameId: "second" as GameId }} />
+    </I18nextProvider>,
+  );
+
+  await reactAct(async () => {
+    first.resolve({
+      name: "Stale game",
+      ownerDisplayName: "Wren",
+      status: "lobby",
+      playerCount: 1,
+      canJoin: true,
+      canSpectate: false,
+      canReplay: false,
+      membership: "spectator",
+      gameId: "stale-destination" as GameId,
+    });
+  });
+  expect(screen.queryByRole("heading", { name: "Stale game" })).not.toBeInTheDocument();
+  expect(window.location.pathname).toBe("/");
+
+  await reactAct(async () => {
+    second.resolve({
+      name: "Current game",
+      ownerDisplayName: "Wren",
+      status: "lobby",
+      playerCount: 1,
+      canJoin: true,
+      canSpectate: false,
+      canReplay: false,
+      membership: null,
+    });
+  });
+  expect(await screen.findByRole("heading", { name: "Current game" })).toBeInTheDocument();
+});
+
+test("entry: ignores a preview that resolves after unmount", async () => {
+  const pending = deferred<GameEntryPreview>();
+  vi.spyOn(api, "previewGameEntry").mockReturnValue(pending.promise);
+  const view = renderWithI18n(
+    <GameEntryScreen reference={{ kind: "public-game", gameId: "gone" as GameId }} />,
+  );
+  view.unmount();
+
+  await reactAct(async () => {
+    pending.resolve({
+      name: "Unmounted game",
+      ownerDisplayName: "Wren",
+      status: "lobby",
+      playerCount: 1,
+      canJoin: true,
+      canSpectate: false,
+      canReplay: false,
+      membership: "spectator",
+      gameId: "unmounted-destination" as GameId,
+    });
+  });
+  expect(screen.queryByRole("heading", { name: "Unmounted game" })).not.toBeInTheDocument();
+  expect(window.location.pathname).toBe("/");
+});
+
+test("entry: ignores an admission result after the reference changes", async () => {
+  const nextPreview = deferred<GameEntryPreview>();
+  const admission = deferred<{ gameId: GameId; destination: "game" | "replay" }>();
+  vi.spyOn(api, "previewGameEntry")
+    .mockResolvedValueOnce({
+      name: "First game",
+      ownerDisplayName: "Wren",
+      status: "lobby",
+      playerCount: 1,
+      canJoin: true,
+      canSpectate: false,
+      canReplay: false,
+      membership: null,
+    })
+    .mockReturnValueOnce(nextPreview.promise);
+  const admitGameEntry = vi.spyOn(api, "admitGameEntry").mockReturnValue(admission.promise);
+  const view = renderWithI18n(
+    <GameEntryScreen reference={{ kind: "public-game", gameId: "first" as GameId }} />,
+  );
+  fireEvent.click(await screen.findByRole("button", { name: "Join as player" }));
+  expect(admitGameEntry).toHaveBeenCalledWith({ kind: "public-game", gameId: "first" }, "player");
+
+  view.rerender(
+    <I18nextProvider i18n={i18n}>
+      <GameEntryScreen reference={{ kind: "public-game", gameId: "second" as GameId }} />
+    </I18nextProvider>,
+  );
+  await reactAct(async () => {
+    admission.resolve({ gameId: "stale-admission" as GameId, destination: "game" });
+  });
+  expect(window.location.pathname).toBe("/");
+
+  await reactAct(async () => {
+    nextPreview.resolve({
+      name: "Second game",
+      ownerDisplayName: "Wren",
+      status: "lobby",
+      playerCount: 1,
+      canJoin: true,
+      canSpectate: false,
+      canReplay: false,
+      membership: null,
+    });
+  });
+  expect(await screen.findByRole("heading", { name: "Second game" })).toBeInTheDocument();
+});
+
+test("entry: does not navigate when admission resolves after unmount", async () => {
+  vi.spyOn(api, "previewGameEntry").mockResolvedValue({
+    name: "Night Watch",
+    ownerDisplayName: "Wren",
+    status: "lobby",
+    playerCount: 1,
+    canJoin: true,
+    canSpectate: false,
+    canReplay: false,
+    membership: null,
+  });
+  const admission = deferred<{ gameId: GameId; destination: "game" | "replay" }>();
+  vi.spyOn(api, "admitGameEntry").mockReturnValue(admission.promise);
+  const view = renderWithI18n(
+    <GameEntryScreen reference={{ kind: "public-game", gameId: "gone" as GameId }} />,
+  );
+  fireEvent.click(await screen.findByRole("button", { name: "Join as player" }));
+  view.unmount();
+
+  await reactAct(async () => {
+    admission.resolve({ gameId: "should-not-navigate" as GameId, destination: "game" });
+  });
+  expect(window.location.pathname).toBe("/");
+});
+
+test("entry: offers only the modes allowed by the preview", async () => {
+  const previewGameEntry = vi.spyOn(api, "previewGameEntry").mockResolvedValue({
+    name: "Night Watch",
+    ownerDisplayName: "Wren",
+    status: "running",
+    playerCount: 3,
+    canJoin: false,
+    canSpectate: true,
+    canReplay: false,
+    membership: null,
+  });
+  const admitGameEntry = vi
+    .spyOn(api, "admitGameEntry")
+    .mockResolvedValue({ gameId: "g-watch" as GameId, destination: "game" });
+
+  renderWithI18n(
+    <GameEntryScreen reference={{ kind: "public-game", gameId: "g-watch" as GameId }} />,
+  );
+
+  expect(await screen.findByRole("button", { name: "Watch live" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Join as player" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "View replay" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Watch live" }));
+  await waitFor(() =>
+    expect(admitGameEntry).toHaveBeenCalledWith(
+      { kind: "public-game", gameId: "g-watch" },
+      "spectator",
+    ),
+  );
+  expect(previewGameEntry).toHaveBeenCalledTimes(1);
+});
+
+test("entry: replay is the only action offered for replay access", async () => {
+  vi.spyOn(api, "previewGameEntry").mockResolvedValue({
+    name: "The Last Night",
+    ownerDisplayName: "Wren",
+    status: "finished",
+    playerCount: 5,
+    canJoin: false,
+    canSpectate: false,
+    canReplay: true,
+    membership: null,
+  });
+  const admitGameEntry = vi
+    .spyOn(api, "admitGameEntry")
+    .mockResolvedValue({ gameId: "g-replay" as GameId, destination: "replay" });
+
+  renderWithI18n(
+    <GameEntryScreen reference={{ kind: "public-game", gameId: "g-replay" as GameId }} />,
+  );
+
+  fireEvent.click(await screen.findByRole("button", { name: "View replay" }));
+  await waitFor(() =>
+    expect(admitGameEntry).toHaveBeenCalledWith(
+      { kind: "public-game", gameId: "g-replay" },
+      "replay",
+    ),
+  );
+  expect(window.location.pathname).toBe("/games/g-replay/replay");
+});
+
+test("entry: cancelled games render an unavailable state without actions", async () => {
+  vi.spyOn(api, "previewGameEntry").mockResolvedValue({
+    name: "Cancelled",
+    ownerDisplayName: "Wren",
+    status: "cancelled",
+    playerCount: 0,
+    canJoin: false,
+    canSpectate: false,
+    canReplay: false,
+    unavailableReason: "cancelled",
+    membership: null,
+  });
+
+  renderWithI18n(
+    <GameEntryScreen reference={{ kind: "invitation", code: "K7M3P9T2WQ" as never }} />,
+  );
+
+  expect(await screen.findByRole("status")).toHaveTextContent(
+    "This game was cancelled and is no longer accepting visitors.",
+  );
+  expect(screen.queryByRole("button", { name: "Join as player" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Watch live" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "View replay" })).not.toBeInTheDocument();
+});
+
+test("entry: existing active membership resumes without admitting or converting", async () => {
+  const previewGameEntry = vi.spyOn(api, "previewGameEntry").mockResolvedValue({
+    name: "Private Watch",
+    ownerDisplayName: "Wren",
+    status: "running",
+    playerCount: 3,
+    canJoin: false,
+    canSpectate: false,
+    canReplay: false,
+    membership: "spectator",
+    gameId: "private-watch" as GameId,
+  });
+  const admitGameEntry = vi.spyOn(api, "admitGameEntry");
+
+  renderWithI18n(
+    <GameEntryScreen reference={{ kind: "invitation", code: "K7M3P9T2WQ" as never }} />,
+  );
+
+  await waitFor(() => expect(window.location.pathname).toBe("/games/private-watch"));
+  expect(previewGameEntry).toHaveBeenCalledTimes(1);
+  expect(admitGameEntry).not.toHaveBeenCalled();
+});
+
+test("entry: existing replay membership resumes at replay without admitting", async () => {
+  vi.spyOn(api, "previewGameEntry").mockResolvedValue({
+    name: "Private Replay",
+    ownerDisplayName: "Wren",
+    status: "finished",
+    playerCount: 3,
+    canJoin: false,
+    canSpectate: false,
+    canReplay: false,
+    membership: "replay",
+    gameId: "private-replay" as GameId,
+  });
+  const admitGameEntry = vi.spyOn(api, "admitGameEntry");
+
+  renderWithI18n(
+    <GameEntryScreen reference={{ kind: "public-game", gameId: "private-replay" as GameId }} />,
+  );
+
+  await waitFor(() => expect(window.location.pathname).toBe("/games/private-replay/replay"));
+  expect(admitGameEntry).not.toHaveBeenCalled();
+});
+
+test("entry: admission replaces the invitation URL and removes its query", async () => {
+  window.history.replaceState({}, "", "/join?code=K7M3P9T2WQ");
+  vi.spyOn(api, "previewGameEntry").mockResolvedValue({
+    name: "Night Watch",
+    ownerDisplayName: "Wren",
+    status: "lobby",
+    playerCount: 2,
+    canJoin: true,
+    canSpectate: false,
+    canReplay: false,
+    membership: null,
+  });
+  vi.spyOn(api, "admitGameEntry").mockResolvedValue({
+    gameId: "g-replaced" as GameId,
+    destination: "game",
+  });
+  const replaceState = vi.spyOn(window.history, "replaceState");
+  const pushState = vi.spyOn(window.history, "pushState");
+
+  renderWithI18n(
+    <GameEntryScreen reference={{ kind: "invitation", code: "K7M3P9T2WQ" as never }} />,
+  );
+  fireEvent.click(await screen.findByRole("button", { name: "Join as player" }));
+
+  await waitFor(() => expect(window.location.pathname).toBe("/games/g-replaced"));
+  expect(window.location.search).toBe("");
+  expect(replaceState).toHaveBeenCalledWith({}, "", "/games/g-replaced");
+  expect(pushState).not.toHaveBeenCalled();
+});
+
+test("entry: a conflict refetches choices without falling back to spectator", async () => {
+  const previewGameEntry = vi
+    .spyOn(api, "previewGameEntry")
+    .mockResolvedValueOnce({
+      name: "Last Seat",
+      ownerDisplayName: "Wren",
+      status: "lobby",
+      playerCount: 5,
+      canJoin: true,
+      canSpectate: true,
+      canReplay: false,
+      membership: null,
+    })
+    .mockResolvedValueOnce({
+      name: "Last Seat",
+      ownerDisplayName: "Wren",
+      status: "running",
+      playerCount: 5,
+      canJoin: false,
+      canSpectate: true,
+      canReplay: false,
+      membership: null,
+    });
+  const admitGameEntry = vi
+    .spyOn(api, "admitGameEntry")
+    .mockRejectedValue(new ApiError("CONFLICT"));
+
+  renderWithI18n(
+    <GameEntryScreen reference={{ kind: "invitation", code: "K7M3P9T2WQ" as never }} />,
+  );
+  fireEvent.click(await screen.findByRole("button", { name: "Join as player" }));
+
+  await waitFor(() => expect(previewGameEntry).toHaveBeenCalledTimes(2));
+  expect(screen.queryByRole("button", { name: "Join as player" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Watch live" })).toBeInTheDocument();
+  expect(admitGameEntry).toHaveBeenCalledTimes(1);
+  expect(admitGameEntry).toHaveBeenCalledWith({ kind: "invitation", code: "K7M3P9T2WQ" }, "player");
+});
+
+test("lobby: only the owner sees and can copy the invitation", async () => {
+  const getInvitation = vi
+    .spyOn(api, "getInvitation")
+    .mockResolvedValue({ code: "K7M3P9T2WQ" as GameCode });
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  window.history.replaceState({}, "", "/games/g1");
+
+  renderWithI18n(
+    <LobbyScreen
+      onUpdate={noopUpdate}
+      snapshot={makeGameSnapshot({
+        game: { ownerUserId: "owner" as UserId, status: "lobby", phase: null },
+        me: { userId: "owner" as UserId, status: "lobby" },
+      })}
+    />,
+  );
+
+  expect(await screen.findByText("K7M3-P9T2-WQ")).toBeInTheDocument();
+  expect(getInvitation).toHaveBeenCalledWith("g1");
+  fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
+  await waitFor(() =>
+    expect(writeText).toHaveBeenCalledWith("http://localhost:3000/join?code=K7M3P9T2WQ"),
+  );
+});
+
+test("lobby: a non-owner does not fetch or see the invitation panel", async () => {
+  const getInvitation = vi.spyOn(api, "getInvitation");
+
+  renderWithI18n(
+    <LobbyScreen
+      onUpdate={noopUpdate}
+      snapshot={makeGameSnapshot({
+        game: { ownerUserId: "owner" as UserId, status: "lobby", phase: null },
+        me: { userId: "guest" as UserId, status: "lobby" },
+      })}
+    />,
+  );
+
+  await reactAct(async () => undefined);
+  expect(getInvitation).not.toHaveBeenCalled();
+  expect(screen.queryByText("Invite the pack")).not.toBeInTheDocument();
+});
+
+test("lobby: clipboard failures stay semantic and do not claim success", async () => {
+  vi.spyOn(api, "getInvitation").mockResolvedValue({ code: "K7M3P9T2WQ" as GameCode });
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText: vi.fn().mockRejectedValue(new Error("denied")) },
+  });
+
+  renderWithI18n(
+    <LobbyScreen
+      onUpdate={noopUpdate}
+      snapshot={makeGameSnapshot({
+        game: { ownerUserId: "owner" as UserId, status: "lobby", phase: null },
+        me: { userId: "owner" as UserId, status: "lobby" },
+      })}
+    />,
+  );
+
+  fireEvent.click(await screen.findByRole("button", { name: "Copy link" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent(en.errors.INVITATION_COPY_FAILED);
+  expect(screen.queryByRole("button", { name: "Copied" })).not.toBeInTheDocument();
 });
 
 test("create: sends the right createGame payload including scheduledAt for a preset", async () => {
   const createGame = vi
     .spyOn(api, "createGame")
-    .mockResolvedValue(makeSummary({ id: "created-1" as GameId, name: "Moonrise" }));
+    .mockResolvedValue({ gameId: "created-1" as GameId });
   renderWithI18n(<CreateGameScreen />);
 
   fireEvent.change(screen.getByLabelText("Game name"), { target: { value: "Moonrise" } });
@@ -781,9 +1353,7 @@ test("lobby: leaving takes the player back to the games list", async () => {
   // The file's afterEach resets the URL to "/", so pin it to a game route
   // first or the pathname assertion below would pass without any navigation.
   window.history.replaceState({}, "", "/games/g1");
-  const leave = vi
-    .spyOn(api, "leave")
-    .mockResolvedValue(makeGameSnapshot({ game: { status: "lobby", phase: null } }));
+  const leave = vi.spyOn(api, "leave").mockResolvedValue(undefined);
   renderWithI18n(
     <LobbyScreen
       onUpdate={() => undefined}

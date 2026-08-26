@@ -1,9 +1,14 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 
-import { apiUrl, wsUrl } from "./origin.ts";
+import { apiUrl, invitationUrl, serverOrigin, wsUrl } from "./origin.ts";
+
+const mocks = vi.hoisted(() => ({ isTauri: vi.fn() }));
+
+vi.mock("@tauri-apps/api/core", () => ({ isTauri: mocks.isTauri }));
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  mocks.isTauri.mockReset();
 });
 
 describe("apiUrl", () => {
@@ -21,6 +26,25 @@ describe("apiUrl", () => {
     expect(apiUrl("/api/games", "https://werewolf.example.com/")).toBe(
       "https://werewolf.example.com/api/games",
     );
+  });
+});
+
+describe("share origins", () => {
+  test("web links use the page origin even when an API origin is configured", () => {
+    mocks.isTauri.mockReturnValue(false);
+    vi.stubGlobal("window", { location: { origin: "https://play.example.com" } });
+    expect(serverOrigin("https://api.example.com")).toBe("https://play.example.com");
+    expect(invitationUrl("K7M3P9T2WQ", "https://api.example.com")).toBe(
+      "https://play.example.com/join?code=K7M3P9T2WQ",
+    );
+  });
+
+  test("packaged links use the configured HTTPS server origin", () => {
+    mocks.isTauri.mockReturnValue(true);
+    expect(invitationUrl("K7M3P9T2WQ", "https://play.example.com/")).toBe(
+      "https://play.example.com/join?code=K7M3P9T2WQ",
+    );
+    expect(() => invitationUrl("K7M3P9T2WQ", "tauri://localhost")).toThrow("web server origin");
   });
 });
 

@@ -11,6 +11,7 @@ import type { GameCoordinator } from "../game/coordinator.ts";
 import {
   as,
   createGame,
+  entry,
   jsonRequest,
   setup,
   startGameWithPlayers,
@@ -396,16 +397,11 @@ test("a spectator receives public events only", async () => {
   const { app, coordinator, repo, db } = await setup();
   const game = await createGame(app, USERS[0]!);
   for (const userId of [USERS[1]!, USERS[2]!, USERS[3]!, USERS[4]!]) {
-    const response = await as(app, userId, `/api/games/${game.id}/join`, jsonRequest("POST", {}));
+    const response = await entry(app, userId, game.id);
     expect(response.status).toBe(200);
   }
   const spectator = USERS[5]!;
-  const spectated = await as(
-    app,
-    spectator,
-    `/api/games/${game.id}/spectate`,
-    jsonRequest("POST", {}),
-  );
+  const spectated = await entry(app, spectator, game.id, "spectator");
   expect(spectated.status).toBe(200);
   // Pin the seed before start so the composition is deterministic.
   await db.update(games).set({ rngSeed: "find-1" }).where(eq(games.id, game.id));

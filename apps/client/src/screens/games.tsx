@@ -34,13 +34,19 @@ function secondaryLine(game: GameSummary, t: TFunction) {
   return count;
 }
 
-function GameCard({ game }: { game: GameSummary }) {
+function GameCard({ game, scope }: { game: GameSummary; scope: "browse" | "mine" }) {
   const { t } = useTranslation();
   if (game.status === "finished") {
     return (
       <button
         className="card flex flex-col gap-1.5 text-left"
-        onClick={() => navigate(`/games/${game.id}/replay`)}
+        onClick={() =>
+          navigate(
+            scope === "mine" && game.membership === "replay"
+              ? `/games/${game.id}/replay`
+              : `/games/${game.id}/entry`,
+          )
+        }
         type="button"
       >
         <div className="flex items-center justify-between gap-3">
@@ -79,7 +85,13 @@ function GameCard({ game }: { game: GameSummary }) {
         <AvatarStack names={game.players.map((player) => player.displayName)} />
         <button
           className={`btn ${lobby ? "btn--primary" : "btn--ghost"}`}
-          onClick={() => navigate(`/games/${game.id}`)}
+          onClick={() =>
+            navigate(
+              scope === "mine" && game.membership !== undefined
+                ? `/games/${game.id}`
+                : `/games/${game.id}/entry`,
+            )
+          }
           type="button"
         >
           {lobby ? t("ui.join") : t("ui.spectate")}
@@ -95,16 +107,32 @@ export function GamesScreen({ username }: { username: string }) {
   const [games, setGames] = useState<GameSummary[]>([]);
   const [error, setError] = useState<unknown>();
   const [filter, setFilter] = useState<Filter>("lobby");
+  const [scope, setScope] = useState<"browse" | "mine">("browse");
   useEffect(() => {
-    void api.listGames().then(setGames).catch(setError);
-  }, []);
-  const visible = games.filter((game) =>
-    filter === "all"
-      ? true
-      : filter === "lobby"
-        ? (game.status === "lobby" || game.status === "scheduled") && game.visibility !== "private"
-        : game.status === "running" && game.visibility !== "private",
-  );
+    let active = true;
+    setGames([]);
+    void api
+      .listGames(scope)
+      .then((next) => {
+        if (active) setGames(next);
+      })
+      .catch((caught: unknown) => {
+        if (active) setError(caught);
+      });
+    return () => {
+      active = false;
+    };
+  }, [scope]);
+  const visible =
+    scope === "mine"
+      ? games
+      : games.filter((game) =>
+          filter === "all"
+            ? true
+            : filter === "lobby"
+              ? game.status === "lobby" || game.status === "scheduled"
+              : game.status === "running",
+        );
   return (
     <div className="screen__scroll flex flex-col gap-5 px-4.5 pb-5 pt-6">
       <header className="flex items-center justify-between gap-3">
@@ -120,6 +148,20 @@ export function GamesScreen({ username }: { username: string }) {
           </span>
         </button>
       </header>
+      <div className="flex gap-2" role="tablist">
+        {(["browse", "mine"] as const).map((option) => (
+          <button
+            aria-selected={scope === option}
+            className={`chip${scope === option ? " chip--active" : ""}`}
+            key={option}
+            onClick={() => setScope(option)}
+            role="tab"
+            type="button"
+          >
+            {option === "browse" ? t("ui.browser.browse") : t("ui.browser.myGames")}
+          </button>
+        ))}
+      </div>
       <div className="flex gap-2">
         {FILTERS.map((option) => (
           <button
@@ -135,11 +177,13 @@ export function GamesScreen({ username }: { username: string }) {
       </div>
       <ErrorMessage error={error} />
       {visible.length === 0 ? (
-        <p className="card text-fog">{t("ui.noOpenGames")}</p>
+        <p className="card text-fog">
+          {scope === "browse" ? t("ui.noOpenGames") : t("ui.noMyGames")}
+        </p>
       ) : (
         <div className="flex flex-col gap-3.5">
           {visible.map((game) => (
-            <GameCard game={game} key={game.id} />
+            <GameCard game={game} key={game.id} scope={scope} />
           ))}
         </div>
       )}

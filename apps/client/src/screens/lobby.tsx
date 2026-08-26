@@ -7,8 +7,9 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { api } from "../api/client.ts";
+import { ApiError, api } from "../api/client.ts";
 import { LiveGameConnection } from "../api/live.ts";
+import { invitationUrl } from "../api/origin.ts";
 import { Avatar, ErrorMessage, Meter } from "../components.tsx";
 import { navigate } from "../routes.tsx";
 
@@ -26,7 +27,16 @@ export function LobbyScreen({
   // Seating a bot is a slow round trip in production, so the seat is shown as
   // taken the moment it is clicked and the server's snapshot reconciles it.
   const [seatingBotIds, setSeatingBotIds] = useState<string[]>([]);
+  const [invitation, setInvitation] = useState<{ code: string }>();
+  const [copyState, setCopyState] = useState<"copied" | undefined>();
   const isOwner = snapshot.game.ownerUserId === snapshot.me?.userId;
+  useEffect(() => {
+    if (!isOwner) return;
+    void api
+      .getInvitation(snapshot.game.id)
+      .then(setInvitation)
+      .catch(() => setInvitation(undefined));
+  }, [isOwner, snapshot.game.id]);
   // The socket can deliver the seated bot before the request that seated it
   // resolves, so drop a pending seat whose bot is already at the table rather
   // than showing it twice. Roster names are unique, and the projection carries
@@ -90,6 +100,17 @@ export function LobbyScreen({
       setError(caught);
     }
   };
+  const copyInvitation = async () => {
+    if (!invitation) return;
+    try {
+      if (!navigator.clipboard) throw new Error("clipboard unavailable");
+      await navigator.clipboard.writeText(invitationUrl(invitation.code));
+      setCopyState("copied");
+    } catch {
+      setError(new ApiError("INVITATION_COPY_FAILED"));
+      setCopyState(undefined);
+    }
+  };
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="screen__scroll flex flex-col gap-5 px-4.5 pb-5 pt-6">
@@ -105,6 +126,25 @@ export function LobbyScreen({
           </h1>
         </header>
         <ErrorMessage error={error} />
+        {isOwner && invitation && (
+          <section className="card flex flex-col gap-3" aria-label={t("ui.share.title")}>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="eyebrow">{t("ui.share.title")}</p>
+                <p className="mt-1 font-mono text-xl tracking-[0.08em] text-bone">
+                  {`${invitation.code.slice(0, 4)}-${invitation.code.slice(4, 8)}-${invitation.code.slice(8)}`}
+                </p>
+              </div>
+              <button
+                className="btn btn--ghost"
+                onClick={() => void copyInvitation()}
+                type="button"
+              >
+                {copyState === "copied" ? t("ui.share.copied") : t("ui.share.copy")}
+              </button>
+            </div>
+          </section>
+        )}
         <section className="card flex flex-col gap-3.5">
           <div className="flex items-baseline justify-between gap-3">
             <h2 className="text-base text-paper-dim">{t("ui.lobby.waitingForPlayers")}</h2>

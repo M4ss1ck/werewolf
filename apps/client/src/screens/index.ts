@@ -1,6 +1,7 @@
 export { CancelledScreen } from "./cancelled.tsx";
 export { CreateGameScreen } from "./create-game.tsx";
 export { GameScreen } from "./game.tsx";
+export { GameEntryScreen } from "./game-entry.tsx";
 export { GameOverScreen } from "./game-over.tsx";
 export { GamesScreen } from "./games.tsx";
 export { GlobalChatScreen } from "./global-chat.tsx";

@@ -2,6 +2,8 @@ import type {
   BotRosterEntry,
   ChatContent,
   ChatMessage,
+  GameEntryMode,
+  GameEntryReference,
   GameEvent,
   GameId,
   GameplayCommand,
@@ -11,7 +13,15 @@ import type {
   ViewerGameSnapshot,
 } from "@werewolf/protocol";
 
-import { ChatMessageSchema, MentionCandidateSchema } from "@werewolf/protocol";
+import {
+  ChatMessageSchema,
+  GameAdmissionResultSchema,
+  GameEntryPreviewSchema,
+  GameIdSchema,
+  GameSummarySchema,
+  MentionCandidateSchema,
+  OwnerGameInvitationSchema,
+} from "@werewolf/protocol";
 
 import { captureAuthToken, getAuthToken } from "../auth/token.ts";
 import { apiUrl } from "./origin.ts";
@@ -37,6 +47,15 @@ export interface CreateGameInput {
     spectatingEnabled?: boolean;
   };
 }
+
+export interface CreateGameResult {
+  gameId: GameId;
+}
+
+export type GameEntryReferenceInput =
+  | GameEntryReference
+  | { kind: "invitation"; code: string }
+  | { kind: "public-game"; gameId: string };
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getAuthToken();
@@ -67,14 +86,39 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 const json = (body: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(body) });
 
 export const api = {
-  listGames: () => request<GameSummary[]>("/api/games"),
-  createGame: (input: CreateGameInput) => request<GameSummary>("/api/games", { ...json(input) }),
+  listGames: (scope: "browse" | "mine" = "browse") =>
+    request<unknown>(scope === "browse" ? "/api/games" : "/api/games?scope=mine").then(
+      (body) => GameSummarySchema.array().parse(body) as GameSummary[],
+    ),
+  listBrowseGames: () => api.listGames("browse"),
+  listMyGames: () => api.listGames("mine"),
+  createGame: (input: CreateGameInput) =>
+    request<unknown>("/api/games", { ...json(input) }).then((body) => {
+      if (typeof body !== "object" || body === null) throw new ApiError("VALIDATION");
+      const gameId = GameIdSchema.safeParse((body as { gameId?: unknown }).gameId);
+      if (!gameId.success) throw new ApiError("VALIDATION");
+      return { gameId: gameId.data };
+    }),
   getSnapshot: (id: GameId | string) => request<ViewerGameSnapshot>(`/api/games/${id}`),
-  join: (id: GameId | string) => request<ViewerGameSnapshot>(`/api/games/${id}/join`, json({})),
-  spectate: (id: GameId | string) =>
-    request<ViewerGameSnapshot>(`/api/games/${id}/spectate`, json({})),
+  previewGameEntry: (reference: GameEntryReferenceInput) => {
+    const query =
+      reference.kind === "invitation"
+        ? `code=${encodeURIComponent(reference.code)}`
+        : `gameId=${encodeURIComponent(reference.gameId)}`;
+    return request<unknown>(`/api/game-entry?${query}`).then((body) =>
+      GameEntryPreviewSchema.parse(body),
+    );
+  },
+  admitGameEntry: (reference: GameEntryReferenceInput, mode: GameEntryMode) =>
+    request<unknown>("/api/game-entry", {
+      ...json({ reference, mode }),
+    }).then((body) => GameAdmissionResultSchema.parse(body)),
+  getInvitation: (id: GameId | string) =>
+    request<unknown>(`/api/games/${id}/invitation`).then((body) =>
+      OwnerGameInvitationSchema.parse(body),
+    ),
   leave: (id: GameId | string) =>
-    request<ViewerGameSnapshot>(`/api/games/${id}/membership`, { method: "DELETE" }),
+    request<void>(`/api/games/${id}/membership`, { method: "DELETE" }),
   kick: (id: GameId | string, userId: UserId | string) =>
     request<ViewerGameSnapshot>(`/api/games/${id}/players/${userId}`, { method: "DELETE" }),
   start: (id: GameId | string) => request<ViewerGameSnapshot>(`/api/games/${id}/start`, json({})),
