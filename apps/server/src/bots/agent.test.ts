@@ -335,6 +335,8 @@ describe("llm bot agent", () => {
     expect(request.temperature).toBe(BOT_CONFIG.temperature);
     expect(request.maxOutputTokens).toBe(BOT_CONFIG.maxOutputTokens);
     expect(request.timeoutMs).toBe(BOT_CONFIG.timeoutMs);
+    // One stable session per seat, for OpenCode Go routing and cache affinity.
+    expect(request.sessionId).toBe("g:p0");
     // The prompt carries the bot's own seat, never the rest of the table.
     expect(request.userPrompt).toContain("Mira");
     expect(request.userPrompt).toContain("villager");
@@ -349,6 +351,7 @@ describe("openai-compatible provider", () => {
     temperature: 0,
     maxOutputTokens: 10,
     timeoutMs: 1_000,
+    sessionId: "game-1:p0",
   };
 
   test("returns the first choice's content", async () => {
@@ -362,6 +365,21 @@ describe("openai-compatible provider", () => {
       },
     });
     expect(await provider.generateDecision(request)).toEqual({ text: "{}" });
+  });
+
+  test("identifies as werewolf-bots and sends the stable session per conversation", async () => {
+    let headers: Record<string, string> | undefined;
+    const provider = new OpenAiCompatibleProvider({
+      baseUrl: "https://example.test/v1",
+      apiKey: "secret",
+      fetch: async (_url, init) => {
+        headers = (init ?? {}).headers as Record<string, string>;
+        return new Response(JSON.stringify({ choices: [{ message: { content: "{}" } }] }));
+      },
+    });
+    await provider.generateDecision(request);
+    expect(headers?.["user-agent"]).toBe("werewolf-bots/1.0");
+    expect(headers?.["x-opencode-session"]).toBe("game-1:p0");
   });
 
   test("sends no response_format, only the plain chat-completions fields", async () => {

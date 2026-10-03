@@ -10,6 +10,11 @@
 
 import type { BotLogger } from "./log.ts";
 import { silentBotLogger } from "./log.ts";
+import {
+  MODEL_CATALOG_SESSION_ID,
+  OPENCODE_SESSION_HEADER,
+  OPENCODE_USER_AGENT,
+} from "./opencode-headers.ts";
 
 type Fetch = (input: string, init: RequestInit) => Promise<Response>;
 
@@ -46,7 +51,11 @@ export class ModelCatalog {
     try {
       const response = await this.fetch(`${this.options.baseUrl.replace(/\/$/, "")}/models`, {
         signal: controller.signal,
-        headers: { authorization: `Bearer ${this.options.apiKey}` },
+        headers: {
+          authorization: `Bearer ${this.options.apiKey}`,
+          "user-agent": OPENCODE_USER_AGENT,
+          [OPENCODE_SESSION_HEADER]: MODEL_CATALOG_SESSION_ID,
+        },
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const body = (await response.json()) as { data?: { id?: unknown }[] };

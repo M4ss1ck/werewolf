@@ -147,7 +147,10 @@ describe("model catalog", () => {
       apiKey: "secret",
       fetch: async (url, init) => {
         expect(url).toBe("https://example.test/v1/models");
-        expect((init.headers as Record<string, string>).authorization).toBe("Bearer secret");
+        const headers = init.headers as Record<string, string>;
+        expect(headers.authorization).toBe("Bearer secret");
+        expect(headers["user-agent"]).toBe("werewolf-bots/1.0");
+        expect(headers["x-opencode-session"]).toBe("werewolf-model-catalog");
         return new Response(JSON.stringify({ data: [{ id: "glm-5" }, { id: "kimi-k3" }] }));
       },
     });

@@ -116,6 +116,8 @@ export interface BotModelRequest {
   temperature: number;
   maxOutputTokens: number;
   timeoutMs: number;
+  /** Stable per conversation (`gameId:playerId`), sent as `x-opencode-session`. */
+  sessionId: string;
 }
 
 export interface BotModelResponse {
