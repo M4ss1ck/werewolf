@@ -13,6 +13,7 @@ import { createRng } from "@werewolf/game-engine";
 import { type BotRuntimeConfig, loadBotConfig } from "./config.ts";
 import { type BotLogger, silentBotLogger } from "./log.ts";
 import { truncateUtf16 } from "./mentions.ts";
+import { botSessionId } from "./opencode-headers.ts";
 import { BOT_SYSTEM_PROMPT, buildUserPrompt } from "./prompt.ts";
 import {
   type BotAgent,
@@ -85,6 +86,8 @@ export class LlmBotAgent implements BotAgent {
         temperature: input.config.temperature,
         maxOutputTokens: input.config.maxOutputTokens,
         timeoutMs: input.config.timeoutMs,
+        // One stable conversation per seat, for OpenCode Go routing and cache.
+        sessionId: botSessionId(input.gameId, input.playerId),
       });
       text = response.text;
     } catch (error) {

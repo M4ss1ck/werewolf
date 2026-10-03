@@ -3,11 +3,16 @@
 // server all speak this, so changing model means changing environment, not
 // code.
 //
+// OpenCode Go (https://opencode.ai/docs/go#where-can-i-use-it) requires its
+// own User-Agent plus a stable `x-opencode-session` per conversation.
+// Requests missing the session header may error.
+//
 // The JSON shape is demanded by the prompt and validated by the caller:
 // providers on this API differ on whether they accept a json_schema
 // `response_format` at all, and a rejection costs the whole turn, so the
 // request body carries no structured-output field.
 
+import { OPENCODE_SESSION_HEADER, OPENCODE_USER_AGENT } from "./opencode-headers.ts";
 import {
   type BotModelProvider,
   type BotModelRequest,
@@ -47,6 +52,8 @@ export class OpenAiCompatibleProvider implements BotModelProvider {
         headers: {
           "content-type": "application/json",
           authorization: `Bearer ${this.options.apiKey}`,
+          "user-agent": OPENCODE_USER_AGENT,
+          [OPENCODE_SESSION_HEADER]: request.sessionId,
         },
         body: JSON.stringify({
           model: request.model,

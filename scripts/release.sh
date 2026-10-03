@@ -169,6 +169,9 @@ EOF
 
 # Call the OpenAI-compatible /chat/completions endpoint of the bot provider.
 # Args: base_url, api_key, model, prompt. Prints the assistant message text.
+# OpenCode Go requires its own User-Agent plus a stable x-opencode-session per
+# conversation (https://opencode.ai/docs/go#where-can-i-use-it); the changelog
+# call is a single request, so it uses a static session.
 call_chat_completions() {
     local base_url="$1" api_key="$2" model="$3" prompt="$4"
     local payload response
@@ -178,6 +181,8 @@ call_chat_completions() {
     response="$(curl -sS --fail "$base_url/chat/completions" \
         -H "Authorization: Bearer $api_key" \
         -H "Content-Type: application/json" \
+        -H "User-Agent: werewolf-bots/1.0" \
+        -H "x-opencode-session: werewolf-release" \
         -d "$payload" 2>/dev/null)" || {
         print_warning "Request to $base_url failed." >&2
         return 1
